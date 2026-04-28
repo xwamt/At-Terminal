@@ -108,6 +108,14 @@ export class SftpEditSessionManager {
     return this.sessionsByLocalPath.get(localPath);
   }
 
+  async handleSavedDocument(document: Pick<vscode.TextDocument, 'uri'> & { fileName?: string }): Promise<void> {
+    const session = this.sessionsByLocalPath.get(document.uri.fsPath);
+    if (!session) {
+      return;
+    }
+    this.scheduleUpload(session);
+  }
+
   dispose(): void {
     for (const session of this.sessionsByKey.values()) {
       if (session.debounceTimer) {
@@ -120,5 +128,67 @@ export class SftpEditSessionManager {
 
   async deleteSessionCache(session: SftpEditSession): Promise<void> {
     await rm(session.localUri.fsPath, { force: true });
+  }
+
+  private scheduleUpload(session: SftpEditSession): void {
+    session.syncState = 'pending';
+    session.pendingUpload = true;
+    if (session.debounceTimer) {
+      clearTimeout(session.debounceTimer);
+    }
+    session.debounceTimer = setTimeout(() => {
+      session.debounceTimer = undefined;
+      void this.drainUploadQueue(session);
+    }, this.debounceMs);
+  }
+
+  private async drainUploadQueue(session: SftpEditSession): Promise<void> {
+    if (session.uploadInProgress) {
+      session.pendingUpload = true;
+      return;
+    }
+
+    while (session.pendingUpload) {
+      session.pendingUpload = false;
+      if (!session.firstSaveConfirmed) {
+        const confirmed = await this.options.ui.confirmAutoSync(session.remotePath);
+        if (!confirmed) {
+          session.syncState = 'idle';
+          return;
+        }
+        session.firstSaveConfirmed = true;
+      }
+
+      session.uploadInProgress = true;
+      session.syncState = 'uploading';
+      session.lastError = undefined;
+      this.options.ui.showStatus('uploading', 'Uploading remote file...');
+      try {
+        const uploaded = await this.uploadIfUnchanged(session);
+        if (!uploaded) {
+          return;
+        }
+        session.syncState = 'idle';
+        this.options.ui.showStatus('idle', 'Remote file synced');
+      } catch (error) {
+        session.syncState = 'failed';
+        session.lastError = error instanceof Error ? error.message : String(error);
+        this.options.ui.showStatus('failed', 'Remote sync failed');
+      } finally {
+        session.uploadInProgress = false;
+      }
+    }
+  }
+
+  private async uploadIfUnchanged(session: SftpEditSession): Promise<boolean> {
+    const currentRemoteStat = await this.options.sftp.stat(session.remotePath);
+    if (!remoteStatsMatch(currentRemoteStat, session.baseRemoteStat)) {
+      session.syncState = 'conflict';
+      this.options.ui.showStatus('conflict', 'Remote file changed');
+      return false;
+    }
+    await this.options.sftp.uploadFile(session.localUri.fsPath, session.remotePath);
+    session.baseRemoteStat = await this.options.sftp.stat(session.remotePath);
+    return true;
   }
 }
