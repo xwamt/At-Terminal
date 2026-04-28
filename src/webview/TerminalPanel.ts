@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
+import { LrzszDetector } from '../lrzsz/LrzszDetector';
+import { LrzszTransfer } from '../lrzsz/LrzszTransfer';
 import { SshSession, type HostKeyVerifier } from '../ssh/SshSession';
 import type { TerminalContextRegistry } from '../terminal/TerminalContext';
 import { formatError } from '../utils/errors';
@@ -153,12 +155,20 @@ export class TerminalPanel {
   }
 
   private createSession(generation: number): SshSession {
+    const lrzszDetector = new LrzszDetector({
+      onTransfer: (start) => {
+        void new LrzszTransfer().start(start);
+      }
+    });
     return new SshSession(
       this.server,
       this.configManager,
       {
         output: (data) => {
-          void this.panel.webview.postMessage({ type: 'output', payload: data });
+          const inspected = lrzszDetector.inspect(data);
+          if (inspected.passthrough) {
+            void this.panel.webview.postMessage({ type: 'output', payload: inspected.passthrough });
+          }
         },
         status: (message) => this.handleSessionStatus(message, generation),
         error: (error) => this.postStatus(formatError(error))
