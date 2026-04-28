@@ -70,12 +70,47 @@ export const ThemeIcon = class {
   constructor(public readonly id: string) {}
 };
 
+export interface TextDocument {
+  uri: Uri;
+  fileName: string;
+  isDirty?: boolean;
+}
+
+export enum StatusBarAlignment {
+  Left = 1,
+  Right = 2
+}
+
+export class StatusBarItem {
+  text = '';
+  tooltip: string | undefined;
+  command: string | undefined;
+  visible = false;
+
+  show(): void {
+    this.visible = true;
+  }
+
+  hide(): void {
+    this.visible = false;
+  }
+
+  dispose(): void {
+    this.visible = false;
+  }
+}
+
+const didSaveTextDocument = new EventEmitter<TextDocument>();
+const didCloseTextDocument = new EventEmitter<TextDocument>();
+
 export const window = {
   showErrorMessage: async () => undefined,
   showInformationMessage: async () => undefined,
   showWarningMessage: async () => undefined,
   createTreeView: () => ({ dispose: () => undefined }),
-  createWebviewPanel: () => ({ dispose: () => undefined })
+  createWebviewPanel: () => ({ dispose: () => undefined }),
+  showTextDocument: async (document: TextDocument) => document,
+  createStatusBarItem: () => new StatusBarItem()
 };
 
 export const commands = {
@@ -85,7 +120,15 @@ export const commands = {
 
 export const workspace = {
   registerTextDocumentContentProvider: () => ({ dispose: () => undefined }),
-  onDidCloseTextDocument: () => ({ dispose: () => undefined }),
+  openTextDocument: async (uri: Uri): Promise<TextDocument> => ({
+    uri,
+    fileName: uri.fsPath,
+    isDirty: false
+  }),
+  onDidSaveTextDocument: didSaveTextDocument.event,
+  onDidCloseTextDocument: didCloseTextDocument.event,
+  __fireDidSaveTextDocument: (document: TextDocument) => didSaveTextDocument.fire(document),
+  __fireDidCloseTextDocument: (document: TextDocument) => didCloseTextDocument.fire(document),
   getConfiguration: () => ({
     get: <T>(_key: string, defaultValue: T): T => defaultValue
   })
