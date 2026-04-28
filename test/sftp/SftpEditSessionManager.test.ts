@@ -302,3 +302,109 @@ describe('SftpEditSessionManager conflicts and failures', () => {
     }
   });
 });
+
+describe('SftpEditSessionManager close cleanup', () => {
+  it('deletes cache and unregisters clean idle sessions on close', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-clean-')));
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp: {
+        getActiveServerId: vi.fn(() => 'srv'),
+        stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+        downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+        uploadFile: vi.fn()
+      },
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      expect(existsSync(session.localUri.fsPath)).toBe(true);
+
+      await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+
+      expect(existsSync(session.localUri.fsPath)).toBe(false);
+      expect(manager.getSessionByLocalPath(session.localUri.fsPath)).toBeUndefined();
+    } finally {
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps local cache when a failed session is closed and the user chooses keep', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-keep-')));
+    const promptUnsyncedClose = vi.fn(async () => 'keep' as const);
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp: {
+        getActiveServerId: vi.fn(() => 'srv'),
+        stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+        downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+        uploadFile: vi.fn()
+      },
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      session.syncState = 'failed';
+
+      await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+
+      expect(promptUnsyncedClose).toHaveBeenCalledWith('/srv/app/index.js');
+      expect(existsSync(session.localUri.fsPath)).toBe(true);
+      expect(manager.getSessionByLocalPath(session.localUri.fsPath)).toBe(session);
+    } finally {
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('discards local cache when a failed session is closed and the user chooses discard', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-discard-')));
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp: {
+        getActiveServerId: vi.fn(() => 'srv'),
+        stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+        downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+        uploadFile: vi.fn()
+      },
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn(async () => 'discard' as const)
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      session.syncState = 'failed';
+
+      await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+
+      expect(existsSync(session.localUri.fsPath)).toBe(false);
+      expect(manager.getSessionByLocalPath(session.localUri.fsPath)).toBeUndefined();
+    } finally {
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+});

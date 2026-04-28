@@ -130,6 +130,15 @@ export class SftpEditSessionManager {
     if (!session) {
       return;
     }
+    if (this.hasUnsynchronizedState(session)) {
+      const choice = await this.options.ui.promptUnsyncedClose(session.remotePath);
+      if (choice === 'keep') {
+        return;
+      }
+    }
+
+    this.unregisterSession(session);
+    await this.deleteSessionCache(session);
   }
 
   dispose(): void {
@@ -147,6 +156,24 @@ export class SftpEditSessionManager {
 
   async deleteSessionCache(session: SftpEditSession): Promise<void> {
     await rm(session.localUri.fsPath, { force: true });
+  }
+
+  private hasUnsynchronizedState(session: SftpEditSession): boolean {
+    return (
+      session.syncState === 'pending' ||
+      session.syncState === 'uploading' ||
+      session.syncState === 'conflict' ||
+      session.syncState === 'failed'
+    );
+  }
+
+  private unregisterSession(session: SftpEditSession): void {
+    if (session.debounceTimer) {
+      clearTimeout(session.debounceTimer);
+      session.debounceTimer = undefined;
+    }
+    this.sessionsByKey.delete(session.key);
+    this.sessionsByLocalPath.delete(session.localUri.fsPath);
   }
 
   private scheduleUpload(session: SftpEditSession): void {
