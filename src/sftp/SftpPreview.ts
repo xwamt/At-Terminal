@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, rm } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, extname } from 'node:path';
 import * as vscode from 'vscode';
 import { safePreviewName } from './RemotePath';
 
@@ -11,7 +12,7 @@ export class SftpPreviewDocumentStore implements vscode.TextDocumentContentProvi
   createReadonlyUri(remotePath: string, localPath: string): vscode.Uri {
     const uri = vscode.Uri.from({
       scheme: SFTP_PREVIEW_SCHEME,
-      path: `/${safePreviewName(remotePath)}`,
+      path: `/${safePreviewDocumentName(remotePath)}`,
       query: encodeURIComponent(localPath)
     });
     this.filesByUri.set(uri.toString(), localPath);
@@ -44,8 +45,22 @@ export interface OpenRemotePreviewFileOptions {
   openUri(uri: vscode.Uri, options?: vscode.TextDocumentShowOptions): Promise<void>;
 }
 
+export function safePreviewDocumentName(remotePath: string): string {
+  const safeName = safePreviewName(remotePath)
+    .replace(/^\.+/, '_')
+    .replace(/[. ]+$/g, '');
+  const displayName = safeName || 'remote-file';
+  return extname(displayName) ? displayName : `${displayName}.txt`;
+}
+
 export async function openRemotePreviewFile(options: OpenRemotePreviewFileOptions): Promise<vscode.Uri> {
-  const localPreviewUri = vscode.Uri.joinPath(options.storageUri, 'sftp-preview', safePreviewName(options.remotePath));
+  const remoteHash = createHash('sha256').update(options.remotePath).digest('hex').slice(0, 16);
+  const localPreviewUri = vscode.Uri.joinPath(
+    options.storageUri,
+    'sftp-preview',
+    remoteHash,
+    safePreviewDocumentName(options.remotePath)
+  );
   await mkdir(dirname(localPreviewUri.fsPath), { recursive: true });
   await options.downloadFile(options.remotePath, localPreviewUri.fsPath);
   const readonlyUri = options.previewStore.createReadonlyUri(options.remotePath, localPreviewUri.fsPath);
