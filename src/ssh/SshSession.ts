@@ -18,6 +18,7 @@ export class SshSession {
   private shell: ClientChannel | undefined;
   private rows = 24;
   private cols = 80;
+  private connected = false;
 
   constructor(
     private readonly server: ServerConfig,
@@ -52,8 +53,10 @@ export class SshSession {
       this.events.output(data.toString(this.server.encoding));
     });
     this.shell.on('close', () => {
+      this.connected = false;
       this.events.status('Disconnected');
     });
+    this.connected = true;
     this.events.status('Connected');
   }
 
@@ -82,11 +85,16 @@ export class SshSession {
     };
   }
 
+  isConnected(): boolean {
+    return this.connected;
+  }
+
   dispose(): void {
     this.shell?.end();
     this.client?.end();
     this.shell = undefined;
     this.client = undefined;
+    this.connected = false;
   }
 
   private async buildConnectConfig(): Promise<ConnectConfig> {
