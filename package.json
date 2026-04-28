@@ -2,13 +2,18 @@
   "name": "ssh-terminal-manager",
   "displayName": "SSH Terminal Manager",
   "description": "Manage SSH terminal sessions in VS Code without installing a remote server.",
-  "version": "0.2.1",
+  "version": "0.2.5",
   "publisher": "local",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onView:sshManager.servers", "onView:sshManager.sftpFiles"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:sshManager.servers",
+    "onView:sshManager.sftpFiles"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -34,27 +39,90 @@
       ]
     },
     "commands": [
-      { "command": "sshManager.addServer", "title": "SSH: Add Server" },
-      { "command": "sshManager.editServer", "title": "SSH: Edit Server" },
-      { "command": "sshManager.deleteServer", "title": "SSH: Delete Server" },
-      { "command": "sshManager.connect", "title": "SSH: Connect" },
-      { "command": "sshManager.disconnect", "title": "SSH: Disconnect" },
-      { "command": "sshManager.reconnect", "title": "SSH: Reconnect" },
-      { "command": "sshManager.copyHost", "title": "SSH: Copy Host" },
-      { "command": "sshManager.refresh", "title": "SSH: Refresh" },
-      { "command": "sshManager.sftp.refresh", "title": "SFTP: Refresh" },
-      { "command": "sshManager.sftp.upload", "title": "SFTP: Upload" },
-      { "command": "sshManager.sftp.download", "title": "SFTP: Download" },
-      { "command": "sshManager.sftp.delete", "title": "SFTP: Delete" },
-      { "command": "sshManager.sftp.rename", "title": "SFTP: Rename" },
-      { "command": "sshManager.sftp.newFile", "title": "SFTP: New File" },
-      { "command": "sshManager.sftp.newFolder", "title": "SFTP: New Folder" },
-      { "command": "sshManager.sftp.copyPath", "title": "SFTP: Copy Remote Path" },
-      { "command": "sshManager.sftp.edit", "title": "SFTP: Edit" },
-      { "command": "sshManager.sftp.openPreview", "title": "SFTP: Open Preview" },
-      { "command": "sshManager.sftp.cdToDirectory", "title": "SFTP: cd To Directory" },
-      { "command": "sshManager.sftp.goToPath", "title": "SFTP: Go to Path" },
-      { "command": "sshManager.sftp.goUp", "title": "SFTP: Go Up" }
+      {
+        "command": "sshManager.addServer",
+        "title": "SSH: Add Server"
+      },
+      {
+        "command": "sshManager.editServer",
+        "title": "SSH: Edit Server"
+      },
+      {
+        "command": "sshManager.deleteServer",
+        "title": "SSH: Delete Server"
+      },
+      {
+        "command": "sshManager.connect",
+        "title": "SSH: Connect"
+      },
+      {
+        "command": "sshManager.disconnect",
+        "title": "SSH: Disconnect"
+      },
+      {
+        "command": "sshManager.reconnect",
+        "title": "SSH: Reconnect"
+      },
+      {
+        "command": "sshManager.copyHost",
+        "title": "SSH: Copy Host"
+      },
+      {
+        "command": "sshManager.refresh",
+        "title": "SSH: Refresh"
+      },
+      {
+        "command": "sshManager.sftp.refresh",
+        "title": "SFTP: Refresh"
+      },
+      {
+        "command": "sshManager.sftp.upload",
+        "title": "SFTP: Upload"
+      },
+      {
+        "command": "sshManager.sftp.download",
+        "title": "SFTP: Download"
+      },
+      {
+        "command": "sshManager.sftp.delete",
+        "title": "SFTP: Delete"
+      },
+      {
+        "command": "sshManager.sftp.rename",
+        "title": "SFTP: Rename"
+      },
+      {
+        "command": "sshManager.sftp.newFile",
+        "title": "SFTP: New File"
+      },
+      {
+        "command": "sshManager.sftp.newFolder",
+        "title": "SFTP: New Folder"
+      },
+      {
+        "command": "sshManager.sftp.copyPath",
+        "title": "SFTP: Copy Remote Path"
+      },
+      {
+        "command": "sshManager.sftp.edit",
+        "title": "SFTP: Edit"
+      },
+      {
+        "command": "sshManager.sftp.openPreview",
+        "title": "SFTP: Open Preview"
+      },
+      {
+        "command": "sshManager.sftp.cdToDirectory",
+        "title": "SFTP: cd To Directory"
+      },
+      {
+        "command": "sshManager.sftp.goToPath",
+        "title": "SFTP: Go to Path"
+      },
+      {
+        "command": "sshManager.sftp.goUp",
+        "title": "SFTP: Go Up"
+      }
     ],
     "menus": {
       "view/title": [
