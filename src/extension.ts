@@ -2,7 +2,9 @@ import * as vscode from 'vscode';
 import { ConfigManager } from './config/ConfigManager';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
+import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
 import { SftpManager } from './sftp/SftpManager';
+import { createRemoteFileForEditing } from './sftp/SftpNewFile';
 import { SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore, openRemotePreviewFile } from './sftp/SftpPreview';
 import { SftpSession } from './sftp/SftpSession';
 import { VscodeTransferReporter } from './sftp/VscodeTransferReporter';
@@ -30,6 +32,12 @@ export function activate(context: vscode.ExtensionContext): void {
     listDirectory: (path) => sftpManager.listDirectory(path)
   });
   const sftpPreviewStore = new SftpPreviewDocumentStore();
+  const sftpEditStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  const sftpEditManager = new SftpEditSessionManager({
+    storageUri: resolveEditStorageUri(context.globalStorageUri, vscode.workspace.workspaceFolders),
+    sftp: sftpManager,
+    ui: createVscodeSftpEditUi(sftpEditStatus)
+  });
 
   terminalContext.onDidChangeActiveContext((activeContext) => {
     sftpManager.setTerminalContext(activeContext);
@@ -71,6 +79,8 @@ export function activate(context: vscode.ExtensionContext): void {
       dragAndDropController: new SftpDragAndDropController(sftpManager),
       showCollapseAll: true
     }),
+    sftpEditStatus,
+    sftpEditManager,
     vscode.workspace.registerTextDocumentContentProvider(SFTP_PREVIEW_SCHEME, sftpPreviewStore),
     vscode.workspace.onDidCloseTextDocument((document) => {
       if (document.uri.scheme === SFTP_PREVIEW_SCHEME) {
@@ -203,6 +213,21 @@ export function activate(context: vscode.ExtensionContext): void {
         sftpTreeProvider.refresh();
       });
     }),
+    vscode.commands.registerCommand('sshManager.sftp.newFile', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        const state = sftpManager.getState();
+        await createRemoteFileForEditing({
+          entry: item?.entry,
+          rootPath: state.kind === 'active' ? state.rootPath : '.',
+          promptName: async () => vscode.window.showInputBox({ prompt: 'New remote file name' }),
+          createFile: (remotePath) => sftpManager.createFile(remotePath),
+          openRemoteFile: async (remotePath) => {
+            await sftpEditManager.openRemoteFile(remotePath);
+          },
+          refresh: () => sftpTreeProvider.refresh()
+        });
+      });
+    }),
     vscode.commands.registerCommand('sshManager.sftp.newFolder', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
       await runSftpCommand(async () => {
         const folderName = await vscode.window.showInputBox({ prompt: 'New remote folder name' });
@@ -220,6 +245,14 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.env.clipboard.writeText(item.entry.path);
       }
     }),
+    vscode.commands.registerCommand('sshManager.sftp.edit', async (item?: SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        if (!item) {
+          return;
+        }
+        await sftpEditManager.openRemoteFile(item.entry.path);
+      });
+    }),
     vscode.commands.registerCommand('sshManager.sftp.openPreview', async (item?: SftpFileTreeItem) => {
       await runSftpCommand(async () => {
         if (!item) {
@@ -230,8 +263,8 @@ export function activate(context: vscode.ExtensionContext): void {
           remotePath: item.entry.path,
           previewStore: sftpPreviewStore,
           downloadFile: (remotePath, localPath) => sftpManager.downloadFile(remotePath, localPath),
-          openUri: async (uri) => {
-            await vscode.commands.executeCommand('vscode.open', uri);
+          openUri: async (uri, openOptions) => {
+            await vscode.commands.executeCommand('vscode.open', uri, openOptions);
           }
         });
       });

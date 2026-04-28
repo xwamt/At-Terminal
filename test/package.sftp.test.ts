@@ -17,12 +17,28 @@ describe('SFTP package contributions', () => {
         'sshManager.sftp.download',
         'sshManager.sftp.delete',
         'sshManager.sftp.rename',
+        'sshManager.sftp.newFile',
         'sshManager.sftp.newFolder',
         'sshManager.sftp.copyPath',
+        'sshManager.sftp.edit',
         'sshManager.sftp.openPreview',
         'sshManager.sftp.cdToDirectory',
         'sshManager.sftp.goToPath',
         'sshManager.sftp.goUp'
+      ])
+    );
+    expect(pkg.contributes.menus['view/item/context']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          command: 'sshManager.sftp.edit',
+          when: 'view == sshManager.sftpFiles && viewItem == sftpFile',
+          group: 'open@1'
+        }),
+        expect.objectContaining({
+          command: 'sshManager.sftp.newFile',
+          when: 'view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)',
+          group: 'management@1'
+        })
       ])
     );
   });

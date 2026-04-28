@@ -2,7 +2,7 @@
   "name": "ssh-terminal-manager",
   "displayName": "SSH Terminal Manager",
   "description": "Manage SSH terminal sessions in VS Code without installing a remote server.",
-  "version": "0.1.19",
+  "version": "0.2.1",
   "publisher": "local",
   "engines": {
     "vscode": "^1.85.0"
@@ -47,8 +47,10 @@
       { "command": "sshManager.sftp.download", "title": "SFTP: Download" },
       { "command": "sshManager.sftp.delete", "title": "SFTP: Delete" },
       { "command": "sshManager.sftp.rename", "title": "SFTP: Rename" },
+      { "command": "sshManager.sftp.newFile", "title": "SFTP: New File" },
       { "command": "sshManager.sftp.newFolder", "title": "SFTP: New Folder" },
       { "command": "sshManager.sftp.copyPath", "title": "SFTP: Copy Remote Path" },
+      { "command": "sshManager.sftp.edit", "title": "SFTP: Edit" },
       { "command": "sshManager.sftp.openPreview", "title": "SFTP: Open Preview" },
       { "command": "sshManager.sftp.cdToDirectory", "title": "SFTP: cd To Directory" },
       { "command": "sshManager.sftp.goToPath", "title": "SFTP: Go to Path" },
@@ -119,34 +121,44 @@
           "group": "transfer@2"
         },
         {
-          "command": "sshManager.sftp.openPreview",
+          "command": "sshManager.sftp.edit",
           "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
           "group": "open@1"
         },
         {
+          "command": "sshManager.sftp.openPreview",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
+          "group": "open@2"
+        },
+        {
           "command": "sshManager.sftp.cdToDirectory",
           "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
-          "group": "open@2"
+          "group": "open@3"
+        },
+        {
+          "command": "sshManager.sftp.newFile",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@1"
         },
         {
           "command": "sshManager.sftp.newFolder",
           "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
-          "group": "management@1"
+          "group": "management@2"
         },
         {
           "command": "sshManager.sftp.rename",
           "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
-          "group": "management@2"
+          "group": "management@3"
         },
         {
           "command": "sshManager.sftp.delete",
           "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
-          "group": "management@3"
+          "group": "management@4"
         },
         {
           "command": "sshManager.sftp.copyPath",
           "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile || viewItem == sftpDisconnectedDirectory || viewItem == sftpDisconnectedFile)",
-          "group": "management@4"
+          "group": "management@5"
         }
       ]
     },

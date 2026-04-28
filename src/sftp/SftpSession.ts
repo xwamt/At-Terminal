@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { Client, type ConnectConfig, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
 import type { TransferProgress } from './TransferService';
-import type { PasswordSource, SftpEntry, SftpEntryType } from './SftpTypes';
+import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './SftpTypes';
 
 export async function buildSftpConnectConfig(server: ServerConfig, passwords: PasswordSource): Promise<ConnectConfig> {
   const base: ConnectConfig = {
@@ -99,10 +99,43 @@ export class SftpSession {
     }));
   }
 
+  async stat(path: string): Promise<SftpFileStat> {
+    const sftp = this.requireSftp();
+    const attrs = await new Promise<{ size: number; mtime: number }>((resolve, reject) => {
+      sftp.stat(path, (error, stat) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(stat);
+      });
+    });
+    return {
+      size: attrs.size,
+      modifiedAt: attrs.mtime
+    };
+  }
+
   async mkdir(path: string): Promise<void> {
     const sftp = this.requireSftp();
     await new Promise<void>((resolve, reject) => {
       sftp.mkdir(path, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  async createFile(path: string): Promise<void> {
+    const sftp = this.requireSftp();
+    const handle = await new Promise<Buffer>((resolve, reject) => {
+      sftp.open(path, 'wx', (error, fileHandle) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(fileHandle);
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      sftp.close(handle, (error) => (error ? reject(error) : resolve()));
     });
   }
 
