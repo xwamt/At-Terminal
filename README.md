@@ -10,6 +10,19 @@ MVP scope:
 - xterm.js Webview terminal.
 - Manual disconnect and reconnect.
 - Basic host fingerprint trust.
+- SFTP Files sidebar following the active SSH terminal.
+- Basic SFTP upload, download, rename, delete, folder creation, preview, and path copy actions.
+- Conservative lrzsz/ZMODEM transfer detection in terminal output.
+
+## SFTP Files
+
+Open an SSH terminal from the Servers view. The `SFTP Files` view follows the active terminal tab and shows the remote login directory after the first SFTP load. Use the context menu to refresh, upload, download, rename, delete, create folders, copy paths, preview files, or send `cd` commands to the active terminal.
+
+Drag files from VS Code Explorer into `SFTP Files` to upload them to the target remote directory. Transfer operations run through the extension host and report errors through VS Code notifications.
+
+## lrzsz
+
+When the remote host has `lrzsz` installed, run `rz` or `sz <file>` in the terminal. The extension detects supported ZMODEM transfer sequences and starts the local adapter boundary. Full protocol transfer support depends on validating a compatible protocol implementation in the extension host.
 
 ## Development
 
@@ -48,3 +61,7 @@ Use any local SSH server or a disposable container. The MVP must be manually che
 - Manual reconnect.
 - Unknown host trust prompt.
 - Changed host key blocking.
+- SFTP directory browsing.
+- SFTP file upload and download.
+- SFTP drag upload from VS Code Explorer.
+- lrzsz `rz` and `sz` detection.
