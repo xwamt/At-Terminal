@@ -95,33 +95,43 @@ export function renderServerForm(server?: ServerConfig): string {
     <div id="form-status" class="form-status">Manual setup</div>
   </header>
   <form id="server-form" class="server-form">
-    <section class="form-section">
-      <h2>Connection</h2>
-      <div class="field-grid">
-        <label>Label <input name="label" value="${escapeAttr(server?.label ?? '')}" required></label>
-        <label>Group <input name="group" value="${escapeAttr(server?.group ?? '')}" placeholder="Default"></label>
-        <label>Host <input name="host" value="${escapeAttr(server?.host ?? '')}" required></label>
-        <label>Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
-        <label>Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required></label>
-        <label>Keepalive <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
+    <div class="form-panel-grid">
+      <section class="form-panel">
+        <div class="form-panel-header">
+          <h2>Connection</h2>
+          <span>Target</span>
+        </div>
+        <div class="field-grid">
+          <label class="field-stack">Label <input name="label" value="${escapeAttr(server?.label ?? '')}" required></label>
+          <label class="field-stack">Group <input name="group" value="${escapeAttr(server?.group ?? '')}" placeholder="Default"></label>
+          <label class="field-stack field-wide">Host <input name="host" value="${escapeAttr(server?.host ?? '')}" required></label>
+          <label class="field-stack">Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
+          <label class="field-stack">Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required></label>
+          <label class="field-stack">Keepalive <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
+        </div>
+      </section>
+      <section class="form-panel">
+        <div class="form-panel-header">
+          <h2>Authentication</h2>
+          <span>Credentials</span>
+        </div>
+        <div class="field-grid">
+          <label class="field-stack">Method
+            <select id="authType" name="authType">
+              <option value="password"${authType === 'password' ? ' selected' : ''}>Password</option>
+              <option value="privateKey"${authType === 'privateKey' ? ' selected' : ''}>Private Key</option>
+            </select>
+          </label>
+          <label class="field-stack">Password <input id="password" name="password" type="password"></label>
+          <label class="field-stack field-wide">Private Key Path <input id="privateKeyPath" name="privateKeyPath" value="${escapeAttr(server?.privateKeyPath ?? '')}"></label>
+        </div>
+      </section>
+    </div>
+    <footer class="form-footer">
+      <div id="form-error" class="form-error"></div>
+      <div class="form-actions">
+        <button class="primary-action" type="submit">${server ? 'Save Server' : 'Add Server'}</button>
       </div>
-    </section>
-    <section class="form-section">
-      <h2>Authentication</h2>
-      <div class="field-grid">
-        <label>Method
-          <select id="authType" name="authType">
-            <option value="password"${authType === 'password' ? ' selected' : ''}>Password</option>
-            <option value="privateKey"${authType === 'privateKey' ? ' selected' : ''}>Private Key</option>
-          </select>
-        </label>
-        <label>Password <input id="password" name="password" type="password"></label>
-        <label class="field-wide">Private Key Path <input id="privateKeyPath" name="privateKeyPath" value="${escapeAttr(server?.privateKeyPath ?? '')}"></label>
-      </div>
-    </section>
-    <div id="form-error" class="form-error"></div>
-    <footer class="form-actions">
-      <button type="submit">${server ? 'Save Server' : 'Add Server'}</button>
     </footer>
   </form>
 </main>`;

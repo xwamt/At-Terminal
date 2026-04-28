@@ -47,7 +47,7 @@ export class TerminalPanel {
     const panel = vscode.window.createWebviewPanel(
       'sshTerminal',
       `SSH: ${server.label}`,
-      vscode.ViewColumn.Beside,
+      createTerminalViewColumn(),
       {
         enableScripts: true,
         retainContextWhenHidden: true,
@@ -146,6 +146,10 @@ export function createTerminalAssets(extensionUri: vscode.Uri): WebviewAsset {
     script: vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'terminal.js'),
     style: vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'terminal.css')
   };
+}
+
+export function createTerminalViewColumn(): vscode.ViewColumn {
+  return vscode.ViewColumn.Active;
 }
 
 export function renderTerminalBody(settings: TerminalSettings): string {

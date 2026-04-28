@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createTerminalAssets, handleTerminalMessage, renderTerminalBody, resolveTerminalSettings } from '../../src/webview/TerminalPanel';
+import * as vscode from 'vscode';
+import {
+  createTerminalAssets,
+  createTerminalViewColumn,
+  handleTerminalMessage,
+  renderTerminalBody,
+  resolveTerminalSettings
+} from '../../src/webview/TerminalPanel';
 
 describe('TerminalPanel rendering helpers', () => {
   it('links the bundled xterm stylesheet emitted by esbuild', () => {
@@ -7,6 +14,10 @@ describe('TerminalPanel rendering helpers', () => {
 
     expect(assets.style).toBeDefined();
     expect(assets.style!.fsPath).toBe('extension-root/dist/webview/terminal.css');
+  });
+
+  it('opens new terminal panels as tabs in the active editor group', () => {
+    expect(createTerminalViewColumn()).toBe(vscode.ViewColumn.Active);
   });
 
   it('renders terminal settings into the webview data attributes', () => {

@@ -3,6 +3,8 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import './index.css';
+import { createTerminalOptions } from './options';
+import { watchTerminalTheme } from './theme';
 
 type VsCodeApi = { postMessage(message: unknown): void };
 
@@ -16,21 +18,22 @@ if (!container) {
   throw new Error('Missing terminal container');
 }
 
-const term = new Terminal({
-  cursorBlink: true,
-  scrollback: Number(container.dataset.scrollback ?? '5000'),
-  fontSize: Number(container.dataset.fontSize ?? '14'),
-  fontFamily: container.dataset.fontFamily || 'Cascadia Code, Menlo, monospace',
-  theme: {
-    background: '#1e1e1e',
-    foreground: '#d4d4d4'
-  }
-});
+const term = new Terminal(
+  createTerminalOptions(
+    {
+      scrollback: Number(container.dataset.scrollback ?? '5000'),
+      fontSize: Number(container.dataset.fontSize ?? '14'),
+      fontFamily: container.dataset.fontFamily || 'Cascadia Code, Menlo, monospace'
+    },
+    (name) => getComputedStyle(document.body).getPropertyValue(name)
+  )
+);
 
 const fitAddon = new FitAddon();
 term.loadAddon(fitAddon);
 term.loadAddon(new WebLinksAddon());
 term.open(container);
+watchTerminalTheme(term);
 fitAddon.fit();
 
 term.onData((data) => {

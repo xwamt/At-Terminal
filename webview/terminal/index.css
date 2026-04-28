@@ -8,7 +8,7 @@ body {
 }
 
 body {
-  background: #141414;
+  background: var(--vscode-terminal-background, var(--vscode-editor-background));
 }
 
 .terminal-shell {
@@ -16,7 +16,7 @@ body {
   grid-template-rows: 32px minmax(0, 1fr);
   width: 100vw;
   height: 100vh;
-  background: #1e1e1e;
+  background: var(--vscode-terminal-background, var(--vscode-editor-background));
 }
 
 .terminal-status {
@@ -65,11 +65,16 @@ body {
   height: 100%;
   padding: 8px 10px;
   box-sizing: border-box;
-  background: #1e1e1e;
+  background: var(--vscode-terminal-background, var(--vscode-editor-background));
 }
 
 .xterm {
   height: 100%;
+  box-sizing: border-box;
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
 }
 
 .xterm-viewport {
