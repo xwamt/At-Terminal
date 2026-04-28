@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
-import { Client, type ClientChannel, type ConnectConfig, type VerifyCallback } from 'ssh2';
+import { Client, type ClientChannel, type ConnectConfig, type ShellOptions, type VerifyCallback } from 'ssh2';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 
 export interface SshSessionEvents {
-  output(data: string): void;
+  output(data: Buffer): void;
   status(message: string): void;
   error(error: unknown): void;
 }
@@ -18,6 +18,7 @@ export class SshSession {
   private shell: ClientChannel | undefined;
   private rows = 24;
   private cols = 80;
+  private connected = false;
 
   constructor(
     private readonly server: ServerConfig,
@@ -39,7 +40,7 @@ export class SshSession {
     });
 
     this.shell = await new Promise<ClientChannel>((resolve, reject) => {
-      client.shell(this.getShellOptions(), (error, stream) => {
+      client.shell(this.getShellOptions(), { env: this.getShellEnvironment() }, (error, stream) => {
         if (error) {
           reject(error);
           return;
@@ -49,11 +50,13 @@ export class SshSession {
     });
 
     this.shell.on('data', (data: Buffer) => {
-      this.events.output(data.toString(this.server.encoding));
+      this.events.output(data);
     });
     this.shell.on('close', () => {
+      this.connected = false;
       this.events.status('Disconnected');
     });
+    this.connected = true;
     this.events.status('Connected');
   }
 
@@ -82,11 +85,25 @@ export class SshSession {
     };
   }
 
+  getShellEnvironment(): ShellOptions['env'] {
+    return {
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      CLICOLOR: '1',
+      FORCE_COLOR: '1'
+    };
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
   dispose(): void {
     this.shell?.end();
     this.client?.end();
     this.shell = undefined;
     this.client = undefined;
+    this.connected = false;
   }
 
   private async buildConnectConfig(): Promise<ConnectConfig> {

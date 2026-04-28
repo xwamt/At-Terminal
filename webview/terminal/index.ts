@@ -4,7 +4,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import './index.css';
 import { createTerminalOptions } from './options';
+import { writeTerminalOutputMessage } from './output';
 import { watchTerminalTheme } from './theme';
+import { watchTerminalZebraStripes } from './zebra';
 
 type VsCodeApi = { postMessage(message: unknown): void };
 
@@ -34,6 +36,7 @@ term.loadAddon(fitAddon);
 term.loadAddon(new WebLinksAddon());
 term.open(container);
 watchTerminalTheme(term);
+watchTerminalZebraStripes(term);
 fitAddon.fit();
 
 term.onData((data) => {
@@ -48,10 +51,8 @@ resizeObserver.observe(container);
 
 window.addEventListener('message', (event: MessageEvent) => {
   const message = event.data as { type?: string; payload?: unknown };
-  if (message.type === 'output' && typeof message.payload === 'string') {
-    term.write(message.payload);
-  }
-if (message.type === 'status' && typeof message.payload === 'string' && status) {
+  writeTerminalOutputMessage(message, term, { semanticHighlight: container.dataset.semanticHighlight === 'true' });
+  if (message.type === 'status' && typeof message.payload === 'string' && status) {
     const text = status.querySelector<HTMLElement>('.terminal-status-text');
     if (text) {
       text.textContent = message.payload;

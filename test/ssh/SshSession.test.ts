@@ -18,6 +18,18 @@ function server(): ServerConfig {
 }
 
 describe('SshSession host key verification', () => {
+  it('tracks connection state as disconnected before connect and after dispose', () => {
+    const session = new SshSession(
+      server(),
+      { getPassword: async () => 'secret' } as never,
+      { output: vi.fn(), status: vi.fn(), error: vi.fn() }
+    );
+
+    expect(session.isConnected()).toBe(false);
+    session.dispose();
+    expect(session.isConnected()).toBe(false);
+  });
+
   it('waits for async host key verification callback instead of accepting synchronously', async () => {
     let resolveVerification: (value: boolean) => void = () => undefined;
     const verifier = {

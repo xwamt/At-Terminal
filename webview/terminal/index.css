@@ -78,5 +78,22 @@ body {
 }
 
 .xterm-viewport {
+  background: transparent !important;
   overflow-y: auto;
+}
+
+.xterm-screen {
+  background: transparent;
+}
+
+.xterm-rows > div {
+  position: relative;
+}
+
+.xterm-rows > div.terminal-row-even {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.xterm-rows > div.terminal-row-odd {
+  background: rgba(0, 0, 0, 0.06);
 }

@@ -10,17 +10,19 @@ describe('terminal theme integration', () => {
       '--vscode-terminal-background': '#101820',
       '--vscode-terminal-foreground': '#f2f2f2',
       '--vscode-terminalCursor-foreground': '#ffcc00',
-      '--vscode-terminal-selectionBackground': '#264f78'
+      '--vscode-terminal-selectionBackground': '#264f78',
+      '--vscode-terminal-ansiRed': '#aa0000',
+      '--vscode-terminal-ansiBrightGreen': '#00ff44'
     };
 
-    expect(createTerminalTheme((name) => values[name])).toEqual({
+    expect(createTerminalTheme((name) => values[name])).toMatchObject({
       background: '#101820',
       foreground: '#f2f2f2',
       cursor: '#ffcc00',
       cursorAccent: '#ffffff',
       selectionBackground: '#264f78',
       black: '#000000',
-      red: '#f48771',
+      red: '#aa0000',
       green: '#b1d631',
       yellow: '#ffd866',
       blue: '#569cd6',
@@ -29,7 +31,7 @@ describe('terminal theme integration', () => {
       white: '#dcdcaa',
       brightBlack: '#666666',
       brightRed: '#ff6b6b',
-      brightGreen: '#c3e88d',
+      brightGreen: '#00ff44',
       brightYellow: '#fff569',
       brightBlue: '#82aaff',
       brightMagenta: '#ff9ccc',
@@ -68,6 +70,8 @@ describe('terminal theme integration', () => {
     const css = readFileSync(join(process.cwd(), 'webview/terminal/index.css'), 'utf8');
 
     expect(css).toContain('var(--vscode-terminal-background');
+    expect(css).toContain('.xterm-viewport');
+    expect(css).toContain('background: transparent');
     expect(css).toContain('border-radius: 6px');
     expect(css).toContain('padding: 8px');
     expect(css).toContain('box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2)');

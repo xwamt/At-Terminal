@@ -42,7 +42,12 @@ export class EventEmitter<T> {
 }
 
 export class Uri {
-  constructor(public readonly fsPath: string) {}
+  constructor(
+    public readonly fsPath: string,
+    public readonly scheme = 'file',
+    public readonly path = fsPath,
+    public readonly query = ''
+  ) {}
 
   static file(path: string): Uri {
     return new Uri(path);
@@ -50,6 +55,14 @@ export class Uri {
 
   static joinPath(base: Uri, ...paths: string[]): Uri {
     return new Uri([base.fsPath, ...paths].join('/'));
+  }
+
+  static from(parts: { scheme: string; path: string; query?: string }): Uri {
+    return new Uri(parts.path, parts.scheme, parts.path, parts.query ?? '');
+  }
+
+  toString(): string {
+    return `${this.scheme}:${this.path}${this.query ? `?${this.query}` : ''}`;
   }
 }
 
@@ -71,6 +84,8 @@ export const commands = {
 };
 
 export const workspace = {
+  registerTextDocumentContentProvider: () => ({ dispose: () => undefined }),
+  onDidCloseTextDocument: () => ({ dispose: () => undefined }),
   getConfiguration: () => ({
     get: <T>(_key: string, defaultValue: T): T => defaultValue
   })

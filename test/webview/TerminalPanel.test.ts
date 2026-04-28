@@ -1,12 +1,123 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import type { ServerConfig } from '../../src/config/schema';
+import { TerminalContextRegistry } from '../../src/terminal/TerminalContext';
 import {
   createTerminalAssets,
   createTerminalViewColumn,
   handleTerminalMessage,
   renderTerminalBody,
-  resolveTerminalSettings
+  resolveTerminalSettings,
+  TerminalPanel
 } from '../../src/webview/TerminalPanel';
+
+const connect = vi.fn<() => Promise<void>>();
+const reconnect = vi.fn<() => Promise<void>>();
+const disposeSession = vi.fn<() => void>();
+const write = vi.fn<(data: string) => void>();
+const resize = vi.fn<(rows: number, cols: number) => void>();
+const sessionEvents: Array<{ output(data: Buffer): void; status(message: string): void }> = [];
+
+vi.mock('../../src/ssh/SshSession', () => ({
+  SshSession: vi.fn().mockImplementation((_server, _configManager, events) => {
+    sessionEvents.push(events);
+    return {
+      connect,
+      reconnect,
+      dispose: disposeSession,
+      write,
+      resize
+    };
+  })
+}));
+
+function server(id = 'terminal-server'): ServerConfig {
+  return {
+    id,
+    label: id,
+    host: `${id}.example.com`,
+    port: 22,
+    username: 'deploy',
+    authType: 'password',
+    keepAliveInterval: 30,
+    encoding: 'utf-8',
+    createdAt: 1,
+    updatedAt: 1
+  };
+}
+
+function configManager() {
+  return {} as never;
+}
+
+function extensionContext(): vscode.ExtensionContext {
+  return {
+    extensionUri: vscode.Uri.file('extension-root')
+  } as vscode.ExtensionContext;
+}
+
+function createPanel() {
+  const messageListeners: Array<(message: unknown) => void> = [];
+  const viewStateListeners: Array<(event: { webviewPanel: { active: boolean } }) => void> = [];
+  const disposeListeners: Array<() => void> = [];
+  const panel = {
+    active: true,
+    webview: {
+      html: '',
+      asWebviewUri: vi.fn((uri: vscode.Uri) => uri),
+      onDidReceiveMessage: vi.fn((listener: (message: unknown) => void) => {
+        messageListeners.push(listener);
+        return { dispose: vi.fn() };
+      }),
+      postMessage: vi.fn()
+    },
+    onDidChangeViewState: vi.fn((listener: (event: { webviewPanel: { active: boolean } }) => void) => {
+      viewStateListeners.push(listener);
+      return { dispose: vi.fn() };
+    }),
+    onDidDispose: vi.fn((listener: () => void) => {
+      disposeListeners.push(listener);
+      return { dispose: vi.fn() };
+    })
+  } as unknown as vscode.WebviewPanel;
+
+  return {
+    panel,
+    fireViewState(active: boolean) {
+      for (const listener of viewStateListeners) {
+        listener({ webviewPanel: { active } });
+      }
+    },
+    fireDispose() {
+      for (const listener of disposeListeners) {
+        listener();
+      }
+    }
+  };
+}
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
+beforeEach(() => {
+  connect.mockResolvedValue(undefined);
+  reconnect.mockResolvedValue(undefined);
+  disposeSession.mockClear();
+  write.mockClear();
+  resize.mockClear();
+  sessionEvents.length = 0;
+  vi.spyOn(vscode.window, 'createWebviewPanel').mockReturnValue(createPanel().panel);
+});
 
 describe('TerminalPanel rendering helpers', () => {
   it('links the bundled xterm stylesheet emitted by esbuild', () => {
@@ -24,12 +135,14 @@ describe('TerminalPanel rendering helpers', () => {
     const body = renderTerminalBody({
       scrollback: 1234,
       fontSize: 16,
-      fontFamily: 'JetBrains Mono'
+      fontFamily: 'JetBrains Mono',
+      semanticHighlight: true
     });
 
     expect(body).toContain('data-scrollback="1234"');
     expect(body).toContain('data-font-size="16"');
     expect(body).toContain('data-font-family="JetBrains Mono"');
+    expect(body).toContain('data-semantic-highlight="true"');
   });
 
   it('reads contributed terminal settings from VS Code configuration', () => {
@@ -38,7 +151,8 @@ describe('TerminalPanel rendering helpers', () => {
         const values: Record<string, unknown> = {
           scrollback: 9000,
           terminalFontSize: 18,
-          terminalFontFamily: 'Fira Code'
+          terminalFontFamily: 'Fira Code',
+          semanticHighlight: false
         };
         return (values[key] ?? defaultValue) as T;
       }
@@ -47,7 +161,8 @@ describe('TerminalPanel rendering helpers', () => {
     expect(settings).toEqual({
       scrollback: 9000,
       fontSize: 18,
-      fontFamily: 'Fira Code'
+      fontFamily: 'Fira Code',
+      semanticHighlight: false
     });
   });
 
@@ -65,11 +180,137 @@ describe('TerminalPanel rendering helpers', () => {
     const body = renderTerminalBody({
       scrollback: 5000,
       fontSize: 14,
-      fontFamily: 'Cascadia Code'
+      fontFamily: 'Cascadia Code',
+      semanticHighlight: true
     });
 
     expect(body).toContain('class="terminal-shell"');
     expect(body).toContain('class="terminal-status terminal-status--connecting"');
     expect(body).toContain('class="terminal-host"');
+  });
+
+  it('publishes active terminal context as disconnected on open and connected after connect succeeds', async () => {
+    const registry = new TerminalContextRegistry();
+    const listener = vi.fn();
+    registry.onDidChangeActiveContext(listener);
+
+    TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+
+    expect(registry.getActive()?.connected).toBe(false);
+    await flushPromises();
+    expect(registry.getActive()?.connected).toBe(true);
+    expect(registry.getActive()?.server.id).toBe('terminal-server');
+    expect(registry.getActive()?.terminalId).toEqual(expect.any(String));
+    expect(listener).toHaveBeenLastCalledWith(registry.getActive());
+  });
+
+  it('marks the active context disconnected on connect error and disconnect', async () => {
+    connect.mockRejectedValueOnce(new Error('connect failed'));
+    const registry = new TerminalContextRegistry();
+
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+
+    await flushPromises();
+    expect(registry.getActive()?.connected).toBe(false);
+
+    terminal.disconnect();
+    expect(registry.getActive()?.connected).toBe(false);
+  });
+
+  it('keeps current connection state on duplicate activation and clears on dispose', async () => {
+    const registry = new TerminalContextRegistry();
+    const listener = vi.fn();
+    registry.onDidChangeActiveContext(listener);
+    const panelHost = createPanel();
+    vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+
+    TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    await flushPromises();
+    listener.mockClear();
+
+    panelHost.fireViewState(true);
+    expect(listener).not.toHaveBeenCalled();
+    expect(registry.getActive()?.connected).toBe(true);
+
+    panelHost.fireDispose();
+    expect(registry.getActive()).toBeUndefined();
+  });
+
+  it('ignores connect success after the terminal has been disconnected', async () => {
+    const pendingConnect = deferred<void>();
+    connect.mockReturnValueOnce(pendingConnect.promise);
+    const registry = new TerminalContextRegistry();
+
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    terminal.disconnect();
+
+    expect(registry.getActive()?.connected).toBe(false);
+    pendingConnect.resolve();
+    await flushPromises();
+
+    expect(registry.getActive()?.connected).toBe(false);
+  });
+
+  it('marks the active context disconnected when the remote session reports Disconnected status', async () => {
+    const registry = new TerminalContextRegistry();
+    const panelHost = createPanel();
+    vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+
+    TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    await flushPromises();
+    expect(registry.getActive()?.connected).toBe(true);
+
+    sessionEvents.at(-1)!.status('Disconnected');
+
+    expect(registry.getActive()?.connected).toBe(false);
+    expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'status', payload: 'Disconnected' });
+  });
+
+  it('posts ANSI terminal output to xterm as raw bytes without stripping escape sequences', async () => {
+    const panelHost = createPanel();
+    vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+    const rawOutput = Buffer.from('\x1b[31mred\x1b[0m\r\n\x1b[32mgreen\x1b[0m', 'utf8');
+
+    TerminalPanel.open(extensionContext(), server(), configManager());
+    await flushPromises();
+    sessionEvents.at(-1)!.output(rawOutput);
+
+    expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'outputBytes',
+      payload: [...rawOutput]
+    });
+  });
+
+  it('ignores late session messages after the webview panel is disposed', async () => {
+    const registry = new TerminalContextRegistry();
+    const panelHost = createPanel();
+    vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+
+    TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    await flushPromises();
+    panelHost.fireDispose();
+    sessionEvents.at(-1)!.output(Buffer.from('late output', 'utf8'));
+    sessionEvents.at(-1)!.status('Disconnected');
+
+    expect(panelHost.panel.webview.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not let stale disconnected status from an old session mark a reconnected terminal disconnected', async () => {
+    const registry = new TerminalContextRegistry();
+    const panelHost = createPanel();
+    vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    await flushPromises();
+    const oldSessionEvents = sessionEvents[0];
+
+    await terminal.reconnect();
+    await flushPromises();
+    expect(registry.getActive()?.connected).toBe(true);
+
+    oldSessionEvents.status('Disconnected');
+
+    expect(registry.getActive()?.connected).toBe(true);
+    expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'status', payload: 'Disconnected' });
   });
 });

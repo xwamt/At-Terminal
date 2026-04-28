@@ -1,7 +1,11 @@
+import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
+import { LrzszDetector } from '../lrzsz/LrzszDetector';
+import { LrzszTransfer } from '../lrzsz/LrzszTransfer';
 import { SshSession, type HostKeyVerifier } from '../ssh/SshSession';
+import type { TerminalContextRegistry } from '../terminal/TerminalContext';
 import { formatError } from '../utils/errors';
 import { renderWebviewHtml, type WebviewAsset } from './html';
 
@@ -19,6 +23,7 @@ export interface TerminalSettings {
   scrollback: number;
   fontSize: number;
   fontFamily: string;
+  semanticHighlight: boolean;
 }
 
 export interface ConfigurationLike {
@@ -28,21 +33,27 @@ export interface ConfigurationLike {
 export class TerminalPanel {
   private static active: TerminalPanel | undefined;
   private session: SshSession;
+  private readonly terminalId = randomUUID();
+  private connected = false;
+  private disposed = false;
+  private connectionGeneration = 0;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
     private readonly server: ServerConfig,
     private readonly configManager: ConfigManager,
-    private readonly hostKeyVerifier?: HostKeyVerifier
+    private readonly hostKeyVerifier?: HostKeyVerifier,
+    private readonly terminalContext?: TerminalContextRegistry
   ) {
-    this.session = this.createSession();
+    this.session = this.createSession(this.connectionGeneration);
   }
 
   static open(
     context: vscode.ExtensionContext,
     server: ServerConfig,
     configManager: ConfigManager,
-    hostKeyVerifier?: HostKeyVerifier
+    hostKeyVerifier?: HostKeyVerifier,
+    terminalContext?: TerminalContextRegistry
   ): TerminalPanel {
     const panel = vscode.window.createWebviewPanel(
       'sshTerminal',
@@ -55,7 +66,7 @@ export class TerminalPanel {
       }
     );
 
-    const terminal = new TerminalPanel(panel, server, configManager, hostKeyVerifier);
+    const terminal = new TerminalPanel(panel, server, configManager, hostKeyVerifier, terminalContext);
     TerminalPanel.active = terminal;
     const settings = resolveTerminalSettings(vscode.workspace.getConfiguration('sshManager'));
     panel.webview.html = renderWebviewHtml(
@@ -64,6 +75,7 @@ export class TerminalPanel {
       renderTerminalBody(settings)
     );
     terminal.bind();
+    terminal.publishContext();
     void terminal.connect();
     return terminal;
   }
@@ -73,24 +85,51 @@ export class TerminalPanel {
   }
 
   async connect(): Promise<void> {
+    const generation = this.connectionGeneration;
     try {
       await this.session.connect();
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
+      this.connected = true;
+      this.terminalContext?.markConnected(this.terminalId);
     } catch (error) {
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
+      this.connected = false;
+      this.terminalContext?.markDisconnected(this.terminalId);
       this.postStatus(formatError(error));
     }
   }
 
   async reconnect(): Promise<void> {
+    const generation = ++this.connectionGeneration;
     try {
       this.postStatus('Reconnecting...');
-      await this.session.reconnect();
+      this.session.dispose();
+      this.session = this.createSession(generation);
+      await this.session.connect();
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
+      this.connected = true;
+      this.terminalContext?.markConnected(this.terminalId);
     } catch (error) {
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
+      this.connected = false;
+      this.terminalContext?.markDisconnected(this.terminalId);
       this.postStatus(formatError(error));
     }
   }
 
   disconnect(): void {
+    this.connectionGeneration++;
     this.session.dispose();
+    this.connected = false;
+    this.terminalContext?.markDisconnected(this.terminalId);
     this.postStatus('Disconnected');
   }
 
@@ -102,26 +141,39 @@ export class TerminalPanel {
     this.panel.onDidChangeViewState((event) => {
       if (event.webviewPanel.active) {
         TerminalPanel.active = this;
+        this.publishContext();
       }
     });
 
     this.panel.onDidDispose(() => {
+      this.disposed = true;
+      this.connectionGeneration++;
       this.session.dispose();
+      this.connected = false;
+      this.terminalContext?.clearIfActive(this.terminalId);
       if (TerminalPanel.active === this) {
         TerminalPanel.active = undefined;
       }
     });
   }
 
-  private createSession(): SshSession {
+  private createSession(generation: number): SshSession {
+    const lrzszDetector = new LrzszDetector({
+      onTransfer: (start) => {
+        void new LrzszTransfer().start(start);
+      }
+    });
     return new SshSession(
       this.server,
       this.configManager,
       {
         output: (data) => {
-          void this.panel.webview.postMessage({ type: 'output', payload: data });
+          const inspected = lrzszDetector.inspect(data.toString('latin1'));
+          if (inspected.passthrough) {
+            this.postWebviewMessage({ type: 'outputBytes', payload: [...data] });
+          }
         },
-        status: (message) => this.postStatus(message),
+        status: (message) => this.handleSessionStatus(message, generation),
         error: (error) => this.postStatus(formatError(error))
       },
       this.hostKeyVerifier
@@ -129,7 +181,35 @@ export class TerminalPanel {
   }
 
   private postStatus(message: string): void {
-    void this.panel.webview.postMessage({ type: 'status', payload: message });
+    this.postWebviewMessage({ type: 'status', payload: message });
+  }
+
+  private handleSessionStatus(message: string, generation: number): void {
+    if (message === 'Disconnected' && generation === this.connectionGeneration) {
+      this.connected = false;
+      this.terminalContext?.markDisconnected(this.terminalId);
+    }
+    this.postStatus(message);
+  }
+
+  private publishContext(): void {
+    this.terminalContext?.setActive({
+      terminalId: this.terminalId,
+      server: this.server,
+      connected: this.connected,
+      write: (data) => this.session.write(data)
+    });
+  }
+
+  private postWebviewMessage(message: unknown): void {
+    if (this.disposed) {
+      return;
+    }
+    try {
+      void Promise.resolve(this.panel.webview.postMessage(message)).catch(() => undefined);
+    } catch {
+      // VS Code can reject or throw if a late SSH event arrives after webview disposal.
+    }
   }
 }
 
@@ -137,7 +217,8 @@ export function resolveTerminalSettings(configuration: ConfigurationLike): Termi
   return {
     scrollback: configuration.get('scrollback', 5000),
     fontSize: configuration.get('terminalFontSize', 14),
-    fontFamily: configuration.get('terminalFontFamily', 'Cascadia Code, Menlo, monospace')
+    fontFamily: configuration.get('terminalFontFamily', 'Cascadia Code, Menlo, monospace'),
+    semanticHighlight: configuration.get('semanticHighlight', true)
   };
 }
 
@@ -159,7 +240,7 @@ export function renderTerminalBody(settings: TerminalSettings): string {
     <span class="terminal-status-text">Starting...</span>
     <span class="terminal-host">xterm.js</span>
   </header>
-  <section id="terminal" class="terminal-surface" data-scrollback="${settings.scrollback}" data-font-size="${settings.fontSize}" data-font-family="${escapeAttr(settings.fontFamily)}"></section>
+  <section id="terminal" class="terminal-surface" data-scrollback="${settings.scrollback}" data-font-size="${settings.fontSize}" data-font-family="${escapeAttr(settings.fontFamily)}" data-semantic-highlight="${settings.semanticHighlight}"></section>
 </main>`;
 }
 
