@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ConfigManager } from './config/ConfigManager';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
+import { SftpDragAndDropController } from './sftp/SftpDragAndDropController';
 import { SftpManager } from './sftp/SftpManager';
 import { SftpSession } from './sftp/SftpSession';
 import { HostKeyStore } from './ssh/HostKeyStore';
@@ -63,6 +64,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.window.createTreeView('sshManager.sftpFiles', {
       treeDataProvider: sftpTreeProvider,
+      dragAndDropController: new SftpDragAndDropController(sftpManager),
       showCollapseAll: true
     }),
     vscode.commands.registerCommand('sshManager.addServer', () => {
