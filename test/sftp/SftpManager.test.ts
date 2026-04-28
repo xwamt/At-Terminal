@@ -299,6 +299,56 @@ describe('SftpManager', () => {
     expect(firstSession.dispose).toHaveBeenCalled();
     expect(secondSession.realpath).toHaveBeenCalledWith('.');
   });
+
+  it('rejects in-flight SFTP loads when the active terminal disconnects before connect settles', async () => {
+    const firstConnect = deferred<void>();
+    const firstSession = {
+      connect: vi.fn(() => firstConnect.promise),
+      realpath: vi.fn(async () => '/first'),
+      listDirectory: vi.fn(async () => []),
+      mkdir: vi.fn(),
+      rename: vi.fn(),
+      deleteFile: vi.fn(),
+      deleteDirectory: vi.fn(),
+      uploadFile: vi.fn(),
+      downloadFile: vi.fn(),
+      createFile: vi.fn(),
+      stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
+      dispose: vi.fn()
+    };
+    const secondSession = {
+      connect: vi.fn(),
+      realpath: vi.fn(async () => '/second'),
+      listDirectory: vi.fn(async () => []),
+      mkdir: vi.fn(),
+      rename: vi.fn(),
+      deleteFile: vi.fn(),
+      deleteDirectory: vi.fn(),
+      uploadFile: vi.fn(),
+      downloadFile: vi.fn(),
+      createFile: vi.fn(),
+      stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
+      dispose: vi.fn()
+    };
+    const createSession = vi.fn().mockReturnValueOnce(firstSession).mockReturnValueOnce(secondSession);
+    const manager = new SftpManager({ createSession });
+
+    manager.setTerminalContext(context(true, 'terminal-a'));
+    const staleRoot = manager.ensureRoot();
+    await flushPromises();
+
+    manager.setTerminalContext(context(false, 'terminal-a'));
+    await flushPromises();
+
+    expect(await promiseState(staleRoot)).toBe('rejected');
+    await expect(staleRoot).rejects.toThrow('superseded');
+    expect(firstSession.dispose).toHaveBeenCalled();
+    expect(firstSession.realpath).not.toHaveBeenCalled();
+
+    manager.setTerminalContext(context(true, 'terminal-b'));
+    await expect(manager.ensureRoot()).resolves.toBe('/second');
+    expect(secondSession.realpath).toHaveBeenCalledWith('.');
+  });
 });
 
 function deferred<T>() {
@@ -312,4 +362,18 @@ function deferred<T>() {
 async function flushPromises(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function promiseState<T>(promise: Promise<T>): Promise<'pending' | 'resolved' | 'rejected'> {
+  let state: 'pending' | 'resolved' | 'rejected' = 'pending';
+  promise.then(
+    () => {
+      state = 'resolved';
+    },
+    () => {
+      state = 'rejected';
+    }
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return state;
 }

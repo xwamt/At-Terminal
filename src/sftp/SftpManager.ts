@@ -24,11 +24,17 @@ export interface SftpManagerOptions {
   reporter?: TransferReporter;
 }
 
+interface ConnectionInvalidation {
+  promise: Promise<never>;
+  reject(error: Error): void;
+}
+
 export class SftpManager {
   private terminalContext: TerminalContext | undefined;
   private session: SftpSessionLike | undefined;
   private connectingSession: SftpSessionLike | undefined;
   private connectingSessionPromise: Promise<SftpSessionLike> | undefined;
+  private connectingSessionInvalidation: ConnectionInvalidation | undefined;
   private sessionGeneration = 0;
   private rootPath: string | undefined;
   private snapshot: { rootPath: string; entries: SftpEntry[] } | undefined;
@@ -49,6 +55,7 @@ export class SftpManager {
       return;
     }
     this.sessionGeneration++;
+    this.invalidateConnectingSession();
     this.connectingSession?.dispose();
     this.session?.dispose();
     this.connectingSession = undefined;
@@ -165,8 +172,10 @@ export class SftpManager {
     const terminalId = context.terminalId;
     const session = this.options.createSession(context);
     this.connectingSession = session;
-    const promise = Promise.resolve()
-      .then(() => session.connect())
+    const invalidation = this.createConnectionInvalidation();
+    this.connectingSessionInvalidation = invalidation;
+    const connect = Promise.race([Promise.resolve().then(() => session.connect()), invalidation.promise]);
+    const promise = connect
       .then(() => {
         if (
           generation !== this.sessionGeneration ||
@@ -192,9 +201,29 @@ export class SftpManager {
         if (this.connectingSessionPromise === promise) {
           this.connectingSessionPromise = undefined;
         }
+        if (this.connectingSessionInvalidation === invalidation) {
+          this.connectingSessionInvalidation = undefined;
+        }
       });
     this.connectingSessionPromise = promise;
     return await promise;
+  }
+
+  private createConnectionInvalidation(): ConnectionInvalidation {
+    let reject!: (error: Error) => void;
+    const promise = new Promise<never>((_, promiseReject) => {
+      reject = promiseReject;
+    });
+    return { promise, reject };
+  }
+
+  private invalidateConnectingSession(): void {
+    const invalidation = this.connectingSessionInvalidation;
+    if (!invalidation) {
+      return;
+    }
+    this.connectingSessionInvalidation = undefined;
+    invalidation.reject(new Error('SFTP connection was superseded by another active terminal.'));
   }
 
   private async runConnected<T>(
