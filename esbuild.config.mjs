@@ -15,7 +15,7 @@ const contexts = await Promise.all([
     outfile: 'dist/extension.js',
     platform: 'node',
     format: 'cjs',
-    external: ['vscode']
+    external: ['vscode', 'ssh2']
   }),
   esbuild.context({
     ...common,

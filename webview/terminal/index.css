@@ -1,0 +1,25 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: #1e1e1e;
+}
+
+#status {
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-sideBar-background);
+  font: 12px var(--vscode-font-family);
+  padding: 4px 8px;
+}
+
+#terminal {
+  min-height: 0;
+}

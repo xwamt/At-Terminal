@@ -1,0 +1,27 @@
+body {
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  padding: 20px;
+}
+
+form {
+  display: grid;
+  gap: 12px;
+  max-width: 560px;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+#form-error {
+  color: var(--vscode-errorForeground);
+}
