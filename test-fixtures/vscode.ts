@@ -73,6 +73,7 @@ export const ThemeIcon = class {
 export interface TextDocument {
   uri: Uri;
   fileName: string;
+  languageId?: string;
   isDirty?: boolean;
 }
 
@@ -111,6 +112,13 @@ export const window = {
   createWebviewPanel: () => ({ dispose: () => undefined }),
   showTextDocument: async (document: TextDocument) => document,
   createStatusBarItem: (_alignment?: StatusBarAlignment, _priority?: number) => new StatusBarItem()
+};
+
+export const languages = {
+  setTextDocumentLanguage: async (document: TextDocument, languageId: string): Promise<TextDocument> => ({
+    ...document,
+    languageId
+  })
 };
 
 export const commands = {

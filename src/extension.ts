@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ConfigManager } from './config/ConfigManager';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
-import { createVscodeSftpEditUi, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
+import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
 import { SftpManager } from './sftp/SftpManager';
 import { createRemoteFileForEditing } from './sftp/SftpNewFile';
 import { SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore, openRemotePreviewFile } from './sftp/SftpPreview';
@@ -34,7 +34,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const sftpPreviewStore = new SftpPreviewDocumentStore();
   const sftpEditStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   const sftpEditManager = new SftpEditSessionManager({
-    storageUri: context.globalStorageUri,
+    storageUri: resolveEditStorageUri(context.globalStorageUri, vscode.workspace.workspaceFolders),
     sftp: sftpManager,
     ui: createVscodeSftpEditUi(sftpEditStatus)
   });

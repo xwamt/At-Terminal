@@ -8,6 +8,7 @@ import {
   buildEditSessionKey,
   createEditCacheUri,
   createVscodeSftpEditUi,
+  resolveEditStorageUri,
   SftpEditSessionManager
 } from '../../src/sftp/SftpEditSessionManager';
 
@@ -30,6 +31,29 @@ describe('SftpEditSessionManager open flow', () => {
     }
   });
 
+  it('prefers workspace storage for editable caches so language extensions get workspace context', async () => {
+    const globalStorage = vscode.Uri.file('C:/global-storage');
+    const workspaceRoot = vscode.Uri.file('C:/project');
+
+    const storage = resolveEditStorageUri(globalStorage, [
+      { uri: workspaceRoot, name: 'project', index: 0 } as vscode.WorkspaceFolder
+    ]);
+    const cacheUri = createEditCacheUri(storage, 'srv', '/srv/app/test.py');
+
+    expect(storage.fsPath).toContain('C:/project');
+    expect(storage.fsPath).toContain('.ssh-terminal-manager');
+    expect(cacheUri.fsPath).toContain('test.py');
+    expect(cacheUri.fsPath).not.toContain('C:/global-storage');
+  });
+
+  it('falls back to extension storage when no file workspace is open', () => {
+    const globalStorage = vscode.Uri.file('C:/global-storage');
+
+    const storage = resolveEditStorageUri(globalStorage, []);
+
+    expect(storage.fsPath).toBe(globalStorage.fsPath);
+  });
+
   it('opens editable files outside VS Code preview tabs', async () => {
     const uri = vscode.Uri.file('C:/tmp/sftp-edit/file.txt');
     const document = { uri, fileName: uri.fsPath };
@@ -42,13 +66,46 @@ describe('SftpEditSessionManager open flow', () => {
 
     try {
       const ui = createVscodeSftpEditUi(vscode.window.createStatusBarItem());
-      await ui.openFile(uri);
+      await ui.openFile(uri, '/tmp/file.txt');
 
       expect(openTextDocument).toHaveBeenCalledWith(uri);
       expect(showTextDocument).toHaveBeenCalledWith(document, { preview: false });
     } finally {
       (vscode.workspace as unknown as { openTextDocument: typeof originalOpenTextDocument }).openTextDocument =
         originalOpenTextDocument;
+      (vscode.window as unknown as { showTextDocument: typeof originalShowTextDocument }).showTextDocument =
+        originalShowTextDocument;
+    }
+  });
+
+  it('restores the language mode from the remote filename when VS Code opens a cache file as plaintext', async () => {
+    const uri = vscode.Uri.file('C:/tmp/sftp-edit/test.py');
+    const document = { uri, fileName: uri.fsPath, languageId: 'plaintext' };
+    const pythonDocument = { ...document, languageId: 'python' };
+    const originalOpenTextDocument = vscode.workspace.openTextDocument;
+    const originalSetTextDocumentLanguage = vscode.languages.setTextDocumentLanguage;
+    const originalShowTextDocument = vscode.window.showTextDocument;
+    const openTextDocument = vi.fn(async () => document);
+    const setTextDocumentLanguage = vi.fn(async () => pythonDocument);
+    const showTextDocument = vi.fn(async () => pythonDocument);
+    (vscode.workspace as unknown as { openTextDocument: typeof openTextDocument }).openTextDocument = openTextDocument;
+    (
+      vscode.languages as unknown as { setTextDocumentLanguage: typeof setTextDocumentLanguage }
+    ).setTextDocumentLanguage = setTextDocumentLanguage;
+    (vscode.window as unknown as { showTextDocument: typeof showTextDocument }).showTextDocument = showTextDocument;
+
+    try {
+      const ui = createVscodeSftpEditUi(vscode.window.createStatusBarItem());
+      await ui.openFile(uri, '/srv/app/test.py');
+
+      expect(setTextDocumentLanguage).toHaveBeenCalledWith(document, 'python');
+      expect(showTextDocument).toHaveBeenCalledWith(pythonDocument, { preview: false });
+    } finally {
+      (vscode.workspace as unknown as { openTextDocument: typeof originalOpenTextDocument }).openTextDocument =
+        originalOpenTextDocument;
+      (
+        vscode.languages as unknown as { setTextDocumentLanguage: typeof originalSetTextDocumentLanguage }
+      ).setTextDocumentLanguage = originalSetTextDocumentLanguage;
       (vscode.window as unknown as { showTextDocument: typeof originalShowTextDocument }).showTextDocument =
         originalShowTextDocument;
     }

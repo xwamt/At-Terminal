@@ -17,7 +17,7 @@ export interface SftpEditSftpClient {
 }
 
 export interface SftpEditUi {
-  openFile(uri: vscode.Uri): Promise<void>;
+  openFile(uri: vscode.Uri, remotePath: string): Promise<void>;
   confirmAutoSync(remotePath: string): Promise<boolean>;
   resolveConflict(remotePath: string): Promise<SftpEditConflictChoice>;
   showStatus(state: SftpEditSyncState, message: string): void;
@@ -54,6 +54,14 @@ export function createEditCacheUri(storageUri: vscode.Uri, serverId: string, rem
   return vscode.Uri.joinPath(storageUri, 'sftp-edit', safePreviewName(serverId), hash, safePreviewName(remotePath));
 }
 
+export function resolveEditStorageUri(
+  globalStorageUri: vscode.Uri,
+  workspaceFolders: readonly vscode.WorkspaceFolder[] | undefined
+): vscode.Uri {
+  const fileWorkspace = workspaceFolders?.find((folder) => folder.uri.scheme === 'file');
+  return fileWorkspace ? vscode.Uri.joinPath(fileWorkspace.uri, '.ssh-terminal-manager') : globalStorageUri;
+}
+
 export function remoteStatsMatch(left: SftpFileStat, right: SftpFileStat): boolean {
   return left.size === right.size && left.modifiedAt === right.modifiedAt;
 }
@@ -85,7 +93,7 @@ export class SftpEditSessionManager {
     const key = buildEditSessionKey(serverId, remotePath);
     const existing = this.sessionsByKey.get(key);
     if (existing) {
-      await this.options.ui.openFile(existing.localUri);
+      await this.options.ui.openFile(existing.localUri, existing.remotePath);
       return existing;
     }
 
@@ -109,7 +117,7 @@ export class SftpEditSessionManager {
     };
     this.sessionsByKey.set(key, session);
     this.sessionsByLocalPath.set(localUri.fsPath, session);
-    await this.options.ui.openFile(localUri);
+    await this.options.ui.openFile(localUri, remotePath);
     return session;
   }
 
@@ -246,9 +254,14 @@ export class SftpEditSessionManager {
 
 export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): SftpEditUi {
   return {
-    async openFile(uri) {
+    async openFile(uri, remotePath) {
       const document = await vscode.workspace.openTextDocument(uri);
-      await vscode.window.showTextDocument(document, { preview: false });
+      const languageId = inferLanguageId(remotePath);
+      const visibleDocument =
+        languageId && document.languageId === 'plaintext'
+          ? await vscode.languages.setTextDocumentLanguage(document, languageId)
+          : document;
+      await vscode.window.showTextDocument(visibleDocument, { preview: false });
     },
     async confirmAutoSync(remotePath) {
       const answer = await vscode.window.showWarningMessage(
@@ -292,4 +305,56 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
       return answer === 'Discard Local Copy' ? 'discard' : 'keep';
     }
   };
+}
+
+function inferLanguageId(remotePath: string): string | undefined {
+  const lowerName = safePreviewName(remotePath).toLowerCase();
+  if (lowerName === 'dockerfile' || lowerName.endsWith('.dockerfile')) {
+    return 'dockerfile';
+  }
+  if (lowerName === 'makefile') {
+    return 'makefile';
+  }
+
+  const extension = lowerName.match(/\.([^.]+)$/)?.[1];
+  if (!extension) {
+    return undefined;
+  }
+
+  const languagesByExtension: Record<string, string> = {
+    bash: 'shellscript',
+    c: 'c',
+    cc: 'cpp',
+    conf: 'properties',
+    cpp: 'cpp',
+    cs: 'csharp',
+    css: 'css',
+    go: 'go',
+    h: 'c',
+    hpp: 'cpp',
+    html: 'html',
+    ini: 'ini',
+    java: 'java',
+    js: 'javascript',
+    json: 'json',
+    jsx: 'javascriptreact',
+    lua: 'lua',
+    md: 'markdown',
+    php: 'php',
+    ps1: 'powershell',
+    py: 'python',
+    rb: 'ruby',
+    rs: 'rust',
+    scss: 'scss',
+    sh: 'shellscript',
+    sql: 'sql',
+    toml: 'toml',
+    ts: 'typescript',
+    tsx: 'typescriptreact',
+    xml: 'xml',
+    yaml: 'yaml',
+    yml: 'yaml',
+    zsh: 'shellscript'
+  };
+  return languagesByExtension[extension];
 }
