@@ -8,7 +8,7 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["onView:sshManager.servers"],
+  "activationEvents": ["onView:sshManager.servers", "onView:sshManager.sftpFiles"],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -25,6 +25,10 @@
         {
           "id": "sshManager.servers",
           "name": "Servers"
+        },
+        {
+          "id": "sshManager.sftpFiles",
+          "name": "SFTP Files"
         }
       ]
     },
@@ -36,7 +40,16 @@
       { "command": "sshManager.disconnect", "title": "SSH: Disconnect" },
       { "command": "sshManager.reconnect", "title": "SSH: Reconnect" },
       { "command": "sshManager.copyHost", "title": "SSH: Copy Host" },
-      { "command": "sshManager.refresh", "title": "SSH: Refresh" }
+      { "command": "sshManager.refresh", "title": "SSH: Refresh" },
+      { "command": "sshManager.sftp.refresh", "title": "SFTP: Refresh" },
+      { "command": "sshManager.sftp.upload", "title": "SFTP: Upload" },
+      { "command": "sshManager.sftp.download", "title": "SFTP: Download" },
+      { "command": "sshManager.sftp.delete", "title": "SFTP: Delete" },
+      { "command": "sshManager.sftp.rename", "title": "SFTP: Rename" },
+      { "command": "sshManager.sftp.newFolder", "title": "SFTP: New Folder" },
+      { "command": "sshManager.sftp.copyPath", "title": "SFTP: Copy Remote Path" },
+      { "command": "sshManager.sftp.openPreview", "title": "SFTP: Open Preview" },
+      { "command": "sshManager.sftp.cdToDirectory", "title": "SFTP: cd To Directory" }
     ],
     "menus": {
       "view/title": [
@@ -48,6 +61,11 @@
         {
           "command": "sshManager.refresh",
           "when": "view == sshManager.servers",
+          "group": "navigation"
+        },
+        {
+          "command": "sshManager.sftp.refresh",
+          "when": "view == sshManager.sftpFiles",
           "group": "navigation"
         }
       ],
@@ -71,6 +89,51 @@
           "command": "sshManager.copyHost",
           "when": "view == sshManager.servers && viewItem == server",
           "group": "management@3"
+        },
+        {
+          "command": "sshManager.sftp.refresh",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sshManager.sftp.upload",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "transfer@1"
+        },
+        {
+          "command": "sshManager.sftp.download",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "transfer@2"
+        },
+        {
+          "command": "sshManager.sftp.openPreview",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
+          "group": "open@1"
+        },
+        {
+          "command": "sshManager.sftp.cdToDirectory",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "open@2"
+        },
+        {
+          "command": "sshManager.sftp.newFolder",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "management@1"
+        },
+        {
+          "command": "sshManager.sftp.rename",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@2"
+        },
+        {
+          "command": "sshManager.sftp.delete",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@3"
+        },
+        {
+          "command": "sshManager.sftp.copyPath",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile || viewItem == sftpDisconnectedDirectory || viewItem == sftpDisconnectedFile)",
+          "group": "management@4"
         }
       ]
     },
