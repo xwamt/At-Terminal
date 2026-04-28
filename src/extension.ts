@@ -220,6 +220,14 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.env.clipboard.writeText(item.entry.path);
       }
     }),
+    vscode.commands.registerCommand('sshManager.sftp.edit', async (item?: SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        if (!item) {
+          return;
+        }
+        await vscode.window.showErrorMessage('SFTP edit is not wired yet.');
+      });
+    }),
     vscode.commands.registerCommand('sshManager.sftp.openPreview', async (item?: SftpFileTreeItem) => {
       await runSftpCommand(async () => {
         if (!item) {

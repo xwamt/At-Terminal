@@ -49,6 +49,7 @@
       { "command": "sshManager.sftp.rename", "title": "SFTP: Rename" },
       { "command": "sshManager.sftp.newFolder", "title": "SFTP: New Folder" },
       { "command": "sshManager.sftp.copyPath", "title": "SFTP: Copy Remote Path" },
+      { "command": "sshManager.sftp.edit", "title": "SFTP: Edit" },
       { "command": "sshManager.sftp.openPreview", "title": "SFTP: Open Preview" },
       { "command": "sshManager.sftp.cdToDirectory", "title": "SFTP: cd To Directory" },
       { "command": "sshManager.sftp.goToPath", "title": "SFTP: Go to Path" },
@@ -119,14 +120,19 @@
           "group": "transfer@2"
         },
         {
-          "command": "sshManager.sftp.openPreview",
+          "command": "sshManager.sftp.edit",
           "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
           "group": "open@1"
         },
         {
+          "command": "sshManager.sftp.openPreview",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
+          "group": "open@2"
+        },
+        {
           "command": "sshManager.sftp.cdToDirectory",
           "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
-          "group": "open@2"
+          "group": "open@3"
         },
         {
           "command": "sshManager.sftp.newFolder",
