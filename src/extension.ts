@@ -1,12 +1,15 @@
 import * as vscode from 'vscode';
 import { ConfigManager } from './config/ConfigManager';
+import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpManager } from './sftp/SftpManager';
 import { SftpSession } from './sftp/SftpSession';
 import { HostKeyStore } from './ssh/HostKeyStore';
 import { TerminalContextRegistry } from './terminal/TerminalContext';
 import { ServerTreeProvider } from './tree/ServerTreeProvider';
 import { SftpTreeProvider } from './tree/SftpTreeProvider';
+import { SftpDirectoryTreeItem, SftpFileTreeItem } from './tree/SftpTreeItems';
 import { ServerTreeItem } from './tree/TreeItems';
+import { formatError } from './utils/errors';
 import { ServerFormPanel } from './webview/ServerFormPanel';
 import { TerminalPanel } from './webview/TerminalPanel';
 
@@ -112,19 +115,112 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('sshManager.sftp.refresh', () => {
       sftpTreeProvider.refresh();
     }),
-    vscode.commands.registerCommand('sshManager.sftp.upload', () => showSftpUnavailable('Upload')),
-    vscode.commands.registerCommand('sshManager.sftp.download', () => showSftpUnavailable('Download')),
-    vscode.commands.registerCommand('sshManager.sftp.delete', () => showSftpUnavailable('Delete')),
-    vscode.commands.registerCommand('sshManager.sftp.rename', () => showSftpUnavailable('Rename')),
-    vscode.commands.registerCommand('sshManager.sftp.newFolder', () => showSftpUnavailable('New folder')),
-    vscode.commands.registerCommand('sshManager.sftp.copyPath', () => showSftpUnavailable('Copy path')),
-    vscode.commands.registerCommand('sshManager.sftp.openPreview', () => showSftpUnavailable('Open preview')),
-    vscode.commands.registerCommand('sshManager.sftp.cdToDirectory', () => showSftpUnavailable('cd to directory'))
+    vscode.commands.registerCommand('sshManager.sftp.upload', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        const files = await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectFolders: false, canSelectMany: true });
+        if (!files?.length) {
+          return;
+        }
+        const state = sftpManager.getState();
+        const targetDirectory = getTargetDirectory(item, state.kind === 'active' ? state.rootPath : '.');
+        for (const file of files) {
+          await sftpManager.uploadFile(file.fsPath, joinRemotePath(targetDirectory, safePreviewName(file.fsPath)));
+        }
+        sftpTreeProvider.refresh();
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.download', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        if (!item) {
+          return;
+        }
+        const destination = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(item.entry.name) });
+        if (!destination) {
+          return;
+        }
+        await sftpManager.downloadFile(item.entry.path, destination.fsPath);
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.delete', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        if (!item) {
+          return;
+        }
+        const answer = await vscode.window.showWarningMessage(
+          `Delete remote ${item.entry.type} "${item.entry.path}"?`,
+          { modal: true },
+          'Delete'
+        );
+        if (answer === 'Delete') {
+          await sftpManager.deleteEntry(item.entry);
+          sftpTreeProvider.refresh();
+        }
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.rename', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        if (!item) {
+          return;
+        }
+        const nextName = await vscode.window.showInputBox({ prompt: 'New remote name', value: item.entry.name });
+        if (!nextName || nextName === item.entry.name) {
+          return;
+        }
+        await sftpManager.rename(item.entry.path, joinRemotePath(dirname(item.entry.path), nextName));
+        sftpTreeProvider.refresh();
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.newFolder', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        const folderName = await vscode.window.showInputBox({ prompt: 'New remote folder name' });
+        if (!folderName) {
+          return;
+        }
+        const state = sftpManager.getState();
+        const targetDirectory = getTargetDirectory(item, state.kind === 'active' ? state.rootPath : '.');
+        await sftpManager.mkdir(joinRemotePath(targetDirectory, folderName));
+        sftpTreeProvider.refresh();
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.copyPath', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
+      if (item) {
+        await vscode.env.clipboard.writeText(item.entry.path);
+      }
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.openPreview', async (item?: SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        if (!item) {
+          return;
+        }
+        const previewUri = vscode.Uri.joinPath(context.globalStorageUri, 'sftp-preview', safePreviewName(item.entry.path));
+        await sftpManager.downloadFile(item.entry.path, previewUri.fsPath);
+        await vscode.commands.executeCommand('vscode.open', previewUri);
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.cdToDirectory', (item?: SftpDirectoryTreeItem) => {
+      if (item) {
+        terminalContext.getActive()?.write(`cd ${quotePosixShellPath(item.entry.path)}\r`);
+      }
+    })
   );
 }
 
 export function deactivate(): void {}
 
-function showSftpUnavailable(commandName: string): Thenable<string | undefined> {
-  return vscode.window.showInformationMessage(`${commandName} requires the SFTP operations task to be completed.`);
+async function runSftpCommand(command: () => Promise<void>): Promise<void> {
+  try {
+    await command();
+  } catch (error) {
+    await vscode.window.showErrorMessage(formatError(error));
+  }
+}
+
+function getTargetDirectory(
+  item: SftpDirectoryTreeItem | SftpFileTreeItem | undefined,
+  rootPath: string
+): string {
+  if (!item) {
+    return rootPath;
+  }
+  return item instanceof SftpFileTreeItem ? dirname(item.entry.path) : item.entry.path;
 }

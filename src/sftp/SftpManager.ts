@@ -1,11 +1,18 @@
 import type { TerminalContext } from '../terminal/TerminalContext';
 import type { SftpTreeState } from '../tree/SftpTreeProvider';
 import type { SftpEntry } from './SftpTypes';
+import { TransferService } from './TransferService';
 
 export interface SftpSessionLike {
   connect(): Promise<void>;
   realpath(path?: string): Promise<string>;
   listDirectory(path: string): Promise<SftpEntry[]>;
+  mkdir(path: string): Promise<void>;
+  rename(oldPath: string, newPath: string): Promise<void>;
+  deleteFile(path: string): Promise<void>;
+  deleteDirectory(path: string): Promise<void>;
+  uploadFile(localPath: string, remotePath: string): Promise<void>;
+  downloadFile(remotePath: string, localPath: string): Promise<void>;
   dispose(): void;
 }
 
@@ -18,6 +25,7 @@ export class SftpManager {
   private session: SftpSessionLike | undefined;
   private rootPath: string | undefined;
   private snapshot: { rootPath: string; entries: SftpEntry[] } | undefined;
+  private readonly transfers = new TransferService();
 
   constructor(private readonly options: SftpManagerOptions) {}
 
@@ -61,6 +69,32 @@ export class SftpManager {
     return entries;
   }
 
+  async mkdir(path: string): Promise<void> {
+    await this.runConnected('new folder', async (session) => session.mkdir(path));
+  }
+
+  async rename(oldPath: string, newPath: string): Promise<void> {
+    await this.runConnected('rename', async (session) => session.rename(oldPath, newPath));
+  }
+
+  async deleteEntry(entry: SftpEntry): Promise<void> {
+    await this.runConnected('delete', async (session) => {
+      if (entry.type === 'directory') {
+        await session.deleteDirectory(entry.path);
+        return;
+      }
+      await session.deleteFile(entry.path);
+    });
+  }
+
+  async uploadFile(localPath: string, remotePath: string): Promise<void> {
+    await this.runConnected('upload', async (session) => session.uploadFile(localPath, remotePath));
+  }
+
+  async downloadFile(remotePath: string, localPath: string): Promise<void> {
+    await this.runConnected('download', async (session) => session.downloadFile(remotePath, localPath));
+  }
+
   setSnapshot(rootPath: string, entries: SftpEntry[]): void {
     this.snapshot = { rootPath, entries };
   }
@@ -74,5 +108,12 @@ export class SftpManager {
       await this.session.connect();
     }
     return this.session;
+  }
+
+  private async runConnected(label: string, job: (session: SftpSessionLike) => Promise<void>): Promise<void> {
+    await this.transfers.requireConnected(Boolean(this.terminalContext?.connected));
+    await this.transfers.run(label, async () => {
+      await job(await this.ensureSession());
+    });
   }
 }

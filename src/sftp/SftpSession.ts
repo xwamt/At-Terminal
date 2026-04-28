@@ -98,6 +98,48 @@ export class SftpSession {
     }));
   }
 
+  async mkdir(path: string): Promise<void> {
+    const sftp = this.requireSftp();
+    await new Promise<void>((resolve, reject) => {
+      sftp.mkdir(path, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  async rename(oldPath: string, newPath: string): Promise<void> {
+    const sftp = this.requireSftp();
+    await new Promise<void>((resolve, reject) => {
+      sftp.rename(oldPath, newPath, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    const sftp = this.requireSftp();
+    await new Promise<void>((resolve, reject) => {
+      sftp.unlink(path, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  async deleteDirectory(path: string): Promise<void> {
+    const sftp = this.requireSftp();
+    await new Promise<void>((resolve, reject) => {
+      sftp.rmdir(path, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  async uploadFile(localPath: string, remotePath: string): Promise<void> {
+    const sftp = this.requireSftp();
+    await new Promise<void>((resolve, reject) => {
+      sftp.fastPut(localPath, remotePath, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  async downloadFile(remotePath: string, localPath: string): Promise<void> {
+    const sftp = this.requireSftp();
+    await new Promise<void>((resolve, reject) => {
+      sftp.fastGet(remotePath, localPath, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
   dispose(): void {
     this.sftp = undefined;
     this.client?.end();

@@ -33,6 +33,12 @@ describe('SftpManager', () => {
       connect: vi.fn(),
       realpath: vi.fn(async () => '/home/deploy'),
       listDirectory: vi.fn(async () => []),
+      mkdir: vi.fn(),
+      rename: vi.fn(),
+      deleteFile: vi.fn(),
+      deleteDirectory: vi.fn(),
+      uploadFile: vi.fn(),
+      downloadFile: vi.fn(),
       dispose: vi.fn()
     };
     const manager = new SftpManager({ createSession: () => session });
