@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Client, type ConnectConfig, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
+import type { TransferProgress } from './TransferService';
 import type { PasswordSource, SftpEntry, SftpEntryType } from './SftpTypes';
 
 export async function buildSftpConnectConfig(server: ServerConfig, passwords: PasswordSource): Promise<ConnectConfig> {
@@ -126,17 +127,33 @@ export class SftpSession {
     });
   }
 
-  async uploadFile(localPath: string, remotePath: string): Promise<void> {
+  async uploadFile(localPath: string, remotePath: string, progress?: TransferProgress): Promise<void> {
     const sftp = this.requireSftp();
     await new Promise<void>((resolve, reject) => {
-      sftp.fastPut(localPath, remotePath, (error) => (error ? reject(error) : resolve()));
+      sftp.fastPut(
+        localPath,
+        remotePath,
+        {
+          step: (transferredBytes, _chunkBytes, totalBytes) =>
+            progress?.report({ transferredBytes, totalBytes })
+        },
+        (error) => (error ? reject(error) : resolve())
+      );
     });
   }
 
-  async downloadFile(remotePath: string, localPath: string): Promise<void> {
+  async downloadFile(remotePath: string, localPath: string, progress?: TransferProgress): Promise<void> {
     const sftp = this.requireSftp();
     await new Promise<void>((resolve, reject) => {
-      sftp.fastGet(remotePath, localPath, (error) => (error ? reject(error) : resolve()));
+      sftp.fastGet(
+        remotePath,
+        localPath,
+        {
+          step: (transferredBytes, _chunkBytes, totalBytes) =>
+            progress?.report({ transferredBytes, totalBytes })
+        },
+        (error) => (error ? reject(error) : resolve())
+      );
     });
   }
 

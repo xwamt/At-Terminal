@@ -25,9 +25,37 @@ describe('SftpTreeProvider', () => {
 
     const children = await provider.getChildren();
 
+    expect(children[1]).toBeInstanceOf(SftpDirectoryTreeItem);
+    expect(children[2]).toBeInstanceOf(SftpFileTreeItem);
+    expect(children.slice(1).map((child) => child.contextValue)).toEqual(['sftpDirectory', 'sftpFile']);
+  });
+
+  it('renders a parent directory entry above active root entries', async () => {
+    const provider = new SftpTreeProvider({
+      getState: () => ({ kind: 'active', rootPath: '/home/deploy' }),
+      listDirectory: async () => entries
+    });
+
+    const children = await provider.getChildren();
+
+    expect(children[0].label).toBe('..');
+    expect(children[0].contextValue).toBe('sftpParentDirectory');
+    expect(children[0].command).toEqual({
+      command: 'sshManager.sftp.goUp',
+      title: 'Go Up'
+    });
+    expect(children.slice(1).map((child) => child.contextValue)).toEqual(['sftpDirectory', 'sftpFile']);
+  });
+
+  it('does not render a parent directory entry at the remote filesystem root', async () => {
+    const provider = new SftpTreeProvider({
+      getState: () => ({ kind: 'active', rootPath: '/' }),
+      listDirectory: async () => entries
+    });
+
+    const children = await provider.getChildren();
+
     expect(children[0]).toBeInstanceOf(SftpDirectoryTreeItem);
-    expect(children[1]).toBeInstanceOf(SftpFileTreeItem);
-    expect(children.map((child) => child.contextValue)).toEqual(['sftpDirectory', 'sftpFile']);
   });
 
   it('marks snapshot entries disconnected', async () => {

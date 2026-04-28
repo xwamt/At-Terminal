@@ -7,7 +7,8 @@ describe('SFTP package contributions', () => {
   it('contributes the SFTP Files view and commands', () => {
     expect(pkg.contributes.views.sshManager).toContainEqual({
       id: 'sshManager.sftpFiles',
-      name: 'SFTP Files'
+      name: 'SFTP Files',
+      visibility: 'visible'
     });
     expect(pkg.contributes.commands.map((entry: { command: string }) => entry.command)).toEqual(
       expect.arrayContaining([
@@ -19,7 +20,9 @@ describe('SFTP package contributions', () => {
         'sshManager.sftp.newFolder',
         'sshManager.sftp.copyPath',
         'sshManager.sftp.openPreview',
-        'sshManager.sftp.cdToDirectory'
+        'sshManager.sftp.cdToDirectory',
+        'sshManager.sftp.goToPath',
+        'sshManager.sftp.goUp'
       ])
     );
   });

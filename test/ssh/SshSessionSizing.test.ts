@@ -33,4 +33,19 @@ describe('SshSession terminal sizing', () => {
       cols: 141
     });
   });
+
+  it('requests color-capable shell environment for remote auto-color commands', () => {
+    const session = new SshSession(
+      server(),
+      { getPassword: async () => 'secret' } as never,
+      { output: vi.fn(), status: vi.fn(), error: vi.fn() }
+    );
+
+    expect(session.getShellEnvironment()).toEqual({
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      CLICOLOR: '1',
+      FORCE_COLOR: '1'
+    });
+  });
 });

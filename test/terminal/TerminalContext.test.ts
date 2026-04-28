@@ -36,6 +36,27 @@ describe('TerminalContextRegistry', () => {
     expect(listener).toHaveBeenCalledWith(context);
   });
 
+  it('does not publish when the same terminal is activated without a state change', () => {
+    const registry = new TerminalContextRegistry();
+    const listener = vi.fn();
+    registry.onDidChangeActiveContext(listener);
+    const firstContext: TerminalContext = {
+      terminalId: 'terminal-a',
+      server: server('a'),
+      connected: true,
+      write: vi.fn()
+    };
+    const sameContext: TerminalContext = {
+      ...firstContext,
+      write: vi.fn()
+    };
+
+    registry.setActive(firstContext);
+    registry.setActive(sameContext);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the context but marks it disconnected', () => {
     const registry = new TerminalContextRegistry();
     registry.setActive({

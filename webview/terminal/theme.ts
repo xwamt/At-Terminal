@@ -2,7 +2,7 @@ import type { ITheme, Terminal } from '@xterm/xterm';
 
 type CssVariableReader = (name: string) => string | undefined;
 
-const PROFESSIONAL_ANSI_THEME = {
+const DEFAULT_ANSI_THEME = {
   black: '#000000',
   red: '#f48771',
   green: '#b1d631',
@@ -19,6 +19,25 @@ const PROFESSIONAL_ANSI_THEME = {
   brightMagenta: '#ff9ccc',
   brightCyan: '#89ddff',
   brightWhite: '#ffffff'
+};
+
+const ANSI_COLOR_VARIABLES: Record<keyof typeof DEFAULT_ANSI_THEME, string> = {
+  black: '--vscode-terminal-ansiBlack',
+  red: '--vscode-terminal-ansiRed',
+  green: '--vscode-terminal-ansiGreen',
+  yellow: '--vscode-terminal-ansiYellow',
+  blue: '--vscode-terminal-ansiBlue',
+  magenta: '--vscode-terminal-ansiMagenta',
+  cyan: '--vscode-terminal-ansiCyan',
+  white: '--vscode-terminal-ansiWhite',
+  brightBlack: '--vscode-terminal-ansiBrightBlack',
+  brightRed: '--vscode-terminal-ansiBrightRed',
+  brightGreen: '--vscode-terminal-ansiBrightGreen',
+  brightYellow: '--vscode-terminal-ansiBrightYellow',
+  brightBlue: '--vscode-terminal-ansiBrightBlue',
+  brightMagenta: '--vscode-terminal-ansiBrightMagenta',
+  brightCyan: '--vscode-terminal-ansiBrightCyan',
+  brightWhite: '--vscode-terminal-ansiBrightWhite'
 };
 
 function readThemeColor(readCssVariable: CssVariableReader, name: string, fallback: string): string {
@@ -44,8 +63,17 @@ export function createTerminalTheme(readCssVariable: CssVariableReader): ITheme 
     cursor: readThemeColor(readCssVariable, '--vscode-terminalCursor-foreground', '#569cd6'),
     cursorAccent: readThemeColor(readCssVariable, '--vscode-terminalCursor-background', '#ffffff'),
     selectionBackground: readThemeColor(readCssVariable, '--vscode-terminal-selectionBackground', '#569cd633'),
-    ...PROFESSIONAL_ANSI_THEME
+    ...createAnsiTheme(readCssVariable)
   };
+}
+
+function createAnsiTheme(readCssVariable: CssVariableReader): typeof DEFAULT_ANSI_THEME {
+  return Object.fromEntries(
+    Object.entries(DEFAULT_ANSI_THEME).map(([key, fallback]) => [
+      key,
+      readThemeColor(readCssVariable, ANSI_COLOR_VARIABLES[key as keyof typeof DEFAULT_ANSI_THEME], fallback)
+    ])
+  ) as typeof DEFAULT_ANSI_THEME;
 }
 
 export function applyTerminalTheme(term: Terminal, root: HTMLElement = document.body): void {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectDraggedUris } from '../../src/sftp/SftpDragAndDropController';
+import { collectDraggedUris, localUploadFileName } from '../../src/sftp/SftpDragAndDropController';
 
 describe('collectDraggedUris', () => {
   it('reads uri-list payloads', async () => {
@@ -14,5 +14,13 @@ describe('collectDraggedUris', () => {
     const dataTransfer = new Map([['text/uri-list', item]]);
 
     expect(await collectDraggedUris(dataTransfer as never)).toEqual(['file:///C:/project/a.txt']);
+  });
+
+  it('uses only the base file name when uploading Windows local paths', () => {
+    expect(localUploadFileName('C:\\Users\\alan\\Desktop\\docker-compose.yml')).toBe('docker-compose.yml');
+  });
+
+  it('uses only the base file name when uploading POSIX local paths', () => {
+    expect(localUploadFileName('/home/alan/archive.tar.gz')).toBe('archive.tar.gz');
   });
 });

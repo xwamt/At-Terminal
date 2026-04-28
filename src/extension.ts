@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import { ConfigManager } from './config/ConfigManager';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
-import { SftpDragAndDropController } from './sftp/SftpDragAndDropController';
+import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { SftpManager } from './sftp/SftpManager';
+import { SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore, openRemotePreviewFile } from './sftp/SftpPreview';
 import { SftpSession } from './sftp/SftpSession';
+import { VscodeTransferReporter } from './sftp/VscodeTransferReporter';
 import { HostKeyStore } from './ssh/HostKeyStore';
 import { TerminalContextRegistry } from './terminal/TerminalContext';
 import { ServerTreeProvider } from './tree/ServerTreeProvider';
@@ -20,12 +22,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const treeProvider = new ServerTreeProvider(configManager);
   const terminalContext = new TerminalContextRegistry();
   const sftpManager = new SftpManager({
-    createSession: (terminal) => new SftpSession(terminal.server, configManager)
+    createSession: (terminal) => new SftpSession(terminal.server, configManager),
+    reporter: new VscodeTransferReporter()
   });
   const sftpTreeProvider = new SftpTreeProvider({
     getState: () => sftpManager.getState(),
     listDirectory: (path) => sftpManager.listDirectory(path)
   });
+  const sftpPreviewStore = new SftpPreviewDocumentStore();
 
   terminalContext.onDidChangeActiveContext((activeContext) => {
     sftpManager.setTerminalContext(activeContext);
@@ -66,6 +70,12 @@ export function activate(context: vscode.ExtensionContext): void {
       treeDataProvider: sftpTreeProvider,
       dragAndDropController: new SftpDragAndDropController(sftpManager),
       showCollapseAll: true
+    }),
+    vscode.workspace.registerTextDocumentContentProvider(SFTP_PREVIEW_SCHEME, sftpPreviewStore),
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      if (document.uri.scheme === SFTP_PREVIEW_SCHEME) {
+        void sftpPreviewStore.deletePreviewFile(document.uri);
+      }
     }),
     vscode.commands.registerCommand('sshManager.addServer', () => {
       ServerFormPanel.open(context, configManager, () => treeProvider.refresh());
@@ -117,6 +127,27 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('sshManager.sftp.refresh', () => {
       sftpTreeProvider.refresh();
     }),
+    vscode.commands.registerCommand('sshManager.sftp.goToPath', async () => {
+      await runSftpCommand(async () => {
+        const state = sftpManager.getState();
+        const currentPath = state.kind === 'active' ? state.rootPath : '';
+        const nextPath = await vscode.window.showInputBox({
+          prompt: 'Remote path',
+          value: currentPath
+        });
+        if (!nextPath?.trim()) {
+          return;
+        }
+        await sftpManager.changeDirectory(nextPath.trim());
+        sftpTreeProvider.refresh();
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.goUp', async () => {
+      await runSftpCommand(async () => {
+        await sftpManager.changeToParentDirectory();
+        sftpTreeProvider.refresh();
+      });
+    }),
     vscode.commands.registerCommand('sshManager.sftp.upload', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
       await runSftpCommand(async () => {
         const files = await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectFolders: false, canSelectMany: true });
@@ -126,7 +157,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const state = sftpManager.getState();
         const targetDirectory = getTargetDirectory(item, state.kind === 'active' ? state.rootPath : '.');
         for (const file of files) {
-          await sftpManager.uploadFile(file.fsPath, joinRemotePath(targetDirectory, safePreviewName(file.fsPath)));
+          await sftpManager.uploadFile(file.fsPath, joinRemotePath(targetDirectory, localUploadFileName(file.fsPath)));
         }
         sftpTreeProvider.refresh();
       });
@@ -194,9 +225,15 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!item) {
           return;
         }
-        const previewUri = vscode.Uri.joinPath(context.globalStorageUri, 'sftp-preview', safePreviewName(item.entry.path));
-        await sftpManager.downloadFile(item.entry.path, previewUri.fsPath);
-        await vscode.commands.executeCommand('vscode.open', previewUri);
+        await openRemotePreviewFile({
+          storageUri: context.globalStorageUri,
+          remotePath: item.entry.path,
+          previewStore: sftpPreviewStore,
+          downloadFile: (remotePath, localPath) => sftpManager.downloadFile(remotePath, localPath),
+          openUri: async (uri) => {
+            await vscode.commands.executeCommand('vscode.open', uri);
+          }
+        });
       });
     }),
     vscode.commands.registerCommand('sshManager.sftp.cdToDirectory', (item?: SftpDirectoryTreeItem) => {

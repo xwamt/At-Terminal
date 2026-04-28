@@ -23,6 +23,7 @@ export interface TerminalSettings {
   scrollback: number;
   fontSize: number;
   fontFamily: string;
+  semanticHighlight: boolean;
 }
 
 export interface ConfigurationLike {
@@ -34,6 +35,7 @@ export class TerminalPanel {
   private session: SshSession;
   private readonly terminalId = randomUUID();
   private connected = false;
+  private disposed = false;
   private connectionGeneration = 0;
 
   private constructor(
@@ -144,6 +146,7 @@ export class TerminalPanel {
     });
 
     this.panel.onDidDispose(() => {
+      this.disposed = true;
       this.connectionGeneration++;
       this.session.dispose();
       this.connected = false;
@@ -165,9 +168,9 @@ export class TerminalPanel {
       this.configManager,
       {
         output: (data) => {
-          const inspected = lrzszDetector.inspect(data);
+          const inspected = lrzszDetector.inspect(data.toString('latin1'));
           if (inspected.passthrough) {
-            void this.panel.webview.postMessage({ type: 'output', payload: inspected.passthrough });
+            this.postWebviewMessage({ type: 'outputBytes', payload: [...data] });
           }
         },
         status: (message) => this.handleSessionStatus(message, generation),
@@ -178,7 +181,7 @@ export class TerminalPanel {
   }
 
   private postStatus(message: string): void {
-    void this.panel.webview.postMessage({ type: 'status', payload: message });
+    this.postWebviewMessage({ type: 'status', payload: message });
   }
 
   private handleSessionStatus(message: string, generation: number): void {
@@ -197,13 +200,25 @@ export class TerminalPanel {
       write: (data) => this.session.write(data)
     });
   }
+
+  private postWebviewMessage(message: unknown): void {
+    if (this.disposed) {
+      return;
+    }
+    try {
+      void Promise.resolve(this.panel.webview.postMessage(message)).catch(() => undefined);
+    } catch {
+      // VS Code can reject or throw if a late SSH event arrives after webview disposal.
+    }
+  }
 }
 
 export function resolveTerminalSettings(configuration: ConfigurationLike): TerminalSettings {
   return {
     scrollback: configuration.get('scrollback', 5000),
     fontSize: configuration.get('terminalFontSize', 14),
-    fontFamily: configuration.get('terminalFontFamily', 'Cascadia Code, Menlo, monospace')
+    fontFamily: configuration.get('terminalFontFamily', 'Cascadia Code, Menlo, monospace'),
+    semanticHighlight: configuration.get('semanticHighlight', true)
   };
 }
 
@@ -225,7 +240,7 @@ export function renderTerminalBody(settings: TerminalSettings): string {
     <span class="terminal-status-text">Starting...</span>
     <span class="terminal-host">xterm.js</span>
   </header>
-  <section id="terminal" class="terminal-surface" data-scrollback="${settings.scrollback}" data-font-size="${settings.fontSize}" data-font-family="${escapeAttr(settings.fontFamily)}"></section>
+  <section id="terminal" class="terminal-surface" data-scrollback="${settings.scrollback}" data-font-size="${settings.fontSize}" data-font-family="${escapeAttr(settings.fontFamily)}" data-semantic-highlight="${settings.semanticHighlight}"></section>
 </main>`;
 }
 

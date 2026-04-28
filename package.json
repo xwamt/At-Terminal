@@ -2,7 +2,7 @@
   "name": "ssh-terminal-manager",
   "displayName": "SSH Terminal Manager",
   "description": "Manage SSH terminal sessions in VS Code without installing a remote server.",
-  "version": "0.1.5",
+  "version": "0.1.19",
   "publisher": "local",
   "engines": {
     "vscode": "^1.85.0"
@@ -28,7 +28,8 @@
         },
         {
           "id": "sshManager.sftpFiles",
-          "name": "SFTP Files"
+          "name": "SFTP Files",
+          "visibility": "visible"
         }
       ]
     },
@@ -49,7 +50,9 @@
       { "command": "sshManager.sftp.newFolder", "title": "SFTP: New Folder" },
       { "command": "sshManager.sftp.copyPath", "title": "SFTP: Copy Remote Path" },
       { "command": "sshManager.sftp.openPreview", "title": "SFTP: Open Preview" },
-      { "command": "sshManager.sftp.cdToDirectory", "title": "SFTP: cd To Directory" }
+      { "command": "sshManager.sftp.cdToDirectory", "title": "SFTP: cd To Directory" },
+      { "command": "sshManager.sftp.goToPath", "title": "SFTP: Go to Path" },
+      { "command": "sshManager.sftp.goUp", "title": "SFTP: Go Up" }
     ],
     "menus": {
       "view/title": [
@@ -67,6 +70,16 @@
           "command": "sshManager.sftp.refresh",
           "when": "view == sshManager.sftpFiles",
           "group": "navigation"
+        },
+        {
+          "command": "sshManager.sftp.goUp",
+          "when": "view == sshManager.sftpFiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sshManager.sftp.goToPath",
+          "when": "view == sshManager.sftpFiles",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -153,6 +166,11 @@
           "type": "number",
           "default": 5000,
           "minimum": 100
+        },
+        "sshManager.semanticHighlight": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable frontend semantic highlighting for plain SSH terminal output that does not already contain ANSI colors."
         },
         "sshManager.keepAliveInterval": {
           "type": "number",

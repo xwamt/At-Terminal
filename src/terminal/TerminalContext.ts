@@ -19,6 +19,14 @@ export class TerminalContextRegistry {
   }
 
   setActive(context: TerminalContext): void {
+    if (
+      this.active?.terminalId === context.terminalId &&
+      this.active.connected === context.connected &&
+      this.active.server.id === context.server.id
+    ) {
+      this.active = context;
+      return;
+    }
     this.active = context;
     this.onDidChangeActiveContextEmitter.fire(context);
   }

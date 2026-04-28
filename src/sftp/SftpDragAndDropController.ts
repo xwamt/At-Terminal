@@ -4,6 +4,10 @@ import type { SftpTreeNode } from '../tree/SftpTreeProvider';
 import { dirname, joinRemotePath, safePreviewName } from './RemotePath';
 import type { SftpManager } from './SftpManager';
 
+export function localUploadFileName(localPath: string): string {
+  return localPath.split(/[\\/]/).filter(Boolean).pop() ?? safePreviewName(localPath);
+}
+
 export async function collectDraggedUris(dataTransfer: vscode.DataTransfer): Promise<string[]> {
   const item = dataTransfer.get('text/uri-list');
   if (!item) {
@@ -49,7 +53,7 @@ export class SftpDragAndDropController implements vscode.TreeDragAndDropControll
 
     for (const uri of uris) {
       const localUri = vscode.Uri.parse(uri);
-      await this.manager.uploadFile(localUri.fsPath, joinRemotePath(targetPath, safePreviewName(localUri.fsPath)));
+      await this.manager.uploadFile(localUri.fsPath, joinRemotePath(targetPath, localUploadFileName(localUri.fsPath)));
     }
   }
 }

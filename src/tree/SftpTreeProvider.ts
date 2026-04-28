@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import type { SftpEntry } from '../sftp/SftpTypes';
-import { SftpDirectoryTreeItem, SftpFileTreeItem, SftpPlaceholderTreeItem } from './SftpTreeItems';
+import {
+  SftpDirectoryTreeItem,
+  SftpFileTreeItem,
+  SftpParentDirectoryTreeItem,
+  SftpPlaceholderTreeItem
+} from './SftpTreeItems';
 
 export type SftpTreeState =
   | { kind: 'none' }
@@ -12,7 +17,11 @@ export interface SftpTreeSource {
   listDirectory?(path: string): Promise<SftpEntry[]>;
 }
 
-export type SftpTreeNode = SftpPlaceholderTreeItem | SftpDirectoryTreeItem | SftpFileTreeItem;
+export type SftpTreeNode =
+  | SftpPlaceholderTreeItem
+  | SftpParentDirectoryTreeItem
+  | SftpDirectoryTreeItem
+  | SftpFileTreeItem;
 
 export class SftpTreeProvider implements vscode.TreeDataProvider<SftpTreeNode> {
   private readonly changed = new vscode.EventEmitter<SftpTreeNode | undefined>();
@@ -38,7 +47,8 @@ export class SftpTreeProvider implements vscode.TreeDataProvider<SftpTreeNode> {
     }
     const path = element instanceof SftpDirectoryTreeItem ? element.entry.path : state.rootPath;
     const entries = await this.source.listDirectory?.(path);
-    return (entries ?? []).map((entry) => this.toTreeItem(entry, false));
+    const children = (entries ?? []).map((entry) => this.toTreeItem(entry, false));
+    return element || state.rootPath === '/' ? children : [new SftpParentDirectoryTreeItem(), ...children];
   }
 
   private toTreeItem(entry: SftpEntry, disconnected: boolean): SftpTreeNode {
