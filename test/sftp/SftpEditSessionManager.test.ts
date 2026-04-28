@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import {
   buildEditSessionKey,
   createEditCacheUri,
+  createVscodeSftpEditUi,
   SftpEditSessionManager
 } from '../../src/sftp/SftpEditSessionManager';
 
@@ -26,6 +27,30 @@ describe('SftpEditSessionManager open flow', () => {
       expect(first.fsPath).not.toBe(second.fsPath);
     } finally {
       await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('opens editable files outside VS Code preview tabs', async () => {
+    const uri = vscode.Uri.file('C:/tmp/sftp-edit/file.txt');
+    const document = { uri, fileName: uri.fsPath };
+    const originalOpenTextDocument = vscode.workspace.openTextDocument;
+    const originalShowTextDocument = vscode.window.showTextDocument;
+    const openTextDocument = vi.fn(async () => document);
+    const showTextDocument = vi.fn(async () => document);
+    (vscode.workspace as unknown as { openTextDocument: typeof openTextDocument }).openTextDocument = openTextDocument;
+    (vscode.window as unknown as { showTextDocument: typeof showTextDocument }).showTextDocument = showTextDocument;
+
+    try {
+      const ui = createVscodeSftpEditUi(vscode.window.createStatusBarItem());
+      await ui.openFile(uri);
+
+      expect(openTextDocument).toHaveBeenCalledWith(uri);
+      expect(showTextDocument).toHaveBeenCalledWith(document, { preview: false });
+    } finally {
+      (vscode.workspace as unknown as { openTextDocument: typeof originalOpenTextDocument }).openTextDocument =
+        originalOpenTextDocument;
+      (vscode.window as unknown as { showTextDocument: typeof originalShowTextDocument }).showTextDocument =
+        originalShowTextDocument;
     }
   });
 

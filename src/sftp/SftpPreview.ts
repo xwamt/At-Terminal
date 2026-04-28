@@ -41,7 +41,7 @@ export interface OpenRemotePreviewFileOptions {
   remotePath: string;
   previewStore: SftpPreviewDocumentStore;
   downloadFile(remotePath: string, localPath: string): Promise<void>;
-  openUri(uri: vscode.Uri): Promise<void>;
+  openUri(uri: vscode.Uri, options?: vscode.TextDocumentShowOptions): Promise<void>;
 }
 
 export async function openRemotePreviewFile(options: OpenRemotePreviewFileOptions): Promise<vscode.Uri> {
@@ -49,6 +49,6 @@ export async function openRemotePreviewFile(options: OpenRemotePreviewFileOption
   await mkdir(dirname(localPreviewUri.fsPath), { recursive: true });
   await options.downloadFile(options.remotePath, localPreviewUri.fsPath);
   const readonlyUri = options.previewStore.createReadonlyUri(options.remotePath, localPreviewUri.fsPath);
-  await options.openUri(readonlyUri);
+  await options.openUri(readonlyUri, { preview: false });
   return readonlyUri;
 }

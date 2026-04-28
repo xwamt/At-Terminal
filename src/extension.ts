@@ -247,8 +247,8 @@ export function activate(context: vscode.ExtensionContext): void {
           remotePath: item.entry.path,
           previewStore: sftpPreviewStore,
           downloadFile: (remotePath, localPath) => sftpManager.downloadFile(remotePath, localPath),
-          openUri: async (uri) => {
-            await vscode.commands.executeCommand('vscode.open', uri);
+          openUri: async (uri, openOptions) => {
+            await vscode.commands.executeCommand('vscode.open', uri, openOptions);
           }
         });
       });

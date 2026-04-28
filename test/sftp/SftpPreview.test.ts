@@ -9,7 +9,7 @@ import { SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore, openRemotePreviewFile } 
 describe('SftpPreview', () => {
   it('creates the preview directory before downloading and opens the cached file', async () => {
     const storagePath = await mkdtemp(join(tmpdir(), 'sftp-preview-test-'));
-    const opened: vscode.Uri[] = [];
+    const opened: unknown[][] = [];
     let downloadedLocalPath = '';
     const previewStore = new SftpPreviewDocumentStore();
 
@@ -23,15 +23,15 @@ describe('SftpPreview', () => {
           expect(existsSync(dirname(localPath))).toBe(true);
           await writeFile(localPath, 'services:\n');
         },
-        openUri: async (uri) => {
-          opened.push(uri);
+        openUri: async (...args: unknown[]) => {
+          opened.push(args);
         }
       });
 
       expect(previewUri.scheme).toBe(SFTP_PREVIEW_SCHEME);
       expect(downloadedLocalPath).toContain('sftp-preview');
       expect(downloadedLocalPath).toContain('docker-compose.yml');
-      expect(opened).toEqual([previewUri]);
+      expect(opened).toEqual([[previewUri, { preview: false }]]);
       expect(await previewStore.provideTextDocumentContent(previewUri)).toBe('services:\n');
 
       await previewStore.deletePreviewFile(previewUri);

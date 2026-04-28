@@ -248,7 +248,7 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
   return {
     async openFile(uri) {
       const document = await vscode.workspace.openTextDocument(uri);
-      await vscode.window.showTextDocument(document);
+      await vscode.window.showTextDocument(document, { preview: false });
     },
     async confirmAutoSync(remotePath) {
       const answer = await vscode.window.showWarningMessage(
