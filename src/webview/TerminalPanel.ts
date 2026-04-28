@@ -41,7 +41,7 @@ export class TerminalPanel {
     private readonly hostKeyVerifier?: HostKeyVerifier,
     private readonly terminalContext?: TerminalContextRegistry
   ) {
-    this.session = this.createSession();
+    this.session = this.createSession(this.connectionGeneration);
   }
 
   static open(
@@ -81,7 +81,7 @@ export class TerminalPanel {
   }
 
   async connect(): Promise<void> {
-    const generation = ++this.connectionGeneration;
+    const generation = this.connectionGeneration;
     try {
       await this.session.connect();
       if (generation !== this.connectionGeneration) {
@@ -103,7 +103,9 @@ export class TerminalPanel {
     const generation = ++this.connectionGeneration;
     try {
       this.postStatus('Reconnecting...');
-      await this.session.reconnect();
+      this.session.dispose();
+      this.session = this.createSession(generation);
+      await this.session.connect();
       if (generation !== this.connectionGeneration) {
         return;
       }
@@ -150,7 +152,7 @@ export class TerminalPanel {
     });
   }
 
-  private createSession(): SshSession {
+  private createSession(generation: number): SshSession {
     return new SshSession(
       this.server,
       this.configManager,
@@ -158,7 +160,7 @@ export class TerminalPanel {
         output: (data) => {
           void this.panel.webview.postMessage({ type: 'output', payload: data });
         },
-        status: (message) => this.handleSessionStatus(message),
+        status: (message) => this.handleSessionStatus(message, generation),
         error: (error) => this.postStatus(formatError(error))
       },
       this.hostKeyVerifier
@@ -169,8 +171,8 @@ export class TerminalPanel {
     void this.panel.webview.postMessage({ type: 'status', payload: message });
   }
 
-  private handleSessionStatus(message: string): void {
-    if (message === 'Disconnected') {
+  private handleSessionStatus(message: string, generation: number): void {
+    if (message === 'Disconnected' && generation === this.connectionGeneration) {
       this.connected = false;
       this.terminalContext?.markDisconnected(this.terminalId);
     }

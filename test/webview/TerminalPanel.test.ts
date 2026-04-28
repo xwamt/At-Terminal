@@ -260,4 +260,23 @@ describe('TerminalPanel rendering helpers', () => {
     expect(registry.getActive()?.connected).toBe(false);
     expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'status', payload: 'Disconnected' });
   });
+
+  it('does not let stale disconnected status from an old session mark a reconnected terminal disconnected', async () => {
+    const registry = new TerminalContextRegistry();
+    const panelHost = createPanel();
+    vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    await flushPromises();
+    const oldSessionEvents = sessionEvents[0];
+
+    await terminal.reconnect();
+    await flushPromises();
+    expect(registry.getActive()?.connected).toBe(true);
+
+    oldSessionEvents.status('Disconnected');
+
+    expect(registry.getActive()?.connected).toBe(true);
+    expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'status', payload: 'Disconnected' });
+  });
 });
