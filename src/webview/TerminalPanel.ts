@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { SshSession, type HostKeyVerifier } from '../ssh/SshSession';
+import type { TerminalContextRegistry } from '../terminal/TerminalContext';
 import { formatError } from '../utils/errors';
 import { renderWebviewHtml, type WebviewAsset } from './html';
 
@@ -28,12 +30,16 @@ export interface ConfigurationLike {
 export class TerminalPanel {
   private static active: TerminalPanel | undefined;
   private session: SshSession;
+  private readonly terminalId = randomUUID();
+  private connected = false;
+  private connectionGeneration = 0;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
     private readonly server: ServerConfig,
     private readonly configManager: ConfigManager,
-    private readonly hostKeyVerifier?: HostKeyVerifier
+    private readonly hostKeyVerifier?: HostKeyVerifier,
+    private readonly terminalContext?: TerminalContextRegistry
   ) {
     this.session = this.createSession();
   }
@@ -42,7 +48,8 @@ export class TerminalPanel {
     context: vscode.ExtensionContext,
     server: ServerConfig,
     configManager: ConfigManager,
-    hostKeyVerifier?: HostKeyVerifier
+    hostKeyVerifier?: HostKeyVerifier,
+    terminalContext?: TerminalContextRegistry
   ): TerminalPanel {
     const panel = vscode.window.createWebviewPanel(
       'sshTerminal',
@@ -55,7 +62,7 @@ export class TerminalPanel {
       }
     );
 
-    const terminal = new TerminalPanel(panel, server, configManager, hostKeyVerifier);
+    const terminal = new TerminalPanel(panel, server, configManager, hostKeyVerifier, terminalContext);
     TerminalPanel.active = terminal;
     const settings = resolveTerminalSettings(vscode.workspace.getConfiguration('sshManager'));
     panel.webview.html = renderWebviewHtml(
@@ -64,6 +71,7 @@ export class TerminalPanel {
       renderTerminalBody(settings)
     );
     terminal.bind();
+    terminal.publishContext();
     void terminal.connect();
     return terminal;
   }
@@ -73,24 +81,49 @@ export class TerminalPanel {
   }
 
   async connect(): Promise<void> {
+    const generation = ++this.connectionGeneration;
     try {
       await this.session.connect();
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
+      this.connected = true;
+      this.terminalContext?.markConnected(this.terminalId);
     } catch (error) {
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
+      this.connected = false;
+      this.terminalContext?.markDisconnected(this.terminalId);
       this.postStatus(formatError(error));
     }
   }
 
   async reconnect(): Promise<void> {
+    const generation = ++this.connectionGeneration;
     try {
       this.postStatus('Reconnecting...');
       await this.session.reconnect();
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
+      this.connected = true;
+      this.terminalContext?.markConnected(this.terminalId);
     } catch (error) {
+      if (generation !== this.connectionGeneration) {
+        return;
+      }
+      this.connected = false;
+      this.terminalContext?.markDisconnected(this.terminalId);
       this.postStatus(formatError(error));
     }
   }
 
   disconnect(): void {
+    this.connectionGeneration++;
     this.session.dispose();
+    this.connected = false;
+    this.terminalContext?.markDisconnected(this.terminalId);
     this.postStatus('Disconnected');
   }
 
@@ -102,11 +135,15 @@ export class TerminalPanel {
     this.panel.onDidChangeViewState((event) => {
       if (event.webviewPanel.active) {
         TerminalPanel.active = this;
+        this.publishContext();
       }
     });
 
     this.panel.onDidDispose(() => {
+      this.connectionGeneration++;
       this.session.dispose();
+      this.connected = false;
+      this.terminalContext?.clearIfActive(this.terminalId);
       if (TerminalPanel.active === this) {
         TerminalPanel.active = undefined;
       }
@@ -121,7 +158,7 @@ export class TerminalPanel {
         output: (data) => {
           void this.panel.webview.postMessage({ type: 'output', payload: data });
         },
-        status: (message) => this.postStatus(message),
+        status: (message) => this.handleSessionStatus(message),
         error: (error) => this.postStatus(formatError(error))
       },
       this.hostKeyVerifier
@@ -130,6 +167,23 @@ export class TerminalPanel {
 
   private postStatus(message: string): void {
     void this.panel.webview.postMessage({ type: 'status', payload: message });
+  }
+
+  private handleSessionStatus(message: string): void {
+    if (message === 'Disconnected') {
+      this.connected = false;
+      this.terminalContext?.markDisconnected(this.terminalId);
+    }
+    this.postStatus(message);
+  }
+
+  private publishContext(): void {
+    this.terminalContext?.setActive({
+      terminalId: this.terminalId,
+      server: this.server,
+      connected: this.connected,
+      write: (data) => this.session.write(data)
+    });
   }
 }
 
