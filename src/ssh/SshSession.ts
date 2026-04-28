@@ -84,15 +84,7 @@ export class SshSession {
       username: this.server.username,
       keepaliveInterval: this.server.keepAliveInterval * 1000,
       hostHash: 'sha256',
-      hostVerifier: this.hostKeyVerifier
-        ? (fingerprint: string, verify: VerifyCallback): boolean => {
-            void this.hostKeyVerifier!.verify(this.server.host, this.server.port, fingerprint).then(
-              verify,
-              () => verify(false)
-            );
-            return true;
-          }
-        : undefined
+      hostVerifier: this.createHostVerifier()
     };
 
     if (this.server.authType === 'password') {
@@ -110,5 +102,20 @@ export class SshSession {
       ...base,
       privateKey: await readFile(this.server.privateKeyPath, 'utf8')
     };
+  }
+
+  private createHostVerifier(): ConnectConfig['hostVerifier'] {
+    if (!this.hostKeyVerifier) {
+      return undefined;
+    }
+
+    const verifyHost = (fingerprint: string, verify: VerifyCallback): void => {
+      void this.hostKeyVerifier!.verify(this.server.host, this.server.port, fingerprint).then(
+        verify,
+        () => verify(false)
+      );
+    };
+
+    return verifyHost as ConnectConfig['hostVerifier'];
   }
 }

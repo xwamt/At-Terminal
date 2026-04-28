@@ -35,35 +35,48 @@ export class ServerFormPanel {
     );
 
     panel.webview.onDidReceiveMessage(async (message: { type?: string; payload?: SubmitPayload }) => {
-      if (message.type !== 'submit' || !message.payload) {
-        return;
-      }
-      try {
-        const now = Date.now();
-        const authType = String(message.payload.authType);
-        const server = parseServerConfig({
-          id: existing?.id ?? randomUUID(),
-          label: String(message.payload.label ?? '').trim(),
-          group: optionalString(message.payload.group),
-          host: String(message.payload.host ?? '').trim(),
-          port: Number(message.payload.port ?? 22),
-          username: String(message.payload.username ?? '').trim(),
-          authType,
-          privateKeyPath: optionalString(message.payload.privateKeyPath),
-          keepAliveInterval: Number(message.payload.keepAliveInterval ?? 30),
-          encoding: 'utf-8',
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now
-        });
-        const password = authType === 'password' ? optionalString(message.payload.password) : undefined;
-        await configManager.saveServer(server, password);
-        onSaved();
-        panel.dispose();
-      } catch (error) {
-        void vscode.window.showErrorMessage(formatError(error));
-      }
+      await handleServerFormMessage(message, existing, configManager, onSaved, panel);
     });
   }
+}
+
+export async function handleServerFormMessage(
+  message: { type?: string; payload?: SubmitPayload },
+  existing: ServerConfig | undefined,
+  configManager: Pick<ConfigManager, 'saveServer'>,
+  onSaved: () => void,
+  panel: Pick<vscode.WebviewPanel, 'dispose' | 'webview'>
+): Promise<boolean> {
+  if (message.type !== 'submit' || !message.payload) {
+    return false;
+  }
+
+  try {
+    const now = Date.now();
+    const authType = String(message.payload.authType);
+    const server = parseServerConfig({
+      id: existing?.id ?? randomUUID(),
+      label: String(message.payload.label ?? '').trim(),
+      group: optionalString(message.payload.group),
+      host: String(message.payload.host ?? '').trim(),
+      port: Number(message.payload.port ?? 22),
+      username: String(message.payload.username ?? '').trim(),
+      authType,
+      privateKeyPath: optionalString(message.payload.privateKeyPath),
+      keepAliveInterval: Number(message.payload.keepAliveInterval ?? 30),
+      encoding: 'utf-8',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now
+    });
+    const password = authType === 'password' ? optionalString(message.payload.password) : undefined;
+    await configManager.saveServer(server, password);
+    onSaved();
+    panel.dispose();
+  } catch (error) {
+    await panel.webview.postMessage({ type: 'error', payload: formatError(error) });
+  }
+
+  return true;
 }
 
 function optionalString(value: unknown): string | undefined {

@@ -30,3 +30,10 @@ form?.addEventListener('submit', (event) => {
   }
   vscode.postMessage({ type: 'submit', payload });
 });
+
+window.addEventListener('message', (event: MessageEvent) => {
+  const message = event.data as { type?: string; payload?: unknown };
+  if (message.type === 'error' && typeof message.payload === 'string' && error) {
+    error.textContent = message.payload;
+  }
+});

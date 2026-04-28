@@ -3,12 +3,22 @@ import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { SshSession, type HostKeyVerifier } from '../ssh/SshSession';
 import { formatError } from '../utils/errors';
-import { renderWebviewHtml } from './html';
+import { renderWebviewHtml, type WebviewAsset } from './html';
 
 type TerminalMessage =
   | { type: 'ready'; rows: number; cols: number }
   | { type: 'input'; payload: string }
   | { type: 'resize'; rows: number; cols: number };
+
+export interface TerminalSettings {
+  scrollback: number;
+  fontSize: number;
+  fontFamily: string;
+}
+
+export interface ConfigurationLike {
+  get<T>(key: string, defaultValue: T): T;
+}
 
 export class TerminalPanel {
   private static active: TerminalPanel | undefined;
@@ -42,13 +52,11 @@ export class TerminalPanel {
 
     const terminal = new TerminalPanel(panel, server, configManager, hostKeyVerifier);
     TerminalPanel.active = terminal;
+    const settings = resolveTerminalSettings(vscode.workspace.getConfiguration('sshManager'));
     panel.webview.html = renderWebviewHtml(
       panel.webview,
-      {
-        script: vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview', 'terminal.js'),
-        style: vscode.Uri.joinPath(context.extensionUri, 'webview', 'terminal', 'index.css')
-      },
-      `<div id="status">Starting...</div><div id="terminal" data-scrollback="5000" data-font-size="14" data-font-family="Cascadia Code, Menlo, monospace"></div>`
+      createTerminalAssets(context.extensionUri),
+      renderTerminalBody(settings)
     );
     terminal.bind();
     void terminal.connect();
@@ -123,4 +131,27 @@ export class TerminalPanel {
   private postStatus(message: string): void {
     void this.panel.webview.postMessage({ type: 'status', payload: message });
   }
+}
+
+export function resolveTerminalSettings(configuration: ConfigurationLike): TerminalSettings {
+  return {
+    scrollback: configuration.get('scrollback', 5000),
+    fontSize: configuration.get('terminalFontSize', 14),
+    fontFamily: configuration.get('terminalFontFamily', 'Cascadia Code, Menlo, monospace')
+  };
+}
+
+export function createTerminalAssets(extensionUri: vscode.Uri): WebviewAsset {
+  return {
+    script: vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'terminal.js'),
+    style: vscode.Uri.joinPath(extensionUri, 'dist', 'webview', 'terminal.css')
+  };
+}
+
+export function renderTerminalBody(settings: TerminalSettings): string {
+  return `<div id="status">Starting...</div><div id="terminal" data-scrollback="${settings.scrollback}" data-font-size="${settings.fontSize}" data-font-family="${escapeAttr(settings.fontFamily)}"></div>`;
+}
+
+function escapeAttr(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
