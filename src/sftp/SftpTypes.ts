@@ -10,6 +10,11 @@ export interface SftpEntry {
   modifiedAt?: number;
 }
 
+export interface SftpFileStat {
+  size: number;
+  modifiedAt: number;
+}
+
 export interface SftpSnapshot {
   server: ServerConfig;
   rootPath: string;

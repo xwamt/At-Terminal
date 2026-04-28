@@ -1,7 +1,7 @@
 import type { TerminalContext } from '../terminal/TerminalContext';
 import type { SftpTreeState } from '../tree/SftpTreeProvider';
 import { dirname } from './RemotePath';
-import type { SftpEntry } from './SftpTypes';
+import type { SftpEntry, SftpFileStat } from './SftpTypes';
 import { TransferService, type TransferProgress, type TransferReporter } from './TransferService';
 
 export interface SftpSessionLike {
@@ -14,6 +14,7 @@ export interface SftpSessionLike {
   deleteDirectory(path: string): Promise<void>;
   uploadFile(localPath: string, remotePath: string, progress?: TransferProgress): Promise<void>;
   downloadFile(remotePath: string, localPath: string, progress?: TransferProgress): Promise<void>;
+  stat(path: string): Promise<SftpFileStat>;
   dispose(): void;
 }
 
@@ -69,6 +70,10 @@ export class SftpManager {
         : { kind: 'none' };
     }
     return { kind: 'active', rootPath: this.rootPath ?? '.' };
+  }
+
+  getActiveServerId(): string | undefined {
+    return this.terminalContext?.connected ? this.terminalContext.server.id : undefined;
   }
 
   async ensureRoot(): Promise<string> {
@@ -128,6 +133,13 @@ export class SftpManager {
     );
   }
 
+  async stat(path: string): Promise<SftpFileStat> {
+    if (!this.terminalContext?.connected) {
+      throw new Error('No connected SSH terminal is active.');
+    }
+    return await (await this.ensureSession()).stat(path);
+  }
+
   setSnapshot(rootPath: string, entries: SftpEntry[]): void {
     this.snapshot = { rootPath, entries };
   }
@@ -180,13 +192,13 @@ export class SftpManager {
     return await promise;
   }
 
-  private async runConnected(
+  private async runConnected<T>(
     label: string,
-    job: (session: SftpSessionLike, progress: TransferProgress) => Promise<void>
-  ): Promise<void> {
+    job: (session: SftpSessionLike, progress: TransferProgress) => Promise<T>
+  ): Promise<T> {
     await this.transfers.requireConnected(Boolean(this.terminalContext?.connected));
-    await this.transfers.run(label, async (progress) => {
-      await job(await this.ensureSession(), progress);
+    return await this.transfers.run(label, async (progress) => {
+      return await job(await this.ensureSession(), progress);
     });
   }
 }

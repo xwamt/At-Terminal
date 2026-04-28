@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { Client, type ConnectConfig, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
 import type { TransferProgress } from './TransferService';
-import type { PasswordSource, SftpEntry, SftpEntryType } from './SftpTypes';
+import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './SftpTypes';
 
 export async function buildSftpConnectConfig(server: ServerConfig, passwords: PasswordSource): Promise<ConnectConfig> {
   const base: ConnectConfig = {
@@ -97,6 +97,23 @@ export class SftpSession {
       size: row.attrs.size,
       modifiedAt: row.attrs.mtime
     }));
+  }
+
+  async stat(path: string): Promise<SftpFileStat> {
+    const sftp = this.requireSftp();
+    const attrs = await new Promise<{ size: number; mtime: number }>((resolve, reject) => {
+      sftp.stat(path, (error, stat) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(stat);
+      });
+    });
+    return {
+      size: attrs.size,
+      modifiedAt: attrs.mtime
+    };
   }
 
   async mkdir(path: string): Promise<void> {
