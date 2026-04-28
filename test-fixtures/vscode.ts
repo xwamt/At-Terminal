@@ -110,7 +110,7 @@ export const window = {
   createTreeView: () => ({ dispose: () => undefined }),
   createWebviewPanel: () => ({ dispose: () => undefined }),
   showTextDocument: async (document: TextDocument) => document,
-  createStatusBarItem: () => new StatusBarItem()
+  createStatusBarItem: (_alignment?: StatusBarAlignment, _priority?: number) => new StatusBarItem()
 };
 
 export const commands = {

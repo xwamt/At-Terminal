@@ -61,10 +61,19 @@ export function remoteStatsMatch(left: SftpFileStat, right: SftpFileStat): boole
 export class SftpEditSessionManager {
   private readonly sessionsByKey = new Map<string, SftpEditSession>();
   private readonly sessionsByLocalPath = new Map<string, SftpEditSession>();
+  private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly debounceMs: number;
 
   constructor(private readonly options: SftpEditSessionManagerOptions) {
     this.debounceMs = options.debounceMs ?? 750;
+    this.disposables.push(
+      vscode.workspace.onDidSaveTextDocument((document) => {
+        void this.handleSavedDocument(document);
+      }),
+      vscode.workspace.onDidCloseTextDocument((document) => {
+        void this.handleClosedDocument(document);
+      })
+    );
   }
 
   async openRemoteFile(remotePath: string): Promise<SftpEditSession> {
@@ -116,11 +125,21 @@ export class SftpEditSessionManager {
     this.scheduleUpload(session);
   }
 
+  async handleClosedDocument(document: Pick<vscode.TextDocument, 'uri'> & { fileName?: string }): Promise<void> {
+    const session = this.sessionsByLocalPath.get(document.uri.fsPath);
+    if (!session) {
+      return;
+    }
+  }
+
   dispose(): void {
     for (const session of this.sessionsByKey.values()) {
       if (session.debounceTimer) {
         clearTimeout(session.debounceTimer);
       }
+    }
+    for (const disposable of this.disposables) {
+      disposable.dispose();
     }
     this.sessionsByKey.clear();
     this.sessionsByLocalPath.clear();
@@ -196,4 +215,54 @@ export class SftpEditSessionManager {
     session.baseRemoteStat = await this.options.sftp.stat(session.remotePath);
     return true;
   }
+}
+
+export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): SftpEditUi {
+  return {
+    async openFile(uri) {
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document);
+    },
+    async confirmAutoSync(remotePath) {
+      const answer = await vscode.window.showWarningMessage(
+        `Enable automatic sync to ${remotePath} for this edit session?`,
+        { modal: true },
+        'Enable Sync'
+      );
+      return answer === 'Enable Sync';
+    },
+    async resolveConflict(remotePath) {
+      const answer = await vscode.window.showWarningMessage(
+        `Remote file changed: ${remotePath}`,
+        { modal: true },
+        'Overwrite Remote',
+        'Cancel Upload'
+      );
+      return answer === 'Overwrite Remote' ? 'overwrite' : 'cancel';
+    },
+    showStatus(state, message) {
+      statusBarItem.text =
+        state === 'uploading'
+          ? '$(sync~spin) Uploading remote file...'
+          : state === 'idle'
+            ? '$(check) Remote file synced'
+            : state === 'conflict'
+              ? '$(warning) Remote file changed'
+              : '$(error) Remote sync failed';
+      statusBarItem.tooltip = message;
+      statusBarItem.show();
+      if (state === 'idle') {
+        setTimeout(() => statusBarItem.hide(), 2000);
+      }
+    },
+    async promptUnsyncedClose(remotePath) {
+      const answer = await vscode.window.showWarningMessage(
+        `Remote edit has unsynchronized changes: ${remotePath}`,
+        { modal: true },
+        'Keep Local Copy',
+        'Discard Local Copy'
+      );
+      return answer === 'Discard Local Copy' ? 'discard' : 'keep';
+    }
+  };
 }

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ConfigManager } from './config/ConfigManager';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
+import { createVscodeSftpEditUi, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
 import { SftpManager } from './sftp/SftpManager';
 import { SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore, openRemotePreviewFile } from './sftp/SftpPreview';
 import { SftpSession } from './sftp/SftpSession';
@@ -30,6 +31,12 @@ export function activate(context: vscode.ExtensionContext): void {
     listDirectory: (path) => sftpManager.listDirectory(path)
   });
   const sftpPreviewStore = new SftpPreviewDocumentStore();
+  const sftpEditStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  const sftpEditManager = new SftpEditSessionManager({
+    storageUri: context.globalStorageUri,
+    sftp: sftpManager,
+    ui: createVscodeSftpEditUi(sftpEditStatus)
+  });
 
   terminalContext.onDidChangeActiveContext((activeContext) => {
     sftpManager.setTerminalContext(activeContext);
@@ -71,6 +78,8 @@ export function activate(context: vscode.ExtensionContext): void {
       dragAndDropController: new SftpDragAndDropController(sftpManager),
       showCollapseAll: true
     }),
+    sftpEditStatus,
+    sftpEditManager,
     vscode.workspace.registerTextDocumentContentProvider(SFTP_PREVIEW_SCHEME, sftpPreviewStore),
     vscode.workspace.onDidCloseTextDocument((document) => {
       if (document.uri.scheme === SFTP_PREVIEW_SCHEME) {
@@ -225,7 +234,7 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!item) {
           return;
         }
-        await vscode.window.showErrorMessage('SFTP edit is not wired yet.');
+        await sftpEditManager.openRemoteFile(item.entry.path);
       });
     }),
     vscode.commands.registerCommand('sshManager.sftp.openPreview', async (item?: SftpFileTreeItem) => {
