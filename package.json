@@ -1,0 +1,125 @@
+{
+  "name": "ssh-terminal-manager",
+  "displayName": "SSH Terminal Manager",
+  "description": "Manage SSH terminal sessions in VS Code without installing a remote server.",
+  "version": "0.1.5",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onView:sshManager.servers"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sshManager",
+          "title": "SSH",
+          "icon": "media/terminal-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "sshManager": [
+        {
+          "id": "sshManager.servers",
+          "name": "Servers"
+        }
+      ]
+    },
+    "commands": [
+      { "command": "sshManager.addServer", "title": "SSH: Add Server" },
+      { "command": "sshManager.editServer", "title": "SSH: Edit Server" },
+      { "command": "sshManager.deleteServer", "title": "SSH: Delete Server" },
+      { "command": "sshManager.connect", "title": "SSH: Connect" },
+      { "command": "sshManager.disconnect", "title": "SSH: Disconnect" },
+      { "command": "sshManager.reconnect", "title": "SSH: Reconnect" },
+      { "command": "sshManager.copyHost", "title": "SSH: Copy Host" },
+      { "command": "sshManager.refresh", "title": "SSH: Refresh" }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sshManager.addServer",
+          "when": "view == sshManager.servers",
+          "group": "navigation"
+        },
+        {
+          "command": "sshManager.refresh",
+          "when": "view == sshManager.servers",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sshManager.connect",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "inline@1"
+        },
+        {
+          "command": "sshManager.editServer",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@1"
+        },
+        {
+          "command": "sshManager.deleteServer",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@2"
+        },
+        {
+          "command": "sshManager.copyHost",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SSH Terminal Manager",
+      "properties": {
+        "sshManager.terminalFontSize": {
+          "type": "number",
+          "default": 14,
+          "minimum": 8
+        },
+        "sshManager.terminalFontFamily": {
+          "type": "string",
+          "default": "Cascadia Code, Menlo, monospace"
+        },
+        "sshManager.scrollback": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 100
+        },
+        "sshManager.keepAliveInterval": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "ssh2": "^1.16.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/ssh2": "^1.15.5",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

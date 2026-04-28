@@ -1,0 +1,82 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--vscode-terminal-background, var(--vscode-editor-background));
+}
+
+.terminal-shell {
+  display: grid;
+  grid-template-rows: 32px minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+  background: var(--vscode-terminal-background, var(--vscode-editor-background));
+}
+
+.terminal-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font: 12px var(--vscode-font-family);
+  padding: 0 10px;
+}
+
+.terminal-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--vscode-charts-yellow);
+  flex: 0 0 auto;
+}
+
+.terminal-status--connected .terminal-status-dot {
+  background: var(--vscode-testing-iconPassed);
+}
+
+.terminal-status--disconnected .terminal-status-dot {
+  background: var(--vscode-testing-iconFailed);
+}
+
+.terminal-status-text {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.terminal-host {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#terminal {
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  background: var(--vscode-terminal-background, var(--vscode-editor-background));
+}
+
+.xterm {
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.xterm-viewport {
+  overflow-y: auto;
+}
