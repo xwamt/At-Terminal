@@ -183,3 +183,122 @@ describe('SftpEditSessionManager save synchronization', () => {
     }
   });
 });
+
+describe('SftpEditSessionManager conflicts and failures', () => {
+  it('prompts before overwriting when the remote stat changed', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-conflict-')));
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi
+        .fn()
+        .mockResolvedValueOnce({ size: 7, modifiedAt: 10 })
+        .mockResolvedValueOnce({ size: 8, modifiedAt: 11 })
+        .mockResolvedValueOnce({ size: 9, modifiedAt: 12 }),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn()
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(async () => 'overwrite' as const),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js');
+      expect(session.baseRemoteStat).toEqual({ size: 9, modifiedAt: 12 });
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps local edits and does not upload when conflict resolution is canceled', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-cancel-conflict-')));
+    const showStatus = vi.fn();
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi.fn().mockResolvedValueOnce({ size: 7, modifiedAt: 10 }).mockResolvedValueOnce({ size: 8, modifiedAt: 11 }),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn()
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(async () => 'cancel' as const),
+        showStatus,
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(sftp.uploadFile).not.toHaveBeenCalled();
+      expect(session.syncState).toBe('conflict');
+      expect(showStatus).toHaveBeenCalledWith('conflict', 'Remote file changed');
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('does not advance the remote baseline when upload fails', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-failed-')));
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn(async () => {
+        throw new Error('permission denied');
+      })
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(session.syncState).toBe('failed');
+      expect(session.lastError).toBe('permission denied');
+      expect(session.baseRemoteStat).toEqual({ size: 7, modifiedAt: 10 });
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+});

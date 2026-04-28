@@ -182,10 +182,15 @@ export class SftpEditSessionManager {
 
   private async uploadIfUnchanged(session: SftpEditSession): Promise<boolean> {
     const currentRemoteStat = await this.options.sftp.stat(session.remotePath);
-    if (!remoteStatsMatch(currentRemoteStat, session.baseRemoteStat)) {
+    const conflict = !remoteStatsMatch(currentRemoteStat, session.baseRemoteStat);
+    if (conflict) {
       session.syncState = 'conflict';
       this.options.ui.showStatus('conflict', 'Remote file changed');
-      return false;
+      const choice = await this.options.ui.resolveConflict(session.remotePath);
+      if (choice === 'cancel') {
+        return false;
+      }
+      session.syncState = 'uploading';
     }
     await this.options.sftp.uploadFile(session.localUri.fsPath, session.remotePath);
     session.baseRemoteStat = await this.options.sftp.stat(session.remotePath);
