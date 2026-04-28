@@ -123,6 +123,22 @@ export class SftpSession {
     });
   }
 
+  async createFile(path: string): Promise<void> {
+    const sftp = this.requireSftp();
+    const handle = await new Promise<Buffer>((resolve, reject) => {
+      sftp.open(path, 'wx', (error, fileHandle) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(fileHandle);
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      sftp.close(handle, (error) => (error ? reject(error) : resolve()));
+    });
+  }
+
   async rename(oldPath: string, newPath: string): Promise<void> {
     const sftp = this.requireSftp();
     await new Promise<void>((resolve, reject) => {

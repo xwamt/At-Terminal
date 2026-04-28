@@ -4,6 +4,7 @@ import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from '.
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { createVscodeSftpEditUi, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
 import { SftpManager } from './sftp/SftpManager';
+import { createRemoteFileForEditing } from './sftp/SftpNewFile';
 import { SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore, openRemotePreviewFile } from './sftp/SftpPreview';
 import { SftpSession } from './sftp/SftpSession';
 import { VscodeTransferReporter } from './sftp/VscodeTransferReporter';
@@ -210,6 +211,21 @@ export function activate(context: vscode.ExtensionContext): void {
         }
         await sftpManager.rename(item.entry.path, joinRemotePath(dirname(item.entry.path), nextName));
         sftpTreeProvider.refresh();
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.sftp.newFile', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
+      await runSftpCommand(async () => {
+        const state = sftpManager.getState();
+        await createRemoteFileForEditing({
+          entry: item?.entry,
+          rootPath: state.kind === 'active' ? state.rootPath : '.',
+          promptName: async () => vscode.window.showInputBox({ prompt: 'New remote file name' }),
+          createFile: (remotePath) => sftpManager.createFile(remotePath),
+          openRemoteFile: async (remotePath) => {
+            await sftpEditManager.openRemoteFile(remotePath);
+          },
+          refresh: () => sftpTreeProvider.refresh()
+        });
       });
     }),
     vscode.commands.registerCommand('sshManager.sftp.newFolder', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {

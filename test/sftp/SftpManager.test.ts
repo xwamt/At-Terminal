@@ -39,6 +39,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile: vi.fn(),
       downloadFile: vi.fn(),
+      createFile: vi.fn(),
       stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
       dispose: vi.fn()
     };
@@ -60,6 +61,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile: vi.fn(),
       downloadFile: vi.fn(),
+      createFile: vi.fn(),
       stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
       dispose: vi.fn()
     };
@@ -81,6 +83,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile: vi.fn(),
       downloadFile: vi.fn(),
+      createFile: vi.fn(),
       stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
       dispose: vi.fn()
     };
@@ -106,6 +109,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile: vi.fn(),
       downloadFile: vi.fn(),
+      createFile: vi.fn(),
       stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
       dispose: vi.fn()
     };
@@ -153,6 +157,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile: vi.fn(),
       downloadFile: vi.fn(),
+      createFile: vi.fn(),
       stat,
       dispose: vi.fn()
     };
@@ -164,6 +169,30 @@ describe('SftpManager', () => {
       modifiedAt: 1714280000
     });
     expect(stat).toHaveBeenCalledWith('/home/deploy/app.js');
+  });
+
+  it('creates a remote empty file through the active SFTP session', async () => {
+    const createFile = vi.fn();
+    const session = {
+      connect: vi.fn(),
+      realpath: vi.fn(async () => '/home/deploy'),
+      listDirectory: vi.fn(async () => []),
+      mkdir: vi.fn(),
+      rename: vi.fn(),
+      deleteFile: vi.fn(),
+      deleteDirectory: vi.fn(),
+      uploadFile: vi.fn(),
+      downloadFile: vi.fn(),
+      createFile,
+      stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
+      dispose: vi.fn()
+    };
+    const manager = new SftpManager({ createSession: () => session });
+    manager.setTerminalContext(context(true));
+
+    await manager.createFile('/home/deploy/new.txt');
+
+    expect(createFile).toHaveBeenCalledWith('/home/deploy/new.txt');
   });
 
   it('passes transfer progress reporters to upload and download sessions', async () => {
@@ -179,6 +208,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile,
       downloadFile,
+      createFile: vi.fn(),
       stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
       dispose: vi.fn()
     };
@@ -204,6 +234,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile: vi.fn(),
       downloadFile: vi.fn(),
+      createFile: vi.fn(),
       stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
       dispose: vi.fn()
     };
@@ -236,6 +267,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile: vi.fn(),
       downloadFile: vi.fn(),
+      createFile: vi.fn(),
       stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
       dispose: vi.fn()
     };
@@ -249,6 +281,7 @@ describe('SftpManager', () => {
       deleteDirectory: vi.fn(),
       uploadFile: vi.fn(),
       downloadFile: vi.fn(),
+      createFile: vi.fn(),
       stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
       dispose: vi.fn()
     };

@@ -14,6 +14,7 @@ export interface SftpSessionLike {
   deleteDirectory(path: string): Promise<void>;
   uploadFile(localPath: string, remotePath: string, progress?: TransferProgress): Promise<void>;
   downloadFile(remotePath: string, localPath: string, progress?: TransferProgress): Promise<void>;
+  createFile(path: string): Promise<void>;
   stat(path: string): Promise<SftpFileStat>;
   dispose(): void;
 }
@@ -131,6 +132,10 @@ export class SftpManager {
     await this.runConnected(`Download ${remotePath}`, async (session, progress) =>
       session.downloadFile(remotePath, localPath, progress)
     );
+  }
+
+  async createFile(path: string): Promise<void> {
+    await this.runConnected(`New file ${path}`, async (session) => session.createFile(path));
   }
 
   async stat(path: string): Promise<SftpFileStat> {
