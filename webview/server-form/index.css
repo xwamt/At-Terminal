@@ -2,18 +2,76 @@ body {
   color: var(--vscode-foreground);
   background: var(--vscode-editor-background);
   font-family: var(--vscode-font-family);
-  padding: 20px;
+  padding: 0;
+  margin: 0;
 }
 
-form {
+.server-form-shell {
+  max-width: 860px;
+  padding: 22px 28px 28px;
+}
+
+.form-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 650;
+}
+
+h2 {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--vscode-descriptionForeground);
+  text-transform: uppercase;
+}
+
+p {
+  margin-top: 5px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.form-status {
+  color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-panel-border);
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.server-form {
   display: grid;
+  gap: 14px;
+}
+
+.form-section {
+  border: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
+  padding: 14px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 12px;
-  max-width: 560px;
+  margin-top: 12px;
 }
 
 label {
   display: grid;
-  gap: 4px;
+  gap: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
 }
 
 input,
@@ -22,6 +80,51 @@ button {
   font: inherit;
 }
 
-#form-error {
+input,
+select {
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  padding: 7px 8px;
+}
+
+input:focus,
+select:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.form-error {
   color: var(--vscode-errorForeground);
+  min-height: 18px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+button {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: 0;
+  padding: 8px 14px;
+}
+
+button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+@media (max-width: 640px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-header {
+    display: grid;
+  }
 }

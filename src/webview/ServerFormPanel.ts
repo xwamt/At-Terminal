@@ -31,7 +31,7 @@ export class ServerFormPanel {
         script: vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview', 'server-form.js'),
         style: vscode.Uri.joinPath(context.extensionUri, 'webview', 'server-form', 'index.css')
       },
-      renderForm(existing)
+      renderServerForm(existing)
     );
 
     panel.webview.onDidReceiveMessage(async (message: { type?: string; payload?: SubmitPayload }) => {
@@ -84,26 +84,47 @@ function optionalString(value: unknown): string | undefined {
   return text.length > 0 ? text : undefined;
 }
 
-function renderForm(server?: ServerConfig): string {
+export function renderServerForm(server?: ServerConfig): string {
   const authType = server?.authType ?? 'password';
-  return `<form id="server-form">
-  <label>Label <input name="label" value="${escapeAttr(server?.label ?? '')}" required></label>
-  <label>Group <input name="group" value="${escapeAttr(server?.group ?? '')}"></label>
-  <label>Host <input name="host" value="${escapeAttr(server?.host ?? '')}" required></label>
-  <label>Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
-  <label>Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required></label>
-  <label>Authentication
-    <select id="authType" name="authType">
-      <option value="password"${authType === 'password' ? ' selected' : ''}>Password</option>
-      <option value="privateKey"${authType === 'privateKey' ? ' selected' : ''}>Private Key</option>
-    </select>
-  </label>
-  <label>Password <input id="password" name="password" type="password"></label>
-  <label>Private Key Path <input id="privateKeyPath" name="privateKeyPath" value="${escapeAttr(server?.privateKeyPath ?? '')}"></label>
-  <label>Keepalive Interval <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
-  <div id="form-error"></div>
-  <button type="submit">${server ? 'Save Server' : 'Add Server'}</button>
-</form>`;
+  return `<main class="server-form-shell">
+  <header class="form-header">
+    <div>
+      <h1>${server ? 'Edit SSH Server' : 'Add SSH Server'}</h1>
+      <p>Configure a direct SSH terminal connection.</p>
+    </div>
+    <div id="form-status" class="form-status">Manual setup</div>
+  </header>
+  <form id="server-form" class="server-form">
+    <section class="form-section">
+      <h2>Connection</h2>
+      <div class="field-grid">
+        <label>Label <input name="label" value="${escapeAttr(server?.label ?? '')}" required></label>
+        <label>Group <input name="group" value="${escapeAttr(server?.group ?? '')}" placeholder="Default"></label>
+        <label>Host <input name="host" value="${escapeAttr(server?.host ?? '')}" required></label>
+        <label>Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
+        <label>Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required></label>
+        <label>Keepalive <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
+      </div>
+    </section>
+    <section class="form-section">
+      <h2>Authentication</h2>
+      <div class="field-grid">
+        <label>Method
+          <select id="authType" name="authType">
+            <option value="password"${authType === 'password' ? ' selected' : ''}>Password</option>
+            <option value="privateKey"${authType === 'privateKey' ? ' selected' : ''}>Private Key</option>
+          </select>
+        </label>
+        <label>Password <input id="password" name="password" type="password"></label>
+        <label class="field-wide">Private Key Path <input id="privateKeyPath" name="privateKeyPath" value="${escapeAttr(server?.privateKeyPath ?? '')}"></label>
+      </div>
+    </section>
+    <div id="form-error" class="form-error"></div>
+    <footer class="form-actions">
+      <button type="submit">${server ? 'Save Server' : 'Add Server'}</button>
+    </footer>
+  </form>
+</main>`;
 }
 
 function escapeAttr(value: string): string {

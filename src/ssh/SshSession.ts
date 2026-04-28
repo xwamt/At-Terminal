@@ -16,6 +16,8 @@ export interface HostKeyVerifier {
 export class SshSession {
   private client: Client | undefined;
   private shell: ClientChannel | undefined;
+  private rows = 24;
+  private cols = 80;
 
   constructor(
     private readonly server: ServerConfig,
@@ -37,7 +39,7 @@ export class SshSession {
     });
 
     this.shell = await new Promise<ClientChannel>((resolve, reject) => {
-      client.shell({ term: 'xterm-256color' }, (error, stream) => {
+      client.shell(this.getShellOptions(), (error, stream) => {
         if (error) {
           reject(error);
           return;
@@ -66,8 +68,18 @@ export class SshSession {
 
   resize(rows: number, cols: number): void {
     if (rows > 0 && cols > 0) {
+      this.rows = rows;
+      this.cols = cols;
       this.shell?.setWindow(rows, cols, 0, 0);
     }
+  }
+
+  getShellOptions(): { term: string; rows: number; cols: number } {
+    return {
+      term: 'xterm-256color',
+      rows: this.rows,
+      cols: this.cols
+    };
   }
 
   dispose(): void {

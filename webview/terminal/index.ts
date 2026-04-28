@@ -48,8 +48,16 @@ window.addEventListener('message', (event: MessageEvent) => {
   if (message.type === 'output' && typeof message.payload === 'string') {
     term.write(message.payload);
   }
-  if (message.type === 'status' && typeof message.payload === 'string' && status) {
-    status.textContent = message.payload;
+if (message.type === 'status' && typeof message.payload === 'string' && status) {
+    const text = status.querySelector<HTMLElement>('.terminal-status-text');
+    if (text) {
+      text.textContent = message.payload;
+    } else {
+      status.textContent = message.payload;
+    }
+    status.classList.toggle('terminal-status--connected', message.payload === 'Connected');
+    status.classList.toggle('terminal-status--disconnected', message.payload === 'Disconnected');
+    status.classList.toggle('terminal-status--connecting', message.payload !== 'Connected' && message.payload !== 'Disconnected');
   }
 });
 

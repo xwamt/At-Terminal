@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { createTerminalAssets, renderTerminalBody, resolveTerminalSettings } from '../../src/webview/TerminalPanel';
+import { describe, expect, it, vi } from 'vitest';
+import { createTerminalAssets, handleTerminalMessage, renderTerminalBody, resolveTerminalSettings } from '../../src/webview/TerminalPanel';
 
 describe('TerminalPanel rendering helpers', () => {
   it('links the bundled xterm stylesheet emitted by esbuild', () => {
@@ -38,5 +38,27 @@ describe('TerminalPanel rendering helpers', () => {
       fontSize: 18,
       fontFamily: 'Fira Code'
     });
+  });
+
+  it('treats ready messages as resize messages so the remote PTY matches xterm', () => {
+    const session = {
+      write: vi.fn(),
+      resize: vi.fn()
+    };
+
+    expect(handleTerminalMessage({ type: 'ready', rows: 42, cols: 132 }, session)).toBe(true);
+    expect(session.resize).toHaveBeenCalledWith(42, 132);
+  });
+
+  it('renders a full-bleed xterm surface with semantic status regions', () => {
+    const body = renderTerminalBody({
+      scrollback: 5000,
+      fontSize: 14,
+      fontFamily: 'Cascadia Code'
+    });
+
+    expect(body).toContain('class="terminal-shell"');
+    expect(body).toContain('class="terminal-status terminal-status--connecting"');
+    expect(body).toContain('class="terminal-host"');
   });
 });
