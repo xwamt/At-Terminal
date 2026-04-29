@@ -24,6 +24,7 @@ export interface TerminalSettings {
   fontSize: number;
   fontFamily: string;
   semanticHighlight: boolean;
+  idleDisconnectMinutes: number;
 }
 
 export interface ConfigurationLike {
@@ -32,20 +33,24 @@ export interface ConfigurationLike {
 
 export class TerminalPanel {
   private static active: TerminalPanel | undefined;
+  private static readonly panels = new Set<TerminalPanel>();
   private session: SshSession;
   private readonly terminalId = randomUUID();
   private connected = false;
   private disposed = false;
   private connectionGeneration = 0;
+  private idleDisconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
     private readonly server: ServerConfig,
     private readonly configManager: ConfigManager,
+    private readonly settings: TerminalSettings,
     private readonly hostKeyVerifier?: HostKeyVerifier,
     private readonly terminalContext?: TerminalContextRegistry
   ) {
     this.session = this.createSession(this.connectionGeneration);
+    TerminalPanel.panels.add(this);
   }
 
   static open(
@@ -66,9 +71,9 @@ export class TerminalPanel {
       }
     );
 
-    const terminal = new TerminalPanel(panel, server, configManager, hostKeyVerifier, terminalContext);
-    TerminalPanel.active = terminal;
     const settings = resolveTerminalSettings(vscode.workspace.getConfiguration('sshManager'));
+    const terminal = new TerminalPanel(panel, server, configManager, settings, hostKeyVerifier, terminalContext);
+    TerminalPanel.active = terminal;
     panel.webview.html = renderWebviewHtml(
       panel.webview,
       createTerminalAssets(context.extensionUri),
@@ -84,6 +89,14 @@ export class TerminalPanel {
     return TerminalPanel.active;
   }
 
+  static disconnectAll(): void {
+    for (const terminal of Array.from(TerminalPanel.panels)) {
+      terminal.disconnect();
+    }
+    TerminalPanel.panels.clear();
+    TerminalPanel.active = undefined;
+  }
+
   async connect(): Promise<void> {
     const generation = this.connectionGeneration;
     try {
@@ -93,12 +106,14 @@ export class TerminalPanel {
       }
       this.connected = true;
       this.terminalContext?.markConnected(this.terminalId);
+      this.scheduleIdleDisconnect();
     } catch (error) {
       if (generation !== this.connectionGeneration) {
         return;
       }
       this.connected = false;
       this.terminalContext?.markDisconnected(this.terminalId);
+      this.clearIdleDisconnect();
       this.postStatus(formatError(error));
     }
   }
@@ -115,18 +130,21 @@ export class TerminalPanel {
       }
       this.connected = true;
       this.terminalContext?.markConnected(this.terminalId);
+      this.scheduleIdleDisconnect();
     } catch (error) {
       if (generation !== this.connectionGeneration) {
         return;
       }
       this.connected = false;
       this.terminalContext?.markDisconnected(this.terminalId);
+      this.clearIdleDisconnect();
       this.postStatus(formatError(error));
     }
   }
 
   disconnect(): void {
     this.connectionGeneration++;
+    this.clearIdleDisconnect();
     this.session.dispose();
     this.connected = false;
     this.terminalContext?.markDisconnected(this.terminalId);
@@ -135,7 +153,9 @@ export class TerminalPanel {
 
   private bind(): void {
     this.panel.webview.onDidReceiveMessage((message: TerminalMessage) => {
-      handleTerminalMessage(message, this.session);
+      if (handleTerminalMessage(message, this.session)) {
+        this.scheduleIdleDisconnect();
+      }
     });
 
     this.panel.onDidChangeViewState((event) => {
@@ -148,9 +168,11 @@ export class TerminalPanel {
     this.panel.onDidDispose(() => {
       this.disposed = true;
       this.connectionGeneration++;
+      this.clearIdleDisconnect();
       this.session.dispose();
       this.connected = false;
       this.terminalContext?.clearIfActive(this.terminalId);
+      TerminalPanel.panels.delete(this);
       if (TerminalPanel.active === this) {
         TerminalPanel.active = undefined;
       }
@@ -188,8 +210,28 @@ export class TerminalPanel {
     if (message === 'Disconnected' && generation === this.connectionGeneration) {
       this.connected = false;
       this.terminalContext?.markDisconnected(this.terminalId);
+      this.clearIdleDisconnect();
     }
     this.postStatus(message);
+  }
+
+  private scheduleIdleDisconnect(): void {
+    this.clearIdleDisconnect();
+    if (!this.connected || this.settings.idleDisconnectMinutes <= 0) {
+      return;
+    }
+    this.idleDisconnectTimer = setTimeout(() => {
+      this.disconnect();
+      this.postStatus(`Disconnected after ${this.settings.idleDisconnectMinutes} minute(s) of inactivity`);
+    }, this.settings.idleDisconnectMinutes * 60_000);
+  }
+
+  private clearIdleDisconnect(): void {
+    if (!this.idleDisconnectTimer) {
+      return;
+    }
+    clearTimeout(this.idleDisconnectTimer);
+    this.idleDisconnectTimer = undefined;
   }
 
   private publishContext(): void {
@@ -218,7 +260,8 @@ export function resolveTerminalSettings(configuration: ConfigurationLike): Termi
     scrollback: configuration.get('scrollback', 5000),
     fontSize: configuration.get('terminalFontSize', 14),
     fontFamily: configuration.get('terminalFontFamily', 'Cascadia Code, Menlo, monospace'),
-    semanticHighlight: configuration.get('semanticHighlight', true)
+    semanticHighlight: configuration.get('semanticHighlight', true),
+    idleDisconnectMinutes: configuration.get('idleDisconnectMinutes', 60)
   };
 }
 

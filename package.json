@@ -1,9 +1,10 @@
 {
-  "name": "ssh-terminal-manager",
-  "displayName": "SSH Terminal Manager",
-  "description": "Manage SSH terminal sessions in VS Code without installing a remote server.",
-  "version": "0.2.5",
+  "name": "at-terminal",
+  "displayName": "AT Terminal",
+  "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
+  "version": "0.2.8",
   "publisher": "local",
+  "icon": "media/at-terminal-icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -20,8 +21,8 @@
       "activitybar": [
         {
           "id": "sshManager",
-          "title": "SSH",
-          "icon": "media/terminal-activity.svg"
+          "title": "AT Terminal",
+          "icon": "media/at-terminal-activity.svg"
         }
       ]
     },
@@ -231,7 +232,7 @@
       ]
     },
     "configuration": {
-      "title": "SSH Terminal Manager",
+      "title": "AT Terminal",
       "properties": {
         "sshManager.terminalFontSize": {
           "type": "number",

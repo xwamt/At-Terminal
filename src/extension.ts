@@ -18,6 +18,8 @@ import { formatError } from './utils/errors';
 import { ServerFormPanel } from './webview/ServerFormPanel';
 import { TerminalPanel } from './webview/TerminalPanel';
 
+let extensionCleanup: { dispose(): void } | undefined;
+
 export function activate(context: vscode.ExtensionContext): void {
   const configManager = new ConfigManager(context.globalState, context.secrets);
   const hostKeyStore = new HostKeyStore(context.globalState);
@@ -38,6 +40,21 @@ export function activate(context: vscode.ExtensionContext): void {
     sftp: sftpManager,
     ui: createVscodeSftpEditUi(sftpEditStatus)
   });
+  let disposed = false;
+  const cleanup = {
+    dispose(): void {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      TerminalPanel.disconnectAll();
+      sftpManager.dispose();
+      if (extensionCleanup === cleanup) {
+        extensionCleanup = undefined;
+      }
+    }
+  };
+  extensionCleanup = cleanup;
 
   terminalContext.onDidChangeActiveContext((activeContext) => {
     sftpManager.setTerminalContext(activeContext);
@@ -81,6 +98,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     sftpEditStatus,
     sftpEditManager,
+    cleanup,
     vscode.workspace.registerTextDocumentContentProvider(SFTP_PREVIEW_SCHEME, sftpPreviewStore),
     vscode.workspace.onDidCloseTextDocument((document) => {
       if (document.uri.scheme === SFTP_PREVIEW_SCHEME) {
@@ -277,7 +295,10 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 }
 
-export function deactivate(): void {}
+export function deactivate(): void {
+  extensionCleanup?.dispose();
+  TerminalPanel.disconnectAll();
+}
 
 async function runSftpCommand(command: () => Promise<void>): Promise<void> {
   try {

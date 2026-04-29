@@ -349,6 +349,31 @@ describe('SftpManager', () => {
     await expect(manager.ensureRoot()).resolves.toBe('/second');
     expect(secondSession.realpath).toHaveBeenCalledWith('.');
   });
+
+  it('disposes the active SFTP session and clears active state', async () => {
+    const session = {
+      connect: vi.fn(),
+      realpath: vi.fn(async () => '/home/deploy'),
+      listDirectory: vi.fn(async () => []),
+      mkdir: vi.fn(),
+      rename: vi.fn(),
+      deleteFile: vi.fn(),
+      deleteDirectory: vi.fn(),
+      uploadFile: vi.fn(),
+      downloadFile: vi.fn(),
+      createFile: vi.fn(),
+      stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
+      dispose: vi.fn()
+    };
+    const manager = new SftpManager({ createSession: () => session });
+    manager.setTerminalContext(context(true));
+    await manager.ensureRoot();
+
+    manager.dispose();
+
+    expect(session.dispose).toHaveBeenCalledTimes(1);
+    expect(manager.getState()).toEqual({ kind: 'none' });
+  });
 });
 
 function deferred<T>() {

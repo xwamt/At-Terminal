@@ -68,6 +68,18 @@ export class SftpManager {
     this.rootPath = undefined;
   }
 
+  dispose(): void {
+    this.sessionGeneration++;
+    this.invalidateConnectingSession();
+    this.connectingSession?.dispose();
+    this.session?.dispose();
+    this.connectingSession = undefined;
+    this.connectingSessionPromise = undefined;
+    this.session = undefined;
+    this.terminalContext = undefined;
+    this.rootPath = undefined;
+  }
+
   getState(): SftpTreeState {
     if (!this.terminalContext) {
       return { kind: 'none' };

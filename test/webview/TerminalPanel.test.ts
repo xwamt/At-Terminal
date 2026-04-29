@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import type { ServerConfig } from '../../src/config/schema';
+import { deactivate } from '../../src/extension';
 import { TerminalContextRegistry } from '../../src/terminal/TerminalContext';
 import {
   createTerminalAssets,
@@ -110,6 +111,7 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
+  deactivate();
   connect.mockResolvedValue(undefined);
   reconnect.mockResolvedValue(undefined);
   disposeSession.mockClear();
@@ -136,7 +138,8 @@ describe('TerminalPanel rendering helpers', () => {
       scrollback: 1234,
       fontSize: 16,
       fontFamily: 'JetBrains Mono',
-      semanticHighlight: true
+      semanticHighlight: true,
+      idleDisconnectMinutes: 60
     });
 
     expect(body).toContain('data-scrollback="1234"');
@@ -162,7 +165,8 @@ describe('TerminalPanel rendering helpers', () => {
       scrollback: 9000,
       fontSize: 18,
       fontFamily: 'Fira Code',
-      semanticHighlight: false
+      semanticHighlight: false,
+      idleDisconnectMinutes: 60
     });
   });
 
@@ -181,7 +185,8 @@ describe('TerminalPanel rendering helpers', () => {
       scrollback: 5000,
       fontSize: 14,
       fontFamily: 'Cascadia Code',
-      semanticHighlight: true
+      semanticHighlight: true,
+      idleDisconnectMinutes: 60
     });
 
     expect(body).toContain('class="terminal-shell"');
@@ -264,6 +269,48 @@ describe('TerminalPanel rendering helpers', () => {
 
     expect(registry.getActive()?.connected).toBe(false);
     expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'status', payload: 'Disconnected' });
+  });
+
+  it('disconnects an idle terminal after the configured timeout', async () => {
+    try {
+      vi.useFakeTimers();
+      vi.spyOn(vscode.workspace, 'getConfiguration').mockReturnValue({
+        get: <T>(key: string, defaultValue: T): T => {
+          const values: Record<string, unknown> = {
+            idleDisconnectMinutes: 1
+          };
+          return (values[key] ?? defaultValue) as T;
+        }
+      } as never);
+      const registry = new TerminalContextRegistry();
+
+      TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+      await flushPromises();
+
+      vi.advanceTimersByTime(60_000);
+
+      expect(disposeSession).toHaveBeenCalledTimes(1);
+      expect(registry.getActive()?.connected).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('disconnects all terminal sessions when the extension deactivates', async () => {
+    const firstPanelHost = createPanel();
+    const secondPanelHost = createPanel();
+    vi.mocked(vscode.window.createWebviewPanel)
+      .mockReturnValueOnce(firstPanelHost.panel)
+      .mockReturnValueOnce(secondPanelHost.panel);
+
+    TerminalPanel.open(extensionContext(), server('first-server'), configManager());
+    TerminalPanel.open(extensionContext(), server('second-server'), configManager());
+    await flushPromises();
+
+    deactivate();
+
+    expect(disposeSession).toHaveBeenCalledTimes(2);
+    expect(TerminalPanel.getActive()).toBeUndefined();
   });
 
   it('posts ANSI terminal output to xterm as raw bytes without stripping escape sequences', async () => {
