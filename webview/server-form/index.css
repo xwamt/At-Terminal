@@ -72,9 +72,9 @@ p {
   gap: 16px;
 }
 
-.form-panel-grid {
+.form-section-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
   gap: 14px;
   align-items: start;
 }
@@ -153,6 +153,98 @@ select:focus {
   grid-column: 1 / -1;
 }
 
+.form-panel-summary {
+  grid-column: 1 / -1;
+}
+
+.auth-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 14px 0;
+}
+
+.auth-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  text-align: left;
+  color: var(--vscode-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.auth-card:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.auth-card.is-selected {
+  color: var(--vscode-list-activeSelectionForeground);
+  background: var(--vscode-list-activeSelectionBackground);
+  border-color: var(--vscode-focusBorder);
+}
+
+.auth-card-title {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.auth-card-copy,
+.field-help {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-card.is-selected .auth-card-copy {
+  color: inherit;
+}
+
+.auth-fields {
+  padding: 14px;
+}
+
+.auth-private-key .auth-password-field,
+.auth-password .auth-key-field {
+  display: none;
+}
+
+.file-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.secondary-action {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border: 0;
+  border-radius: 4px;
+  padding: 7px 10px;
+  line-height: 1.35;
+}
+
+.secondary-action:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.connection-summary {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.summary-line:first-child {
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 650;
+}
+
 .form-footer {
   display: flex;
   align-items: center;
@@ -184,6 +276,31 @@ select:focus {
   line-height: 1.2;
 }
 
+.primary-action[disabled] {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.primary-action.is-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.submit-spinner {
+  display: none;
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+}
+
+.primary-action.is-loading .submit-spinner {
+  display: inline-block;
+  animation: submit-spin 800ms linear infinite;
+}
+
 .primary-action:hover {
   background: var(--vscode-button-hoverBackground);
 }
@@ -193,13 +310,20 @@ select:focus {
   outline-offset: 2px;
 }
 
+@keyframes submit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 760px) {
   .server-form-shell {
     padding: 20px;
   }
 
-  .form-panel-grid,
-  .field-grid {
+  .form-section-grid,
+  .field-grid,
+  .auth-card-grid {
     grid-template-columns: 1fr;
   }
 

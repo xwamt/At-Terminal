@@ -31,4 +31,32 @@ describe('ServerTreeProvider', () => {
     const prodChildren = (await provider.getChildren(roots[1])) as ServerTreeItem[];
     expect(prodChildren.map((item) => item.server.label)).toEqual(['A', 'C']);
   });
+
+  it('shows non-sensitive server metadata in server tree items', () => {
+    const item = new ServerTreeItem({
+      id: 'server-1',
+      label: 'Production',
+      group: 'prod',
+      host: 'example.com',
+      port: 2222,
+      username: 'deploy',
+      authType: 'privateKey',
+      privateKeyPath: 'C:\\Users\\alan\\.ssh\\id_ed25519',
+      keepAliveInterval: 45,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(item.description).toBe('deploy@example.com:2222');
+    expect(item.iconPath).toEqual(expect.objectContaining({ id: 'server' }));
+    expect(String(item.tooltip)).toContain('Production');
+    expect(String(item.tooltip)).toContain('Group: prod');
+    expect(String(item.tooltip)).toContain('Host: example.com');
+    expect(String(item.tooltip)).toContain('Port: 2222');
+    expect(String(item.tooltip)).toContain('Username: deploy');
+    expect(String(item.tooltip)).toContain('Authentication: Private Key');
+    expect(String(item.tooltip)).toContain('Keepalive: 45s');
+    expect(String(item.tooltip)).not.toContain('id_ed25519');
+  });
 });
