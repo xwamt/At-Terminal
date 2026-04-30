@@ -110,6 +110,33 @@ describe('createBridgeRequestHandler', () => {
     });
   });
 
+  it('routes sftp endpoints through the service', async () => {
+    const service = {
+      sftpReadFile: vi.fn(async () => ({ content: 'hello' })),
+      sftpWriteFile: vi.fn(async () => ({ bytesWritten: 5 }))
+    };
+    const handler = createBridgeRequestHandler({ token: 'secret', service: service as never });
+
+    await expect(
+      call(handler, { path: '/tools/sftp_read_file', token: 'secret', body: { path: '/app.txt' } })
+    ).resolves.toEqual({
+      status: 200,
+      body: { content: 'hello' }
+    });
+    await expect(
+      call(handler, {
+        path: '/tools/sftp_write_file',
+        token: 'secret',
+        body: { path: '/app.txt', content: 'hello' }
+      })
+    ).resolves.toEqual({
+      status: 200,
+      body: { bytesWritten: 5 }
+    });
+    expect(service.sftpReadFile).toHaveBeenCalledWith({ path: '/app.txt' });
+    expect(service.sftpWriteFile).toHaveBeenCalledWith({ path: '/app.txt', content: 'hello' });
+  });
+
   it('returns a bridge error when user cancels confirmation', async () => {
     const handler = createBridgeRequestHandler({
       token: 'secret',

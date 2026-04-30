@@ -107,6 +107,31 @@ describe('registerAgentTools', () => {
     expect(JSON.parse(text(result))).toEqual({ connectedTerminals: [], knownTerminals: [] });
   });
 
+  it('registers sftp tools and delegates to service', async () => {
+    const service = {
+      listServers: vi.fn(),
+      getTerminalContext: vi.fn(),
+      runRemoteCommand: vi.fn(),
+      sftpListDirectory: vi.fn(async () => ({ entries: [] })),
+      sftpStatPath: vi.fn(async () => ({ size: 1 })),
+      sftpReadFile: vi.fn(async () => ({ content: 'x' })),
+      sftpWriteFile: vi.fn(async () => ({ bytesWritten: 1 })),
+      sftpCreateFile: vi.fn(async () => ({ path: '/x' })),
+      sftpCreateDirectory: vi.fn(async () => ({ path: '/d' }))
+    };
+    registerAgentTools(service as never);
+
+    expect(lmFixture().__getRegisteredTool('sftp_list_directory')).toBeDefined();
+    expect(lmFixture().__getRegisteredTool('sftp_stat_path')).toBeDefined();
+    expect(lmFixture().__getRegisteredTool('sftp_read_file')).toBeDefined();
+    expect(lmFixture().__getRegisteredTool('sftp_write_file')).toBeDefined();
+    expect(lmFixture().__getRegisteredTool('sftp_create_file')).toBeDefined();
+    expect(lmFixture().__getRegisteredTool('sftp_create_directory')).toBeDefined();
+
+    await registeredTool('sftp_read_file').invoke({ input: { path: '/x' } });
+    expect(service.sftpReadFile).toHaveBeenCalledWith({ path: '/x' });
+  });
+
   it('runs a command against an explicit server after user confirmation', async () => {
     const execute = vi.fn(async () => ({
       serverId: 'server-1',

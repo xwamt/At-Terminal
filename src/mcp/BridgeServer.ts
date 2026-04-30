@@ -104,6 +104,24 @@ export function createBridgeRequestHandler(dependencies: BridgeHandlerDependenci
           throw error;
         }
       }
+      if (request.path === '/tools/sftp_list_directory') {
+        return json(200, await dependencies.service.sftpListDirectory(parseBody(request.body)));
+      }
+      if (request.path === '/tools/sftp_stat_path') {
+        return json(200, await dependencies.service.sftpStatPath(parseBody(request.body)));
+      }
+      if (request.path === '/tools/sftp_read_file') {
+        return json(200, await dependencies.service.sftpReadFile(parseBody(request.body)));
+      }
+      if (request.path === '/tools/sftp_write_file') {
+        return json(200, await dependencies.service.sftpWriteFile(parseBody(request.body)));
+      }
+      if (request.path === '/tools/sftp_create_file') {
+        return json(200, await dependencies.service.sftpCreateFile(parseBody(request.body)));
+      }
+      if (request.path === '/tools/sftp_create_directory') {
+        return json(200, await dependencies.service.sftpCreateDirectory(parseBody(request.body)));
+      }
       return json(404, { error: 'Unknown AT Terminal MCP bridge endpoint.' });
     } catch (error) {
       return json(500, { error: error instanceof Error ? error.message : String(error) });

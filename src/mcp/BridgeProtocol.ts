@@ -33,6 +33,32 @@ export interface RunRemoteCommandBridgeRequest {
   maxOutputBytes?: number;
 }
 
+export interface SftpTargetBridgeRequest {
+  terminalId?: string;
+  serverId?: string;
+}
+
+export interface SftpPathBridgeRequest extends SftpTargetBridgeRequest {
+  path: string;
+}
+
+export interface SftpListDirectoryBridgeRequest extends SftpTargetBridgeRequest {
+  path?: string;
+}
+
+export interface SftpReadFileBridgeRequest extends SftpPathBridgeRequest {
+  maxBytes?: number;
+}
+
+export interface SftpWriteFileBridgeRequest extends SftpPathBridgeRequest {
+  content: string;
+  overwrite?: boolean;
+}
+
+export interface SftpCreateFileBridgeRequest extends SftpPathBridgeRequest {
+  content?: string;
+}
+
 export interface BridgeErrorResponse {
   error: string;
 }

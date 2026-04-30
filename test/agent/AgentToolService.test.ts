@@ -85,4 +85,27 @@ describe('AgentToolService', () => {
       ]
     });
   });
+
+  it('delegates sftp operations to the sftp service', async () => {
+    const sftp = {
+      listDirectory: vi.fn(async () => ({ entries: [] })),
+      statPath: vi.fn(async () => ({ size: 1 })),
+      readFile: vi.fn(async () => ({ content: 'x' })),
+      writeFile: vi.fn(async () => ({ bytesWritten: 1 })),
+      createFile: vi.fn(async () => ({ path: '/x' })),
+      createDirectory: vi.fn(async () => ({ path: '/d' }))
+    };
+    const service = new AgentToolService({
+      configManager: { listServers: async () => [] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute: vi.fn() } as unknown as RemoteCommandExecutor,
+      sftp: sftp as never
+    });
+
+    await service.sftpReadFile({ path: '/x' });
+    await service.sftpWriteFile({ path: '/x', content: 'next', overwrite: true });
+
+    expect(sftp.readFile).toHaveBeenCalledWith({ path: '/x' });
+    expect(sftp.writeFile).toHaveBeenCalledWith({ path: '/x', content: 'next', overwrite: true });
+  });
 });

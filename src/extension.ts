@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { AgentToolService } from './agent/AgentToolService';
 import { registerAgentTools } from './agent/AgentTools';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
+import { SftpAgentService } from './agent/SftpAgentService';
+import { SftpWriteAuthorizer } from './agent/SftpWriteAuthorizer';
 import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import { BridgeServer } from './mcp/BridgeServer';
@@ -93,11 +95,19 @@ export function activate(context: vscode.ExtensionContext): void {
   const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier);
   let agentToolDisposables: vscode.Disposable[] = [];
   let bridgeServer: BridgeServer | undefined;
+  let sftpAgentService: SftpAgentService | undefined;
   if (MCP_ENABLED) {
+    const sftpWriteAuthorizer = new SftpWriteAuthorizer();
+    sftpAgentService = new SftpAgentService({
+      terminalContext,
+      createSession: (terminal) => new SftpSession(terminal.server, configManager),
+      authorizer: sftpWriteAuthorizer
+    });
     const agentToolService = new AgentToolService({
       configManager,
       terminalContext,
-      executor: remoteCommandExecutor
+      executor: remoteCommandExecutor,
+      sftp: sftpAgentService
     });
     agentToolDisposables = registerAgentTools(agentToolService);
     bridgeServer = new BridgeServer(agentToolService);
@@ -109,6 +119,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     ...agentToolDisposables,
     ...(bridgeServer ? [bridgeServer] : []),
+    ...(sftpAgentService ? [sftpAgentService] : []),
     vscode.window.createTreeView('sshManager.servers', {
       treeDataProvider: treeProvider,
       showCollapseAll: true

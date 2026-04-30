@@ -10,6 +10,16 @@ const server = new McpServer({
   version: '0.2.9'
 });
 
+const sftpTargetSchema = {
+  terminalId: z.string().optional().describe('Connected AT Terminal terminal id.'),
+  serverId: z.string().optional().describe('Connected AT Terminal server id.')
+};
+
+const pathSchema = {
+  ...sftpTargetSchema,
+  path: z.string().min(1).describe('Remote POSIX path.')
+};
+
 server.registerTool(
   'list_ssh_servers',
   {
@@ -53,6 +63,66 @@ server.registerTool(
     const result = await bridge.runRemoteCommand(input);
     return textResult(result);
   }
+);
+
+server.registerTool(
+  'sftp_list_directory',
+  {
+    title: 'SFTP List Directory',
+    description: 'List a remote directory through the selected AT Terminal SFTP session.',
+    inputSchema: { ...sftpTargetSchema, path: z.string().optional() }
+  },
+  async (input) => textResult(await bridge.sftpListDirectory(input))
+);
+
+server.registerTool(
+  'sftp_stat_path',
+  {
+    title: 'SFTP Stat Path',
+    description: 'Return remote path metadata through AT Terminal SFTP.',
+    inputSchema: pathSchema
+  },
+  async (input) => textResult(await bridge.sftpStatPath(input))
+);
+
+server.registerTool(
+  'sftp_read_file',
+  {
+    title: 'SFTP Read File',
+    description: 'Read bounded UTF-8 text from a remote file through AT Terminal SFTP.',
+    inputSchema: { ...pathSchema, maxBytes: z.number().int().positive().optional() }
+  },
+  async (input) => textResult(await bridge.sftpReadFile(input))
+);
+
+server.registerTool(
+  'sftp_write_file',
+  {
+    title: 'SFTP Write File',
+    description: 'Write UTF-8 text to a remote file after AT Terminal write authorization.',
+    inputSchema: { ...pathSchema, content: z.string(), overwrite: z.boolean().optional() }
+  },
+  async (input) => textResult(await bridge.sftpWriteFile(input))
+);
+
+server.registerTool(
+  'sftp_create_file',
+  {
+    title: 'SFTP Create File',
+    description: 'Create a new remote file through AT Terminal SFTP.',
+    inputSchema: { ...pathSchema, content: z.string().optional() }
+  },
+  async (input) => textResult(await bridge.sftpCreateFile(input))
+);
+
+server.registerTool(
+  'sftp_create_directory',
+  {
+    title: 'SFTP Create Directory',
+    description: 'Create a new remote directory through AT Terminal SFTP.',
+    inputSchema: pathSchema
+  },
+  async (input) => textResult(await bridge.sftpCreateDirectory(input))
 );
 
 function textResult(value: unknown) {

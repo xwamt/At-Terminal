@@ -3,11 +3,13 @@ import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import type { TerminalContextRegistry, TerminalContextSnapshot } from '../terminal/TerminalContext';
 import type { RemoteCommandExecutor, RemoteCommandResult } from './RemoteCommandExecutor';
+import type { SftpAgentService } from './SftpAgentService';
 
 export interface AgentToolServiceDependencies {
   configManager: ConfigManager;
   terminalContext: TerminalContextRegistry;
   executor: RemoteCommandExecutor;
+  sftp?: SftpAgentService;
 }
 
 export interface RunRemoteCommandInput {
@@ -62,6 +64,36 @@ export class AgentToolService {
     });
   }
 
+  async sftpListDirectory(input: { terminalId?: string; serverId?: string; path?: string }) {
+    return await this.requireSftp().listDirectory(input);
+  }
+
+  async sftpStatPath(input: { terminalId?: string; serverId?: string; path: string }) {
+    return await this.requireSftp().statPath(input);
+  }
+
+  async sftpReadFile(input: { terminalId?: string; serverId?: string; path: string; maxBytes?: number }) {
+    return await this.requireSftp().readFile(input);
+  }
+
+  async sftpWriteFile(input: {
+    terminalId?: string;
+    serverId?: string;
+    path: string;
+    content: string;
+    overwrite?: boolean;
+  }) {
+    return await this.requireSftp().writeFile(input);
+  }
+
+  async sftpCreateFile(input: { terminalId?: string; serverId?: string; path: string; content?: string }) {
+    return await this.requireSftp().createFile(input);
+  }
+
+  async sftpCreateDirectory(input: { terminalId?: string; serverId?: string; path: string }) {
+    return await this.requireSftp().createDirectory(input);
+  }
+
   private async resolveServer(serverId: string | undefined): Promise<ServerConfig> {
     if (serverId === 'active' || !serverId) {
       const connected = this.dependencies.terminalContext.getConnectedTerminal();
@@ -80,6 +112,13 @@ export class AgentToolService {
       throw new Error(`SSH server "${serverId}" was not found.`);
     }
     return server;
+  }
+
+  private requireSftp(): SftpAgentService {
+    if (!this.dependencies.sftp) {
+      throw new Error('AT Terminal SFTP agent service is not available.');
+    }
+    return this.dependencies.sftp;
   }
 }
 

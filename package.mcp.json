@@ -16,7 +16,13 @@
     "onView:sshManager.sftpFiles",
     "onLanguageModelTool:list_ssh_servers",
     "onLanguageModelTool:get_terminal_context",
-    "onLanguageModelTool:run_remote_command"
+    "onLanguageModelTool:run_remote_command",
+    "onLanguageModelTool:sftp_list_directory",
+    "onLanguageModelTool:sftp_stat_path",
+    "onLanguageModelTool:sftp_read_file",
+    "onLanguageModelTool:sftp_write_file",
+    "onLanguageModelTool:sftp_create_file",
+    "onLanguageModelTool:sftp_create_directory"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -93,6 +99,215 @@
           },
           "required": [
             "command"
+          ]
+        }
+      },
+      {
+        "name": "sftp_list_directory",
+        "tags": [
+          "ssh",
+          "sftp",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_list_directory",
+        "displayName": "SFTP List Directory",
+        "userDescription": "List a remote directory through AT Terminal SFTP.",
+        "modelDescription": "List remote directory entries through a connected AT Terminal SFTP session without modifying files.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            }
+          }
+        }
+      },
+      {
+        "name": "sftp_stat_path",
+        "tags": [
+          "ssh",
+          "sftp",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_stat_path",
+        "displayName": "SFTP Stat Path",
+        "userDescription": "Show remote path metadata through AT Terminal SFTP.",
+        "modelDescription": "Return metadata for a remote path through a connected AT Terminal SFTP session without modifying files.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "sftp_read_file",
+        "tags": [
+          "ssh",
+          "sftp",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_read_file",
+        "displayName": "SFTP Read File",
+        "userDescription": "Read a bounded UTF-8 remote file through AT Terminal SFTP.",
+        "modelDescription": "Read bounded UTF-8 text from a remote file through a connected AT Terminal SFTP session without modifying files.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            },
+            "maxBytes": {
+              "type": "number",
+              "description": "Optional max bytes to read."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "sftp_write_file",
+        "tags": [
+          "ssh",
+          "sftp"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_write_file",
+        "displayName": "SFTP Write File",
+        "userDescription": "Write UTF-8 text to a remote file through AT Terminal SFTP.",
+        "modelDescription": "Write UTF-8 text to a remote file. AT Terminal prompts for first write authorization per server.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            },
+            "content": {
+              "type": "string",
+              "description": "UTF-8 file content."
+            },
+            "overwrite": {
+              "type": "boolean",
+              "description": "Set true to replace an existing file."
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ]
+        }
+      },
+      {
+        "name": "sftp_create_file",
+        "tags": [
+          "ssh",
+          "sftp"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_create_file",
+        "displayName": "SFTP Create File",
+        "userDescription": "Create a remote file through AT Terminal SFTP.",
+        "modelDescription": "Create a remote file. AT Terminal prompts for first write authorization per server.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            },
+            "content": {
+              "type": "string",
+              "description": "Optional UTF-8 file content."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "sftp_create_directory",
+        "tags": [
+          "ssh",
+          "sftp"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_create_directory",
+        "displayName": "SFTP Create Directory",
+        "userDescription": "Create a remote directory through AT Terminal SFTP.",
+        "modelDescription": "Create a remote directory. AT Terminal prompts for first write authorization per server.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            }
+          },
+          "required": [
+            "path"
           ]
         }
       }

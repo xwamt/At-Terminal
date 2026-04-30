@@ -78,6 +78,23 @@ describe('BridgeClient', () => {
     expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:12345/tools/get_terminal_context', expect.any(Object));
   });
 
+  it('calls sftp read and write bridge endpoints', async () => {
+    const home = await tempHome();
+    await writeBridgeDiscovery(home, { port: 12345, token: 'secret', pid: 1, updatedAt: 1 });
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true })
+    }));
+    const client = new BridgeClient({ home, fetch: fetch as never });
+
+    await client.sftpReadFile({ path: '/app.txt' });
+    await client.sftpWriteFile({ path: '/app.txt', content: 'next', overwrite: true });
+
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:12345/tools/sftp_read_file', expect.any(Object));
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:12345/tools/sftp_write_file', expect.any(Object));
+  });
+
   it('surfaces bridge error responses', async () => {
     const home = await tempHome();
     await writeBridgeDiscovery(home, { port: 12345, token: 'secret', pid: 1, updatedAt: 1 });

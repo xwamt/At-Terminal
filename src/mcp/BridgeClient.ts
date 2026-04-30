@@ -5,7 +5,12 @@ import {
   BRIDGE_TOKEN_HEADER,
   type GetTerminalContextBridgeResponse,
   type ListSshServersBridgeResponse,
-  type RunRemoteCommandBridgeRequest
+  type RunRemoteCommandBridgeRequest,
+  type SftpCreateFileBridgeRequest,
+  type SftpListDirectoryBridgeRequest,
+  type SftpPathBridgeRequest,
+  type SftpReadFileBridgeRequest,
+  type SftpWriteFileBridgeRequest
 } from './BridgeProtocol';
 
 interface FetchLikeResponse {
@@ -41,6 +46,30 @@ export class BridgeClient {
 
   async runRemoteCommand(input: RunRemoteCommandBridgeRequest): Promise<unknown> {
     return this.call('/tools/run_remote_command', input);
+  }
+
+  async sftpListDirectory(input: SftpListDirectoryBridgeRequest): Promise<unknown> {
+    return this.call('/tools/sftp_list_directory', input);
+  }
+
+  async sftpStatPath(input: SftpPathBridgeRequest): Promise<unknown> {
+    return this.call('/tools/sftp_stat_path', input);
+  }
+
+  async sftpReadFile(input: SftpReadFileBridgeRequest): Promise<unknown> {
+    return this.call('/tools/sftp_read_file', input);
+  }
+
+  async sftpWriteFile(input: SftpWriteFileBridgeRequest): Promise<unknown> {
+    return this.call('/tools/sftp_write_file', input);
+  }
+
+  async sftpCreateFile(input: SftpCreateFileBridgeRequest): Promise<unknown> {
+    return this.call('/tools/sftp_create_file', input);
+  }
+
+  async sftpCreateDirectory(input: SftpPathBridgeRequest): Promise<unknown> {
+    return this.call('/tools/sftp_create_directory', input);
   }
 
   private async call<T>(path: string, body: unknown): Promise<T> {

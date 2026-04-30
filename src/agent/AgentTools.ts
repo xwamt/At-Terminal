@@ -8,6 +8,15 @@ export function registerAgentTools(service: AgentToolService): vscode.Disposable
     vscode.lm.registerTool(
       'run_remote_command',
       new JsonTool<RunRemoteCommandInput>((input) => service.runRemoteCommand(input))
+    ),
+    vscode.lm.registerTool('sftp_list_directory', new JsonTool((input) => service.sftpListDirectory(input as never))),
+    vscode.lm.registerTool('sftp_stat_path', new JsonTool((input) => service.sftpStatPath(input as never))),
+    vscode.lm.registerTool('sftp_read_file', new JsonTool((input) => service.sftpReadFile(input as never))),
+    vscode.lm.registerTool('sftp_write_file', new JsonTool((input) => service.sftpWriteFile(input as never))),
+    vscode.lm.registerTool('sftp_create_file', new JsonTool((input) => service.sftpCreateFile(input as never))),
+    vscode.lm.registerTool(
+      'sftp_create_directory',
+      new JsonTool((input) => service.sftpCreateDirectory(input as never))
     )
   ];
 }
