@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { registerAgentTools } from './agent/AgentTools';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
 import { ConfigManager } from './config/ConfigManager';
+import { BridgeServer } from './mcp/BridgeServer';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
@@ -93,9 +94,18 @@ export function activate(context: vscode.ExtensionContext): void {
     terminalContext,
     executor: remoteCommandExecutor
   });
+  const bridgeServer = new BridgeServer({
+    configManager,
+    terminalContext,
+    executor: remoteCommandExecutor
+  });
+  void bridgeServer.start().catch((error) => {
+    void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
+  });
 
   context.subscriptions.push(
     ...agentToolDisposables,
+    bridgeServer,
     vscode.window.createTreeView('sshManager.servers', {
       treeDataProvider: treeProvider,
       showCollapseAll: true
