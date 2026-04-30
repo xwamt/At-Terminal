@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add read-only terminal context tools, first-batch non-destructive SFTP tools, and an explicit MCP configuration installer command for AT Terminal.
+**Goal:** Add base/MCP package variants, read-only terminal context tools, first-batch non-destructive SFTP tools, and an explicit MCP configuration installer command for AT Terminal.
 
-**Architecture:** Keep all sensitive behavior inside the VS Code extension host. Add focused core services for terminal context snapshots, agent SFTP sessions, write authorization, and MCP config installation, then expose those services through both VS Code language model tools and the existing localhost MCP bridge. The MCP stdio process remains a thin bridge client and never reads VS Code storage or secrets directly.
+**Architecture:** Keep one source tree but build two VSIX variants: base `AT Terminal` without agent/MCP features, and `AT Terminal MCP` with Copilot tools, localhost bridge, MCP stdio server, and MCP config installer. Keep all sensitive behavior inside the VS Code extension host. The MCP stdio process remains a thin bridge client and never reads VS Code storage or secrets directly.
 
 **Tech Stack:** TypeScript, VS Code Extension API, `ssh2` SFTP, Node `fs/path/os`, MCP TypeScript SDK, Vitest, esbuild.
 
@@ -13,6 +13,9 @@
 ## Scope Notes
 
 - This plan implements the confirmed first batch only.
+- This plan first splits packaging into two variants from one source tree.
+- Base variant must not register Copilot language model tools, start the MCP bridge, include `dist/mcp-server.js`, or include the MCP config command.
+- MCP variant includes all agent tools, the localhost bridge, the MCP stdio server, and MCP config installer.
 - SFTP tools include list/stat/read/write/create file/create directory.
 - SFTP tools do not delete, rename, move, upload local files, or download to arbitrary local paths.
 - SFTP write authorization is in-memory per `serverId` and cleared by extension reload.
@@ -20,6 +23,17 @@
 
 ## File Structure
 
+- Create: `package.base.json`
+  - Own base extension manifest without language model tools or MCP config command.
+- Create: `package.mcp.json`
+  - Own MCP extension manifest with language model tools and MCP config command.
+- Create: `scripts/package-variant.mjs`
+  - Own deterministic staging and VSIX packaging for base and MCP variants.
+- Create: `src/buildFlags.ts`
+  - Own build-time `MCP_ENABLED` constant used by extension activation.
+- Modify: `esbuild.config.mjs`
+  - Build base or MCP variant using `--variant=base|mcp`.
+  - Build `dist/mcp-server.js` only for MCP variant.
 - Modify `src/terminal/TerminalContext.ts`
   - Own focused/default/known terminal snapshot behavior and connected-terminal lookup helpers.
 - Create `src/agent/AgentToolService.ts`
@@ -45,9 +59,12 @@
 - Modify `src/extension.ts`
   - Instantiate shared `AgentToolService`, `SftpAgentService`, `SftpWriteAuthorizer`, and `McpConfigInstaller`.
   - Register `sshManager.installMcpConfig`.
-- Modify `package.json`
+- Modify `package.mcp.json`
   - Add `languageModelTools` entries and command contribution for the config installer.
+- Modify `package.json`
+  - Keep developer scripts and dependencies in sync with the MCP/default development build.
 - Add tests:
+  - `test/package.variants.test.ts`
   - `test/terminal/TerminalContext.test.ts`
   - `test/agent/AgentToolService.test.ts`
   - `test/agent/SftpAgentService.test.ts`
@@ -60,6 +77,306 @@
 - Modify docs:
   - `README.md`
   - `docs/superpowers/manual-tests/at-terminal-mcp.md`
+
+## Task 0: Dual Package Variant Architecture
+
+**Files:**
+- Create: `package.base.json`
+- Create: `package.mcp.json`
+- Create: `scripts/package-variant.mjs`
+- Create: `src/buildFlags.ts`
+- Add: `test/package.variants.test.ts`
+- Modify: `esbuild.config.mjs`
+- Modify: `src/extension.ts`
+- Modify: `package.mcp.json`
+- Modify: `package.json`
+
+- [ ] **Step 1: Write failing variant tests**
+
+Create `test/package.variants.test.ts`:
+
+```ts
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+
+const baseManifest = JSON.parse(readFileSync('package.base.json', 'utf8'));
+const mcpManifest = JSON.parse(readFileSync('package.mcp.json', 'utf8'));
+const packageScript = readFileSync('scripts/package-variant.mjs', 'utf8');
+const buildConfig = readFileSync('esbuild.config.mjs', 'utf8');
+const extensionSource = readFileSync('src/extension.ts', 'utf8');
+
+describe('package variants', () => {
+  it('keeps the base manifest free of agent and MCP contributions', () => {
+    expect(baseManifest.displayName).toBe('AT Terminal');
+    expect(baseManifest.activationEvents).not.toContain('onLanguageModelTool:list_ssh_servers');
+    expect(JSON.stringify(baseManifest.contributes)).not.toContain('languageModelTools');
+    expect(baseManifest.dependencies['@modelcontextprotocol/sdk']).toBeUndefined();
+  });
+
+  it('keeps the MCP manifest as the only manifest with agent and MCP contributions', () => {
+    expect(mcpManifest.displayName).toBe('AT Terminal MCP');
+    expect(mcpManifest.activationEvents).toContain('onLanguageModelTool:list_ssh_servers');
+    expect(JSON.stringify(mcpManifest.contributes.languageModelTools)).toContain('list_ssh_servers');
+  });
+
+  it('builds the MCP server only for the MCP variant', () => {
+    expect(buildConfig).toContain('--variant=mcp');
+    expect(buildConfig).toContain('src/mcp/server.ts');
+    expect(buildConfig).toContain('dist/mcp-server.js');
+  });
+
+  it('guards extension MCP runtime behind a build flag', () => {
+    expect(extensionSource).toContain('MCP_ENABLED');
+    expect(extensionSource).toContain('if (MCP_ENABLED)');
+  });
+
+  it('stages package variants before running vsce', () => {
+    expect(packageScript).toContain('package.base.json');
+    expect(packageScript).toContain('package.mcp.json');
+    expect(packageScript).toContain('vsce');
+  });
+});
+```
+
+- [ ] **Step 2: Run variant tests to verify failure**
+
+Run: `cmd /c npm run test -- test/package.variants.test.ts`
+
+Expected: FAIL because the variant manifests, package script, and build flag do not exist.
+
+- [ ] **Step 3: Create base and MCP manifests**
+
+Create `package.base.json` by copying current `package.json`, then remove:
+
+- every `activationEvents` entry beginning with `onLanguageModelTool:`;
+- `contributes.languageModelTools`;
+- command object with `"command": "sshManager.installMcpConfig"` if present later.
+- MCP-only dependencies such as `@modelcontextprotocol/sdk`.
+
+Set:
+
+```json
+{
+  "name": "at-terminal",
+  "displayName": "AT Terminal"
+}
+```
+
+Create `package.mcp.json` by copying current `package.json` and set:
+
+```json
+{
+  "name": "at-terminal-mcp",
+  "displayName": "AT Terminal MCP"
+}
+```
+
+Keep current language model tools in `package.mcp.json`.
+
+- [ ] **Step 4: Add build flag module**
+
+Create `src/buildFlags.ts`:
+
+```ts
+declare const __AT_TERMINAL_MCP_ENABLED__: boolean;
+
+export const MCP_ENABLED =
+  typeof __AT_TERMINAL_MCP_ENABLED__ === 'boolean' ? __AT_TERMINAL_MCP_ENABLED__ : true;
+```
+
+- [ ] **Step 5: Guard MCP runtime in extension activation**
+
+Modify `src/extension.ts` import:
+
+```ts
+import { MCP_ENABLED } from './buildFlags';
+```
+
+Replace current unconditional agent tool and bridge setup with:
+
+```ts
+  let agentToolDisposables: vscode.Disposable[] = [];
+  let bridgeServer: BridgeServer | undefined;
+  if (MCP_ENABLED) {
+    agentToolDisposables = registerAgentTools({
+      configManager,
+      terminalContext,
+      executor: remoteCommandExecutor
+    });
+    bridgeServer = new BridgeServer({
+      configManager,
+      terminalContext,
+      executor: remoteCommandExecutor
+    });
+    void bridgeServer.start().catch((error) => {
+      void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
+    });
+  }
+```
+
+In `context.subscriptions.push(...)`, replace `bridgeServer,` with:
+
+```ts
+    ...(bridgeServer ? [bridgeServer] : []),
+```
+
+- [ ] **Step 6: Add variant-aware esbuild config**
+
+Modify `esbuild.config.mjs` near the top:
+
+```js
+const variantArg = process.argv.find((arg) => arg.startsWith('--variant='));
+const variant = variantArg?.split('=')[1] ?? 'mcp';
+if (!['base', 'mcp'].includes(variant)) {
+  throw new Error(`Unknown build variant: ${variant}`);
+}
+const mcpEnabled = variant === 'mcp';
+```
+
+Add `define` to `common`:
+
+```js
+  define: {
+    __AT_TERMINAL_MCP_ENABLED__: JSON.stringify(mcpEnabled)
+  }
+```
+
+Change `contexts` construction so MCP server context is included only when `mcpEnabled`:
+
+```js
+const contextConfigs = [
+  esbuild.context({
+    ...common,
+    entryPoints: ['src/extension.ts'],
+    outfile: 'dist/extension.js',
+    platform: 'node',
+    format: 'cjs',
+    external: ['vscode', 'ssh2']
+  }),
+  ...(mcpEnabled
+    ? [
+        esbuild.context({
+          ...common,
+          entryPoints: ['src/mcp/server.ts'],
+          outfile: 'dist/mcp-server.js',
+          platform: 'node',
+          format: 'cjs',
+          external: ['vscode']
+        })
+      ]
+    : []),
+  esbuild.context({
+    ...common,
+    entryPoints: ['webview/terminal/index.ts'],
+    outfile: 'dist/webview/terminal.js',
+    platform: 'browser',
+    format: 'iife'
+  }),
+  esbuild.context({
+    ...common,
+    entryPoints: ['webview/server-form/index.ts'],
+    outfile: 'dist/webview/server-form.js',
+    platform: 'browser',
+    format: 'iife'
+  })
+];
+
+const contexts = await Promise.all(contextConfigs);
+```
+
+- [ ] **Step 7: Add staging package script**
+
+Create `scripts/package-variant.mjs`:
+
+```js
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+
+const variant = process.argv[2];
+if (!['base', 'mcp'].includes(variant)) {
+  throw new Error('Usage: node scripts/package-variant.mjs base|mcp');
+}
+
+const root = process.cwd();
+const stage = join(root, '.package-work', variant);
+const manifestName = variant === 'base' ? 'package.base.json' : 'package.mcp.json';
+const manifest = JSON.parse(await readFile(join(root, manifestName), 'utf8'));
+
+await rm(stage, { recursive: true, force: true });
+await mkdir(stage, { recursive: true });
+await cp(join(root, 'dist'), join(stage, 'dist'), { recursive: true });
+if (variant === 'base') {
+  await rm(join(stage, 'dist', 'mcp-server.js'), { force: true });
+  await rm(join(stage, 'dist', 'mcp-server.js.map'), { force: true });
+}
+await cp(join(root, 'media'), join(stage, 'media'), { recursive: true });
+await cp(join(root, 'webview'), join(stage, 'webview'), { recursive: true });
+await writeFile(join(stage, 'package.json'), JSON.stringify(manifest, null, 2), 'utf8');
+await cp(join(root, 'README.md'), join(stage, 'README.md'));
+
+const install = spawnSync(
+  process.platform === 'win32' ? 'cmd' : 'npm',
+  process.platform === 'win32'
+    ? ['/c', 'npm', 'install', '--omit=dev', '--package-lock=false', '--ignore-scripts']
+    : ['install', '--omit=dev', '--package-lock=false', '--ignore-scripts'],
+  { cwd: stage, stdio: 'inherit' }
+);
+if (install.status !== 0) {
+  process.exit(install.status ?? 1);
+}
+
+const result = spawnSync(
+  process.platform === 'win32' ? 'cmd' : 'npx',
+  process.platform === 'win32'
+    ? ['/c', 'npx', '@vscode/vsce', 'package', '--allow-missing-repository']
+    : ['@vscode/vsce', 'package', '--allow-missing-repository'],
+  { cwd: stage, stdio: 'inherit' }
+);
+if (result.status !== 0) {
+  process.exit(result.status ?? 1);
+}
+
+const vsixName = `${manifest.name}-${manifest.version}.vsix`;
+await cp(join(stage, vsixName), join(root, vsixName));
+```
+
+- [ ] **Step 8: Add package scripts**
+
+Modify root `package.json` scripts:
+
+```json
+"build:base": "node esbuild.config.mjs --variant=base",
+"build:mcp": "node esbuild.config.mjs --variant=mcp",
+"package:base": "npm run build:base && node scripts/package-variant.mjs base",
+"package:mcp": "npm run build:mcp && node scripts/package-variant.mjs mcp"
+```
+
+Keep existing `"build": "node esbuild.config.mjs"` as the MCP/default build for development compatibility.
+
+- [ ] **Step 9: Run variant tests**
+
+Run: `cmd /c npm run test -- test/package.variants.test.ts`
+
+Expected: PASS.
+
+- [ ] **Step 10: Build both variants**
+
+Run:
+
+```bash
+cmd /c npm run build:base
+cmd /c npm run build:mcp
+```
+
+Expected: both commands PASS. `build:mcp` creates `dist/mcp-server.js`; `build:base` does not need to create it.
+
+- [ ] **Step 11: Commit package variants**
+
+```bash
+git add package.base.json package.mcp.json package.json esbuild.config.mjs src/buildFlags.ts src/extension.ts scripts/package-variant.mjs test/package.variants.test.ts
+git commit -m "feat: add base and mcp package variants"
+```
 
 ## Task 1: Terminal Context Snapshot
 
@@ -612,9 +929,9 @@ server.registerTool(
 );
 ```
 
-- [ ] **Step 9: Update package language model tool contribution**
+- [ ] **Step 9: Update MCP package language model tool contribution**
 
-Modify `package.json`:
+Modify `package.mcp.json`:
 
 Add activation event:
 
@@ -737,6 +1054,7 @@ cmd /c npm run test -- test/mcp/BridgeClient.test.ts
 cmd /c npm run test -- test/mcp/BridgeServer.test.ts
 cmd /c npm run test -- test/mcp/McpServerTools.test.ts
 cmd /c npm run test -- test/package.agent-tools.test.ts
+cmd /c npm run test -- test/package.variants.test.ts
 ```
 
 Expected: PASS after implementation.
@@ -744,7 +1062,7 @@ Expected: PASS after implementation.
 - [ ] **Step 13: Commit context tool**
 
 ```bash
-git add src/agent/AgentToolService.ts src/agent/AgentTools.ts src/mcp/BridgeProtocol.ts src/mcp/BridgeClient.ts src/mcp/BridgeServer.ts src/mcp/server.ts src/extension.ts package.json test/agent/AgentToolService.test.ts test/agent/AgentTools.test.ts test/mcp/BridgeClient.test.ts test/mcp/BridgeServer.test.ts test/mcp/McpServerTools.test.ts test/package.agent-tools.test.ts
+git add src/agent/AgentToolService.ts src/agent/AgentTools.ts src/mcp/BridgeProtocol.ts src/mcp/BridgeClient.ts src/mcp/BridgeServer.ts src/mcp/server.ts src/extension.ts package.mcp.json package.json test/agent/AgentToolService.test.ts test/agent/AgentTools.test.ts test/mcp/BridgeClient.test.ts test/mcp/BridgeServer.test.ts test/mcp/McpServerTools.test.ts test/package.agent-tools.test.ts test/package.variants.test.ts
 git commit -m "feat: add terminal context agent tool"
 ```
 
@@ -1326,6 +1644,7 @@ git commit -m "feat: add agent sftp service"
 - Modify: `src/mcp/BridgeServer.ts`
 - Modify: `src/mcp/server.ts`
 - Modify: `src/extension.ts`
+- Modify: `package.mcp.json`
 - Modify: `package.json`
 - Modify: `test/agent/AgentToolService.test.ts`
 - Modify: `test/agent/AgentTools.test.ts`
@@ -1565,9 +1884,9 @@ server.registerTool('sftp_create_directory', {
 }, async (input) => textResult(await bridge.sftpCreateDirectory(input)));
 ```
 
-- [ ] **Step 7: Add package contributions for SFTP language model tools**
+- [ ] **Step 7: Add MCP package contributions for SFTP language model tools**
 
-Modify `package.json` activation events:
+Modify `package.mcp.json` activation events:
 
 ```json
 "onLanguageModelTool:sftp_list_directory",
@@ -1681,6 +2000,7 @@ cmd /c npm run test -- test/mcp/BridgeClient.test.ts
 cmd /c npm run test -- test/mcp/BridgeServer.test.ts
 cmd /c npm run test -- test/mcp/McpServerTools.test.ts
 cmd /c npm run test -- test/package.agent-tools.test.ts
+cmd /c npm run test -- test/package.variants.test.ts
 ```
 
 Expected: PASS.
@@ -1688,7 +2008,7 @@ Expected: PASS.
 - [ ] **Step 10: Commit exposed SFTP tools**
 
 ```bash
-git add src/agent/AgentToolService.ts src/agent/AgentTools.ts src/mcp/BridgeProtocol.ts src/mcp/BridgeClient.ts src/mcp/BridgeServer.ts src/mcp/server.ts src/extension.ts package.json test/agent/AgentToolService.test.ts test/agent/AgentTools.test.ts test/mcp/BridgeClient.test.ts test/mcp/BridgeServer.test.ts test/mcp/McpServerTools.test.ts test/package.agent-tools.test.ts
+git add src/agent/AgentToolService.ts src/agent/AgentTools.ts src/mcp/BridgeProtocol.ts src/mcp/BridgeClient.ts src/mcp/BridgeServer.ts src/mcp/server.ts src/extension.ts package.mcp.json package.json test/agent/AgentToolService.test.ts test/agent/AgentTools.test.ts test/mcp/BridgeClient.test.ts test/mcp/BridgeServer.test.ts test/mcp/McpServerTools.test.ts test/package.agent-tools.test.ts test/package.variants.test.ts
 git commit -m "feat: expose sftp agent tools"
 ```
 
@@ -1698,7 +2018,7 @@ git commit -m "feat: expose sftp agent tools"
 - Create: `src/mcp/McpConfigInstaller.ts`
 - Add: `test/mcp/McpConfigInstaller.test.ts`
 - Modify: `src/extension.ts`
-- Modify: `package.json`
+- Modify: `package.mcp.json`
 
 - [ ] **Step 1: Write failing MCP config installer tests**
 
@@ -1815,7 +2135,7 @@ Add command to `context.subscriptions.push(...)`:
 
 - [ ] **Step 5: Add package command contribution**
 
-Modify `package.json` `contributes.commands`:
+Modify `package.mcp.json` `contributes.commands`:
 
 ```json
 {
@@ -1824,16 +2144,30 @@ Modify `package.json` `contributes.commands`:
 }
 ```
 
+Also extend `test/package.variants.test.ts`:
+
+```ts
+it('keeps the MCP config command only in the MCP manifest', () => {
+  expect(JSON.stringify(baseManifest.contributes)).not.toContain('sshManager.installMcpConfig');
+  expect(JSON.stringify(mcpManifest.contributes.commands)).toContain('sshManager.installMcpConfig');
+});
+```
+
 - [ ] **Step 6: Run config installer tests**
 
-Run: `cmd /c npm run test -- test/mcp/McpConfigInstaller.test.ts`
+Run:
+
+```bash
+cmd /c npm run test -- test/mcp/McpConfigInstaller.test.ts
+cmd /c npm run test -- test/package.variants.test.ts
+```
 
 Expected: PASS.
 
 - [ ] **Step 7: Commit MCP config installer**
 
 ```bash
-git add src/mcp/McpConfigInstaller.ts src/extension.ts package.json test/mcp/McpConfigInstaller.test.ts
+git add src/mcp/McpConfigInstaller.ts src/extension.ts package.mcp.json test/mcp/McpConfigInstaller.test.ts test/package.variants.test.ts
 git commit -m "feat: add mcp config installer command"
 ```
 
@@ -1921,7 +2255,7 @@ git commit -m "docs: cover expanded agent tools"
 
 **Files:**
 - No source files.
-- Generated ignored artifact: `at-terminal-0.2.9.vsix`
+- Generated ignored artifacts: `at-terminal-0.2.9.vsix` and `at-terminal-mcp-0.2.9.vsix`
 
 - [ ] **Step 1: Run full test suite**
 
@@ -1935,58 +2269,91 @@ Run: `cmd /c npm run typecheck`
 
 Expected: PASS with no TypeScript errors.
 
-- [ ] **Step 3: Run build**
+- [ ] **Step 3: Run both variant builds**
 
-Run: `cmd /c npm run build`
+Run:
 
-Expected: PASS and these files exist:
+```bash
+cmd /c npm run build:base
+cmd /c npm run build:mcp
+```
+
+Expected: PASS and after `build:mcp` these files exist:
 
 - `dist/extension.js`
 - `dist/mcp-server.js`
 - `dist/webview/terminal.js`
 - `dist/webview/server-form.js`
 
-- [ ] **Step 4: Package VSIX**
+- [ ] **Step 4: Package both VSIX variants**
 
 Run:
 
 ```bash
-cmd /c npx @vscode/vsce package --baseContentUrl https://example.invalid/at-terminal/ --baseImagesUrl https://example.invalid/at-terminal/ --allow-missing-repository
+cmd /c npm run package:base
+cmd /c npm run package:mcp
 ```
 
 Expected:
 
-- PASS.
-- `at-terminal-0.2.9.vsix` is roughly several MB, not around 100 KB.
+- PASS for both commands.
+- `at-terminal-0.2.9.vsix` is not around 100 KB.
+- `at-terminal-mcp-0.2.9.vsix` is not around 100 KB and is expected to be larger than the base VSIX.
 
-- [ ] **Step 5: Verify VSIX contents**
+- [ ] **Step 5: Verify base VSIX excludes MCP contents**
 
 Run:
 
 ```bash
-cmd /c tar -tf at-terminal-0.2.9.vsix | findstr /R "extension/dist/mcp-server.js extension/node_modules/ssh2/package.json extension/package.json"
+cmd /c tar -tf at-terminal-0.2.9.vsix | findstr /R "extension/dist/mcp-server.js extension/node_modules/@modelcontextprotocol extension/package.json"
 ```
 
-Expected output includes:
+Expected output includes `extension/package.json` only. It must not include `extension/dist/mcp-server.js` or `extension/node_modules/@modelcontextprotocol`.
+
+- [ ] **Step 6: Verify MCP VSIX includes MCP contents**
+
+Run:
+
+```bash
+cmd /c tar -tf at-terminal-mcp-0.2.9.vsix | findstr /R "extension/dist/mcp-server.js extension/node_modules/ssh2/package.json extension/node_modules/@modelcontextprotocol extension/package.json"
+```
+
+Expected output includes at least:
 
 ```text
 extension/package.json
 extension/dist/mcp-server.js
 extension/node_modules/ssh2/package.json
+extension/node_modules/@modelcontextprotocol
 ```
 
-- [ ] **Step 6: Inspect git state**
+- [ ] **Step 7: Verify staged manifests inside VSIX files**
+
+Run:
+
+```bash
+cmd /c tar -xOf at-terminal-0.2.9.vsix extension/package.json | findstr /R "AT Terminal languageModelTools sshManager.installMcpConfig"
+cmd /c tar -xOf at-terminal-mcp-0.2.9.vsix extension/package.json | findstr /R "AT Terminal MCP languageModelTools sshManager.installMcpConfig"
+```
+
+Expected:
+
+- base command shows `AT Terminal` and does not show `languageModelTools` or `sshManager.installMcpConfig`;
+- MCP command shows `AT Terminal MCP`, `languageModelTools`, and `sshManager.installMcpConfig`.
+
+- [ ] **Step 8: Inspect git state**
 
 Run: `git status --short --ignored`
 
 Expected:
 
 - no tracked source changes;
-- ignored `at-terminal-0.2.9.vsix`, `dist/`, `node_modules/`, and old ignored plan files may appear.
+- ignored `at-terminal-0.2.9.vsix`, `at-terminal-mcp-0.2.9.vsix`, `.package-work/`, `dist/`, `node_modules/`, and old ignored plan files may appear.
 
 ## Self-Review
 
 - Spec coverage:
+  - Dual package variants: Task 0 and Task 7.
   - Terminal context read-only tool: Task 1 and Task 2.
   - `focusedTerminal` plus `defaultConnectedTerminal`: Task 1.
   - SFTP read/write first batch: Task 3 and Task 4.

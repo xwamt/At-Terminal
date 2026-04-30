@@ -8,11 +8,12 @@ The next version should let VS Code agents and MCP-capable IDEs understand the c
 
 ## Scope
 
-This design covers three batches in priority order:
+This design covers four batches in priority order:
 
-1. Read-only terminal context tools.
-2. SFTP read/write tools without destructive file management.
-3. MCP configuration installation command, with optional first-run prompt later.
+1. Dual package variants: `AT Terminal` base and `AT Terminal MCP`.
+2. Read-only terminal context tools.
+3. SFTP read/write tools without destructive file management.
+4. MCP configuration installation command, with optional first-run prompt later.
 
 The feature must expose equivalent capabilities through both integration paths:
 
@@ -21,9 +22,14 @@ The feature must expose equivalent capabilities through both integration paths:
 
 The MCP sidecar must not read VS Code storage, AT Terminal config, or secrets directly. It should continue to call the localhost bridge so all credential access, SFTP sessions, host-key behavior, and confirmation UI remain inside the extension host.
 
+The base package must not expose agent tools, start the MCP bridge, include the MCP stdio server entrypoint, or include MCP-specific dependencies in its VSIX. Users who only want SSH terminal and SFTP UI should install the base package.
+
 ## Confirmed Product Decisions
 
 - Terminal context tools are read-only for the first batch.
+- AT Terminal should ship as two VSIX variants from one source tree:
+  - `AT Terminal`: base SSH terminal and SFTP UI only.
+  - `AT Terminal MCP`: base functionality plus Copilot tools, local MCP bridge, MCP stdio server, and MCP config installer.
 - "Current tab" context should not collapse into one ambiguous value. Tools should return both `focusedTerminal` and `defaultConnectedTerminal`.
 - SFTP first batch is read/write but excludes dangerous operations.
 - SFTP write operations require confirmation the first time each server is written to during the current extension host session.
@@ -31,7 +37,7 @@ The MCP sidecar must not read VS Code storage, AT Terminal config, or secrets di
 
 ## Architecture
 
-Keep a single capability implementation in the extension host and expose it through two adapters:
+Keep a single capability implementation in the extension host and expose it through two adapters in the MCP variant:
 
 - **Core services:** terminal context registry, SFTP manager/session, write authorization, and MCP config installer.
 - **Language model tool adapter:** converts VS Code language model tool input/output into core service calls.
@@ -39,6 +45,27 @@ Keep a single capability implementation in the extension host and expose it thro
 - **MCP stdio adapter:** registers MCP tools and forwards tool calls to `BridgeClient`.
 
 This avoids splitting behavior between Copilot and MCP clients. Tool names, input schemas, errors, and response shapes should stay aligned across both adapters.
+
+### Package Variant Architecture
+
+Use one source tree and two package/build variants:
+
+- `package.base.json`
+  - display name: `AT Terminal`
+  - no `contributes.languageModelTools`
+  - no `onLanguageModelTool:*` activation events
+  - no `sshManager.installMcpConfig` command
+  - no MCP stdio server entrypoint in the VSIX
+- `package.mcp.json`
+  - display name: `AT Terminal MCP`
+  - includes all Copilot language model tools
+  - includes `sshManager.installMcpConfig`
+  - includes `dist/mcp-server.js`
+  - includes dependencies required by the MCP stdio server
+
+Build and package through variant scripts rather than maintaining two source trees. The extension runtime should have a build-time flag such as `MCP_ENABLED` so the base bundle does not register language model tools or start the localhost MCP bridge. The MCP bundle sets the flag true and builds `dist/mcp-server.js`.
+
+Packaging should stage each variant into an isolated temporary directory before running `vsce package`. This prevents the base VSIX from accidentally including MCP-only build outputs or dependencies.
 
 ## Terminal Context Tools
 
@@ -211,6 +238,8 @@ Bridge HTTP errors should continue to return JSON `{ "error": string }`.
 
 Add focused tests around core behavior rather than only adapter wiring:
 
+- Base package VSIX metadata excludes `languageModelTools`, `onLanguageModelTool:*`, `dist/mcp-server.js`, and MCP config command.
+- MCP package VSIX metadata includes agent tools, MCP bridge/server packaging, and MCP config command.
 - Terminal context registry returns both focused and default connected terminals.
 - Agent and MCP bridge adapters expose `get_terminal_context`.
 - SFTP read tools call `SftpManager`/session without requiring confirmation.
@@ -228,6 +257,8 @@ Manual tests should cover:
 - Writing a file prompts once per server, then proceeds without repeated prompts.
 - Reloading the window clears write authorization.
 - Install MCP Config creates a usable Continue config.
+- Base VSIX installs without exposing Copilot or MCP tools.
+- MCP VSIX installs with Copilot tools and local MCP config support.
 
 ## Out Of Scope For This Batch
 
@@ -238,6 +269,8 @@ Manual tests should cover:
 - Multi-file patch application.
 - Streaming very large remote files through MCP.
 - Silent automatic MCP config writes on install.
+- Publishing two Marketplace listings.
+- Maintaining duplicated source trees for base and MCP variants.
 
 ## Open Implementation Notes
 
@@ -245,3 +278,4 @@ Manual tests should cover:
 - If a separate SFTP session registry is added, it should still reuse `SftpSession` and existing config/secret access.
 - The terminal context registry needs enough metadata to distinguish focused terminal from default connected terminal.
 - Tool schemas should be generated or centralized where practical so Copilot and MCP do not drift.
+- Package variant generation should be deterministic and testable; avoid manually editing `package.json` before each package command.
