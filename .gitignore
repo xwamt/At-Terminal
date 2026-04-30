@@ -10,6 +10,7 @@ coverage/
 
 # Packaged extensions
 *.vsix
+.package-work/
 
 # Local workspace state
 .worktrees/
