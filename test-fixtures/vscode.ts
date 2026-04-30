@@ -126,6 +126,29 @@ export const commands = {
   executeCommand: async () => undefined
 };
 
+export class LanguageModelTextPart {
+  constructor(public readonly value: string) {}
+}
+
+export class LanguageModelToolResult {
+  constructor(public readonly content: LanguageModelTextPart[]) {}
+}
+
+const registeredTools = new Map<string, { invoke(options: unknown): Promise<unknown> }>();
+
+export const lm = {
+  registerTool: (name: string, tool: { invoke(options: unknown): Promise<unknown> }) => {
+    registeredTools.set(name, tool);
+    return {
+      dispose: () => {
+        registeredTools.delete(name);
+      }
+    };
+  },
+  __getRegisteredTool: (name: string) => registeredTools.get(name),
+  __clearRegisteredTools: () => registeredTools.clear()
+};
+
 export const workspace = {
   registerTextDocumentContentProvider: () => ({ dispose: () => undefined }),
   openTextDocument: async (uri: Uri): Promise<TextDocument> => ({
