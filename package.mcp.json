@@ -1,6 +1,6 @@
 {
-  "name": "at-terminal",
-  "displayName": "AT Terminal",
+  "name": "at-terminal-mcp",
+  "displayName": "AT Terminal MCP",
   "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
   "version": "0.2.9",
   "publisher": "local",
@@ -328,11 +328,7 @@
     "watch": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "build:base": "node esbuild.config.mjs --variant=base",
-    "build:mcp": "node esbuild.config.mjs --variant=mcp",
-    "package:base": "npm run build:base && node scripts/package-variant.mjs base",
-    "package:mcp": "npm run build:mcp && node scripts/package-variant.mjs mcp"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

@@ -1,14 +1,23 @@
 import * as esbuild from 'esbuild';
 
 const watch = process.argv.includes('--watch');
+const variantArg = process.argv.find((arg) => arg.startsWith('--variant=')) ?? '--variant=mcp';
+const variant = variantArg.split('=')[1];
+if (!['base', 'mcp'].includes(variant)) {
+  throw new Error(`Unknown build variant: ${variant}`);
+}
+const mcpEnabled = variant === 'mcp';
 
 const common = {
   bundle: true,
   sourcemap: true,
-  minify: false
+  minify: false,
+  define: {
+    __AT_TERMINAL_MCP_ENABLED__: JSON.stringify(mcpEnabled)
+  }
 };
 
-const contexts = await Promise.all([
+const contextConfigs = [
   esbuild.context({
     ...common,
     entryPoints: ['src/extension.ts'],
@@ -17,14 +26,18 @@ const contexts = await Promise.all([
     format: 'cjs',
     external: ['vscode', 'ssh2']
   }),
-  esbuild.context({
-    ...common,
-    entryPoints: ['src/mcp/server.ts'],
-    outfile: 'dist/mcp-server.js',
-    platform: 'node',
-    format: 'cjs',
-    external: ['vscode']
-  }),
+  ...(mcpEnabled
+    ? [
+        esbuild.context({
+          ...common,
+          entryPoints: ['src/mcp/server.ts'],
+          outfile: 'dist/mcp-server.js',
+          platform: 'node',
+          format: 'cjs',
+          external: ['vscode']
+        })
+      ]
+    : []),
   esbuild.context({
     ...common,
     entryPoints: ['webview/terminal/index.ts'],
@@ -39,7 +52,9 @@ const contexts = await Promise.all([
     platform: 'browser',
     format: 'iife'
   })
-]);
+];
+
+const contexts = await Promise.all(contextConfigs);
 
 if (watch) {
   await Promise.all(contexts.map((context) => context.watch()));

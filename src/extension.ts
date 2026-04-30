@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { registerAgentTools } from './agent/AgentTools';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
+import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import { BridgeServer } from './mcp/BridgeServer';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
@@ -89,23 +90,27 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
   const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier);
-  const agentToolDisposables = registerAgentTools({
-    configManager,
-    terminalContext,
-    executor: remoteCommandExecutor
-  });
-  const bridgeServer = new BridgeServer({
-    configManager,
-    terminalContext,
-    executor: remoteCommandExecutor
-  });
-  void bridgeServer.start().catch((error) => {
-    void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
-  });
+  let agentToolDisposables: vscode.Disposable[] = [];
+  let bridgeServer: BridgeServer | undefined;
+  if (MCP_ENABLED) {
+    agentToolDisposables = registerAgentTools({
+      configManager,
+      terminalContext,
+      executor: remoteCommandExecutor
+    });
+    bridgeServer = new BridgeServer({
+      configManager,
+      terminalContext,
+      executor: remoteCommandExecutor
+    });
+    void bridgeServer.start().catch((error) => {
+      void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
+    });
+  }
 
   context.subscriptions.push(
     ...agentToolDisposables,
-    bridgeServer,
+    ...(bridgeServer ? [bridgeServer] : []),
     vscode.window.createTreeView('sshManager.servers', {
       treeDataProvider: treeProvider,
       showCollapseAll: true
