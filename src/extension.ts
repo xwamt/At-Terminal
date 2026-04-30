@@ -117,17 +117,14 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
     });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (!workspaceFolder) {
-        await vscode.window.showErrorMessage('Open a workspace folder before installing AT Terminal MCP config.');
-        return;
-      }
       const mcpServerPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'mcp-server.js').fsPath;
-      const continueTarget = await installContinueMcpConfig({ workspaceFolder, mcpServerPath });
       const kiroTarget = await installKiroMcpConfig({ mcpServerPath });
-      await vscode.window.showInformationMessage(
-        `AT Terminal MCP config installed: ${continueTarget}; ${kiroTarget}`
-      );
+      const targets = [kiroTarget];
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (workspaceFolder) {
+        targets.push(await installContinueMcpConfig({ workspaceFolder, mcpServerPath }));
+      }
+      await vscode.window.showInformationMessage(`AT Terminal MCP config installed: ${targets.join('; ')}`);
     });
   }
 

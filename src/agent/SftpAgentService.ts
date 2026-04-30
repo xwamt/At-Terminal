@@ -1,5 +1,6 @@
 import type { ServerConfig } from '../config/schema';
 import type { SftpEntry, SftpFileStat } from '../sftp/SftpTypes';
+import { dirname, joinRemotePath } from '../sftp/RemotePath';
 import type { TerminalContext, TerminalContextRegistry } from '../terminal/TerminalContext';
 import type { SftpWriteAuthorizer } from './SftpWriteAuthorizer';
 
@@ -188,7 +189,14 @@ export class SftpAgentService {
     if (!path.trim()) {
       throw new Error('Remote path cannot be empty.');
     }
-    const resolved = await this.resolvePath(terminalId, session, path);
+    const root = await this.rootFor(terminalId, session);
+    const candidate = path.startsWith('/') ? path : joinRemotePath(root, path);
+    const normalized = candidate.replace(/\/+$/, '') || '/';
+    if (normalized === '/') {
+      throw new Error('Remote root path cannot be modified.');
+    }
+    const parent = await session.realpath(dirname(normalized));
+    const resolved = joinRemotePath(parent, basenameRemotePath(normalized));
     if (resolved === '/') {
       throw new Error('Remote root path cannot be modified.');
     }
@@ -210,9 +218,26 @@ async function pathExists(session: AgentSftpSession, path: string): Promise<bool
   try {
     await session.stat(path);
     return true;
-  } catch {
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+function isMissingPathError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
     return false;
   }
+  const code = (error as { code?: unknown }).code;
+  return code === 2 || code === 'ENOENT';
+}
+
+function basenameRemotePath(path: string): string {
+  const normalized = path.replace(/\/+$/, '');
+  const index = normalized.lastIndexOf('/');
+  return index < 0 ? normalized : normalized.slice(index + 1);
 }
 
 function clampReadBytes(value: number | undefined): number {

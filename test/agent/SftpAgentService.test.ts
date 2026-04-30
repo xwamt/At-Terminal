@@ -29,6 +29,12 @@ function connectedRegistry(): TerminalContextRegistry {
   return registry;
 }
 
+function missingPathError(): Error & { code: number } {
+  const error = new Error('No such file') as Error & { code: number };
+  error.code = 2;
+  return error;
+}
+
 describe('SftpAgentService', () => {
   it('lists a directory using the default connected terminal', async () => {
     const session = {
@@ -140,5 +146,105 @@ describe('SftpAgentService', () => {
     });
     expect(requireWrite).toHaveBeenCalledTimes(1);
     expect(session.writeFile).toHaveBeenCalledWith('/app.txt', Buffer.from('next', 'utf8'));
+  });
+
+  it('writes new files by resolving the parent directory instead of the leaf path', async () => {
+    const requireWrite = vi.fn(async () => undefined);
+    const session = {
+      connect: vi.fn(async () => undefined),
+      realpath: vi.fn(async (path = '.') => {
+        if (path === '.') {
+          return '/home/deploy';
+        }
+        if (path === '/home/deploy') {
+          return '/home/deploy';
+        }
+        throw new Error(`missing path: ${path}`);
+      }),
+      listDirectory: vi.fn(),
+      stat: vi.fn(async () => {
+        throw missingPathError();
+      }),
+      readFile: vi.fn(),
+      writeFile: vi.fn(async () => undefined),
+      mkdir: vi.fn(),
+      createFile: vi.fn(),
+      dispose: vi.fn()
+    };
+    const service = new SftpAgentService({
+      terminalContext: connectedRegistry(),
+      createSession: () => session as never,
+      authorizer: { requireWrite }
+    });
+
+    await expect(service.writeFile({ path: 'new.txt', content: 'hello' })).resolves.toEqual({
+      terminalId: 'terminal-1',
+      serverId: 'server-1',
+      path: '/home/deploy/new.txt',
+      bytesWritten: 5,
+      overwritten: false
+    });
+    expect(session.realpath).not.toHaveBeenCalledWith('/home/deploy/new.txt');
+    expect(session.writeFile).toHaveBeenCalledWith('/home/deploy/new.txt', Buffer.from('hello', 'utf8'));
+  });
+
+  it('does not treat stat permission errors as missing paths before writing', async () => {
+    const permissionError = new Error('Permission denied');
+    const requireWrite = vi.fn(async () => undefined);
+    const session = {
+      connect: vi.fn(async () => undefined),
+      realpath: vi.fn(async (path = '.') => (path === '.' ? '/home/deploy' : path)),
+      listDirectory: vi.fn(),
+      stat: vi.fn(async () => {
+        throw permissionError;
+      }),
+      readFile: vi.fn(),
+      writeFile: vi.fn(),
+      mkdir: vi.fn(),
+      createFile: vi.fn(),
+      dispose: vi.fn()
+    };
+    const service = new SftpAgentService({
+      terminalContext: connectedRegistry(),
+      createSession: () => session as never,
+      authorizer: { requireWrite }
+    });
+
+    await expect(service.writeFile({ path: 'locked.txt', content: 'hello' })).rejects.toThrow('Permission denied');
+    expect(requireWrite).not.toHaveBeenCalled();
+    expect(session.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('creates new directories by resolving the parent directory instead of the leaf path', async () => {
+    const requireWrite = vi.fn(async () => undefined);
+    const session = {
+      connect: vi.fn(async () => undefined),
+      realpath: vi.fn(async (path = '.') => {
+        if (path === '.' || path === '/var/tmp') {
+          return path === '.' ? '/home/deploy' : '/var/tmp';
+        }
+        throw new Error(`missing path: ${path}`);
+      }),
+      listDirectory: vi.fn(),
+      stat: vi.fn(),
+      readFile: vi.fn(),
+      writeFile: vi.fn(),
+      mkdir: vi.fn(async () => undefined),
+      createFile: vi.fn(),
+      dispose: vi.fn()
+    };
+    const service = new SftpAgentService({
+      terminalContext: connectedRegistry(),
+      createSession: () => session as never,
+      authorizer: { requireWrite }
+    });
+
+    await expect(service.createDirectory({ path: '/var/tmp/new-dir/' })).resolves.toEqual({
+      terminalId: 'terminal-1',
+      serverId: 'server-1',
+      path: '/var/tmp/new-dir'
+    });
+    expect(session.realpath).not.toHaveBeenCalledWith('/var/tmp/new-dir');
+    expect(session.mkdir).toHaveBeenCalledWith('/var/tmp/new-dir');
   });
 });
