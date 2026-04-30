@@ -10,6 +10,7 @@ if (!['base', 'mcp'].includes(variant)) {
 const root = process.cwd();
 const stage = join(root, '.package-work', variant);
 const manifestName = variant === 'base' ? 'package.base.json' : 'package.mcp.json';
+const readmeName = variant === 'base' ? 'README-base.md' : 'README.md';
 const manifest = JSON.parse(await readFile(join(root, manifestName), 'utf8'));
 
 await rm(stage, { recursive: true, force: true });
@@ -23,7 +24,7 @@ await cp(join(root, 'media'), join(stage, 'media'), { recursive: true });
 await cp(join(root, 'webview'), join(stage, 'webview'), { recursive: true });
 await cp(join(root, '.vscodeignore'), join(stage, '.vscodeignore'));
 await writeFile(join(stage, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-await cp(join(root, 'README.md'), join(stage, 'README.md'));
+await cp(join(root, readmeName), join(stage, 'README.md'));
 
 const install = spawnSync(
   process.platform === 'win32' ? 'cmd' : 'npm',

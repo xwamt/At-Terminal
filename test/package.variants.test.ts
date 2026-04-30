@@ -42,4 +42,10 @@ describe('package variants', () => {
     expect(packageScript).toContain('package.mcp.json');
     expect(packageScript).toContain('vsce');
   });
+
+  it('packages the base and MCP variants with their own README files', () => {
+    expect(packageScript).toContain("variant === 'base' ? 'README-base.md' : 'README.md'");
+    expect(packageScript).toContain("join(root, readmeName)");
+    expect(packageScript).toContain("join(stage, 'README.md')");
+  });
 });
