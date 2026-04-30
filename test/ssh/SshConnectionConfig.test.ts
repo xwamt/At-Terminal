@@ -92,7 +92,7 @@ describe('buildSshConnectConfig', () => {
     );
     const verify = vi.fn();
 
-    const result = config.hostVerifier!('SHA256:abc', verify);
+    const result = config.hostVerifier!('SHA256:abc' as never, verify);
 
     expect(result).toBeUndefined();
     expect(verify).not.toHaveBeenCalled();

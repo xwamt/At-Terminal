@@ -132,7 +132,7 @@ function wrapCommand(command: string, cwd: string | undefined): string {
 }
 
 function clampPositiveInteger(value: number | undefined, fallback: number, max: number): number {
-  if (!Number.isInteger(value) || value <= 0) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
     return fallback;
   }
   return Math.min(value, max);
