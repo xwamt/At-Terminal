@@ -7,6 +7,8 @@ const packageScript = readFileSync('scripts/package-variant.mjs', 'utf8');
 const buildConfig = readFileSync('esbuild.config.mjs', 'utf8');
 const extensionSource = readFileSync('src/extension.ts', 'utf8');
 const vscodeIgnore = readFileSync('.vscodeignore', 'utf8');
+const readme = readFileSync('README.md', 'utf8');
+const baseReadme = readFileSync('README-base.md', 'utf8');
 
 describe('package variants', () => {
   it('keeps the base manifest free of agent and MCP contributions', () => {
@@ -52,9 +54,12 @@ describe('package variants', () => {
 
   it('keeps README images local in packaged VSIX files', () => {
     expect(packageScript).toContain("join(root, 'docs', 'images')");
+    expect(packageScript).toContain(".endsWith('.gif')");
     expect(packageScript).toContain('--no-rewrite-relative-links');
     expect(packageScript).not.toContain('--baseImagesUrl');
     expect(packageScript).not.toContain('https://example.com/at-terminal');
-    expect(vscodeIgnore).toContain('!docs/images/**');
+    expect(vscodeIgnore).toContain('!docs/images/*.png');
+    expect(readme).not.toContain('.gif');
+    expect(baseReadme).not.toContain('.gif');
   });
 });
