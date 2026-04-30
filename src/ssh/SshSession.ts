@@ -1,16 +1,12 @@
-import { readFile } from 'node:fs/promises';
-import { Client, type ClientChannel, type ConnectConfig, type ShellOptions, type VerifyCallback } from 'ssh2';
+import { Client, type ClientChannel, type ShellOptions } from 'ssh2';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
+import { buildSshConnectConfig, type HostKeyVerifier } from './SshConnectionConfig';
 
 export interface SshSessionEvents {
   output(data: Buffer): void;
   status(message: string): void;
   error(error: unknown): void;
-}
-
-export interface HostKeyVerifier {
-  verify(host: string, port: number, hashedKey: string): Promise<boolean>;
 }
 
 export class SshSession {
@@ -106,45 +102,7 @@ export class SshSession {
     this.connected = false;
   }
 
-  private async buildConnectConfig(): Promise<ConnectConfig> {
-    const base: ConnectConfig = {
-      host: this.server.host,
-      port: this.server.port,
-      username: this.server.username,
-      keepaliveInterval: this.server.keepAliveInterval * 1000,
-      hostHash: 'sha256',
-      hostVerifier: this.createHostVerifier()
-    };
-
-    if (this.server.authType === 'password') {
-      const password = await this.configManager.getPassword(this.server.id);
-      if (!password) {
-        throw new Error('Missing password. Edit the server configuration and enter a password.');
-      }
-      return { ...base, password };
-    }
-
-    if (!this.server.privateKeyPath) {
-      throw new Error('Missing private key path.');
-    }
-    return {
-      ...base,
-      privateKey: await readFile(this.server.privateKeyPath, 'utf8')
-    };
-  }
-
-  private createHostVerifier(): ConnectConfig['hostVerifier'] {
-    if (!this.hostKeyVerifier) {
-      return undefined;
-    }
-
-    const verifyHost = (fingerprint: string, verify: VerifyCallback): void => {
-      void this.hostKeyVerifier!.verify(this.server.host, this.server.port, fingerprint).then(
-        verify,
-        () => verify(false)
-      );
-    };
-
-    return verifyHost as ConnectConfig['hostVerifier'];
+  private async buildConnectConfig() {
+    return buildSshConnectConfig(this.server, this.configManager, this.hostKeyVerifier);
   }
 }
