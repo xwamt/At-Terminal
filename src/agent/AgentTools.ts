@@ -20,8 +20,8 @@ interface RunRemoteCommandInput {
 
 export function registerAgentTools(dependencies: AgentToolDependencies): vscode.Disposable[] {
   return [
-    vscode.lm.registerTool('sshManager.listServers', new ListServersTool(dependencies.configManager)),
-    vscode.lm.registerTool('sshManager.runRemoteCommand', new RunRemoteCommandTool(dependencies))
+    vscode.lm.registerTool('list_ssh_servers', new ListServersTool(dependencies.configManager)),
+    vscode.lm.registerTool('run_remote_command', new RunRemoteCommandTool(dependencies))
   ];
 }
 

@@ -59,8 +59,8 @@ describe('registerAgentTools', () => {
       executor: { execute: vi.fn() } as never
     });
 
-    expect(lmFixture().__getRegisteredTool('sshManager.listServers')).toBeDefined();
-    expect(lmFixture().__getRegisteredTool('sshManager.runRemoteCommand')).toBeDefined();
+    expect(lmFixture().__getRegisteredTool('list_ssh_servers')).toBeDefined();
+    expect(lmFixture().__getRegisteredTool('run_remote_command')).toBeDefined();
   });
 
   it('lists servers without exposing credentials', async () => {
@@ -70,7 +70,7 @@ describe('registerAgentTools', () => {
       executor: { execute: vi.fn() } as never
     });
 
-    const result = await registeredTool('sshManager.listServers').invoke({
+    const result = await registeredTool('list_ssh_servers').invoke({
       input: {}
     });
 
@@ -110,7 +110,7 @@ describe('registerAgentTools', () => {
       executor: { execute } as unknown as RemoteCommandExecutor
     });
 
-    const result = await registeredTool('sshManager.runRemoteCommand').invoke({
+    const result = await registeredTool('run_remote_command').invoke({
       input: {
         serverId: 'server-1',
         command: 'uptime',
@@ -159,7 +159,7 @@ describe('registerAgentTools', () => {
       executor: { execute } as unknown as RemoteCommandExecutor
     });
 
-    await registeredTool('sshManager.runRemoteCommand').invoke({
+    await registeredTool('run_remote_command').invoke({
       input: {
         serverId: 'active',
         command: 'pwd'
@@ -182,7 +182,7 @@ describe('registerAgentTools', () => {
     });
 
     await expect(
-      registeredTool('sshManager.runRemoteCommand').invoke({
+      registeredTool('run_remote_command').invoke({
         input: {
           serverId: 'missing',
           command: 'uptime'
@@ -200,7 +200,7 @@ describe('registerAgentTools', () => {
     });
 
     await expect(
-      registeredTool('sshManager.runRemoteCommand').invoke({
+      registeredTool('run_remote_command').invoke({
         input: {
           serverId: 'server-1',
           command: 'uptime'

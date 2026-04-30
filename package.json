@@ -13,10 +13,58 @@
   ],
   "activationEvents": [
     "onView:sshManager.servers",
-    "onView:sshManager.sftpFiles"
+    "onView:sshManager.sftpFiles",
+    "onLanguageModelTool:list_ssh_servers",
+    "onLanguageModelTool:run_remote_command"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "languageModelTools": [
+      {
+        "name": "list_ssh_servers",
+        "tags": ["ssh", "server", "read-only"],
+        "toolReferenceName": "list_ssh_servers",
+        "displayName": "List SSH Servers",
+        "modelDescription": "List configured SSH servers from AT Terminal without exposing passwords or private keys.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "run_remote_command",
+        "tags": ["ssh", "terminal", "remote"],
+        "toolReferenceName": "run_remote_command",
+        "displayName": "Run Remote SSH Command",
+        "modelDescription": "Run a non-interactive shell command on a configured SSH server and return stdout, stderr, exit code, timeout, and truncation metadata. Use only after the user explicitly intends to run a remote command.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "serverId": {
+              "type": "string",
+              "description": "Configured SSH server id, or active to use the connected active SSH terminal."
+            },
+            "command": {
+              "type": "string",
+              "description": "Non-interactive shell command to run remotely."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Optional POSIX working directory to cd into before running the command."
+            },
+            "timeoutMs": {
+              "type": "number",
+              "description": "Optional timeout in milliseconds. Values above 120000 are capped."
+            },
+            "maxOutputBytes": {
+              "type": "number",
+              "description": "Optional max bytes to keep separately for stdout and stderr. Values above 256000 are capped."
+            }
+          },
+          "required": ["command"]
+        }
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {

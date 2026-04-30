@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { registerAgentTools } from './agent/AgentTools';
+import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
 import { ConfigManager } from './config/ConfigManager';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
@@ -85,8 +87,15 @@ export function activate(context: vscode.ExtensionContext): void {
       return false;
     }
   };
+  const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier);
+  const agentToolDisposables = registerAgentTools({
+    configManager,
+    terminalContext,
+    executor: remoteCommandExecutor
+  });
 
   context.subscriptions.push(
+    ...agentToolDisposables,
     vscode.window.createTreeView('sshManager.servers', {
       treeDataProvider: treeProvider,
       showCollapseAll: true
