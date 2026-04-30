@@ -21,6 +21,11 @@ describe('package variants', () => {
     expect(JSON.stringify(mcpManifest.contributes.languageModelTools)).toContain('list_ssh_servers');
   });
 
+  it('keeps the MCP config command only in the MCP manifest', () => {
+    expect(JSON.stringify(baseManifest.contributes)).not.toContain('sshManager.installMcpConfig');
+    expect(JSON.stringify(mcpManifest.contributes.commands)).toContain('sshManager.installMcpConfig');
+  });
+
   it('builds the MCP server only for the MCP variant', () => {
     expect(buildConfig).toContain('--variant=mcp');
     expect(buildConfig).toContain('src/mcp/server.ts');

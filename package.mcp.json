@@ -418,6 +418,10 @@
       {
         "command": "sshManager.sftp.goUp",
         "title": "SFTP: Go Up"
+      },
+      {
+        "command": "sshManager.installMcpConfig",
+        "title": "AT Terminal: Install MCP Config"
       }
     ],
     "menus": {

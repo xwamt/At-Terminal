@@ -7,6 +7,7 @@ import { SftpWriteAuthorizer } from './agent/SftpWriteAuthorizer';
 import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import { BridgeServer } from './mcp/BridgeServer';
+import { installContinueMcpConfig } from './mcp/McpConfigInstaller';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
@@ -96,6 +97,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let agentToolDisposables: vscode.Disposable[] = [];
   let bridgeServer: BridgeServer | undefined;
   let sftpAgentService: SftpAgentService | undefined;
+  let installMcpConfigCommand: vscode.Disposable | undefined;
   if (MCP_ENABLED) {
     const sftpWriteAuthorizer = new SftpWriteAuthorizer();
     sftpAgentService = new SftpAgentService({
@@ -114,12 +116,23 @@ export function activate(context: vscode.ExtensionContext): void {
     void bridgeServer.start().catch((error) => {
       void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
     });
+    installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!workspaceFolder) {
+        await vscode.window.showErrorMessage('Open a workspace folder before installing AT Terminal MCP config.');
+        return;
+      }
+      const mcpServerPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'mcp-server.js').fsPath;
+      const target = await installContinueMcpConfig({ workspaceFolder, mcpServerPath });
+      await vscode.window.showInformationMessage(`AT Terminal MCP config installed: ${target}`);
+    });
   }
 
   context.subscriptions.push(
     ...agentToolDisposables,
     ...(bridgeServer ? [bridgeServer] : []),
     ...(sftpAgentService ? [sftpAgentService] : []),
+    ...(installMcpConfigCommand ? [installMcpConfigCommand] : []),
     vscode.window.createTreeView('sshManager.servers', {
       treeDataProvider: treeProvider,
       showCollapseAll: true
