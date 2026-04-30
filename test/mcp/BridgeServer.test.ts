@@ -162,6 +162,54 @@ describe('createBridgeRequestHandler', () => {
     });
   });
 
+  it('falls back to the most recent connected terminal when the active panel is disconnected', async () => {
+    const registry = new TerminalContextRegistry();
+    registry.setActive({
+      terminalId: 'terminal-connected',
+      server: server('server-2'),
+      connected: true,
+      write: vi.fn()
+    });
+    registry.setActive({
+      terminalId: 'terminal-disconnected',
+      server: server('server-1'),
+      connected: false,
+      write: vi.fn()
+    });
+    const execute = vi.fn(async () => ({
+      serverId: 'server-2',
+      serverLabel: 'Staging',
+      host: 'server-2.example.com',
+      command: 'hostname',
+      exitCode: 0,
+      stdout: 'server-2\n',
+      stderr: '',
+      durationMs: 10,
+      timedOut: false,
+      truncated: false
+    }));
+    const handler = createBridgeRequestHandler({
+      token: 'secret',
+      configManager: { getServer: async () => undefined } as never,
+      terminalContext: registry,
+      executor: { execute } as unknown as RemoteCommandExecutor,
+      confirmRun: async () => true
+    });
+
+    await call(handler, {
+      path: '/tools/run_remote_command',
+      token: 'secret',
+      body: { serverId: 'active', command: 'hostname' }
+    });
+
+    expect(execute).toHaveBeenCalledWith(server('server-2'), {
+      command: 'hostname',
+      cwd: undefined,
+      timeoutMs: undefined,
+      maxOutputBytes: undefined
+    });
+  });
+
   it('returns a bridge error when user cancels confirmation', async () => {
     const handler = createBridgeRequestHandler({
       token: 'secret',

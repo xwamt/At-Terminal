@@ -77,9 +77,9 @@ class RunRemoteCommandTool implements vscode.LanguageModelTool<RunRemoteCommandI
 
   private async resolveServer(serverId: string | undefined): Promise<ServerConfig> {
     if (serverId === 'active' || !serverId) {
-      const active = this.dependencies.terminalContext.getActive();
-      if (active?.connected) {
-        return active.server;
+      const connected = this.dependencies.terminalContext.getConnectedTerminal();
+      if (connected) {
+        return connected.server;
       }
       if (serverId === 'active') {
         throw new Error('No connected active SSH terminal is available.');

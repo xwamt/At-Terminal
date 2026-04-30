@@ -174,6 +174,54 @@ describe('registerAgentTools', () => {
     });
   });
 
+  it('uses the most recent connected terminal when the active panel is disconnected', async () => {
+    const registry = new TerminalContextRegistry();
+    registry.setActive({
+      terminalId: 'terminal-connected',
+      server: server('server-2'),
+      connected: true,
+      write: vi.fn()
+    });
+    registry.setActive({
+      terminalId: 'terminal-disconnected',
+      server: server('server-1'),
+      connected: false,
+      write: vi.fn()
+    });
+    const execute = vi.fn(async () => ({
+      serverId: 'server-2',
+      serverLabel: 'Staging',
+      host: 'server-2.example.com',
+      command: 'pwd',
+      exitCode: 0,
+      stdout: '/home/deploy\n',
+      stderr: '',
+      durationMs: 20,
+      timedOut: false,
+      truncated: false
+    }));
+
+    registerAgentTools({
+      configManager: { listServers: async () => [], getServer: async () => undefined } as never,
+      terminalContext: registry,
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    await registeredTool('run_remote_command').invoke({
+      input: {
+        serverId: 'active',
+        command: 'pwd'
+      }
+    });
+
+    expect(execute).toHaveBeenCalledWith(server('server-2'), {
+      command: 'pwd',
+      cwd: undefined,
+      timeoutMs: undefined,
+      maxOutputBytes: undefined
+    });
+  });
+
   it('throws when no server can be resolved', async () => {
     registerAgentTools({
       configManager: { listServers: async () => [], getServer: async () => undefined } as never,
