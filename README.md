@@ -205,12 +205,15 @@ The main value is local editing for remote files. AT Terminal downloads a remote
 
 #### Agent Tools
 
-AT Terminal contributes VS Code language model tools so supported VS Code agents can inspect configured SSH targets and run non-interactive remote commands.
+AT Terminal contributes VS Code language model tools and a local MCP server for compatible agents.
 
 - `list_ssh_servers` lists configured server ids and connection metadata without exposing credentials.
+- `get_terminal_context` returns `focusedTerminal`, `defaultConnectedTerminal`, `connectedTerminals`, and `knownTerminals`.
 - `run_remote_command` runs a bounded command through SSH and returns stdout, stderr, exit code, timeout, duration, and truncation metadata.
+- `sftp_list_directory`, `sftp_stat_path`, and `sftp_read_file` inspect remote files through the connected AT Terminal SFTP session.
+- `sftp_write_file`, `sftp_create_file`, and `sftp_create_directory` write remote UTF-8 text or create remote paths after first-write authorization for that server.
 
-Every remote command asks for confirmation before execution. Use `serverId: "active"` to target the connected active SSH terminal, or pass a configured server id from `list_ssh_servers`.
+Every remote command asks for confirmation before execution. SFTP write tools ask for confirmation the first time a server is written to during the current extension host session. Use `terminalId` or `serverId` to target a specific connected terminal, or omit both to use `defaultConnectedTerminal`.
 
 #### AT Terminal MCP
 
@@ -235,7 +238,9 @@ mcpServers:
       - C:\Users\alan\Desktop\ssh-plugins\.worktrees\codex-agent-remote-command-tools\dist\mcp-server.js
 ```
 
-For local development, point the MCP config at the unpacked `dist/mcp-server.js` path above. For installed VSIX testing, point it at the installed extension directory under `%USERPROFILE%\.vscode\extensions\local.at-terminal-0.2.9\dist\mcp-server.js`. Keep VS Code with AT Terminal running so the MCP bridge discovery file is available, then use Continue Agent mode and ask for `list_ssh_servers` or `run_remote_command`.
+Run `AT Terminal: Install MCP Config` from the Command Palette to create `.continue/mcpServers/at-terminal.yaml` in the current workspace.
+
+For local development, point the MCP config at the unpacked `dist/mcp-server.js` path above. For installed VSIX testing, point it at the installed extension directory under `%USERPROFILE%\.vscode\extensions\local.at-terminal-mcp-0.2.9\dist\mcp-server.js`. Keep VS Code with AT Terminal running so the MCP bridge discovery file is available, then use Continue Agent mode and ask for `list_ssh_servers`, `get_terminal_context`, `run_remote_command`, or `sftp_read_file`.
 
 #### Local Editing For Remote Files
 

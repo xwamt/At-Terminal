@@ -37,3 +37,17 @@ Adjust the path to the actual installed extension directory.
 
 3. Close VS Code or disable AT Terminal, then ask Continue to list servers.
    - Expected: MCP returns a clear error saying the AT Terminal MCP bridge is not running.
+
+4. Ask Continue Agent: `Use get_terminal_context to show my AT Terminal context.`
+   - Expected: output includes focusedTerminal and defaultConnectedTerminal.
+
+5. Ask Continue Agent: `Use sftp_list_directory to list the default connected terminal directory.`
+   - Expected: output includes remote directory entries.
+
+6. Ask Continue Agent: `Use sftp_write_file to write hello to /tmp/at-terminal-agent-test.txt.`
+   - Expected: VS Code prompts for SFTP write authorization once.
+   - Expected: approving writes the file.
+   - Expected: a second write on the same server does not prompt again until reload.
+
+7. Run `AT Terminal: Install MCP Config`.
+   - Expected: `.continue/mcpServers/at-terminal.yaml` is created or replaced.

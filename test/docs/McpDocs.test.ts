@@ -10,5 +10,8 @@ describe('MCP documentation', () => {
     expect(sample).toContain('dist/mcp-server.js');
     expect(readme).toContain('AT Terminal MCP');
     expect(readme).toContain('dist/mcp-server.js');
+    expect(readme).toContain('get_terminal_context');
+    expect(readme).toContain('sftp_read_file');
+    expect(readme).toContain('AT Terminal: Install MCP Config');
   });
 });
