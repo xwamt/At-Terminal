@@ -39,8 +39,26 @@ if (install.status !== 0) {
 const result = spawnSync(
   process.platform === 'win32' ? 'cmd' : 'npx',
   process.platform === 'win32'
-    ? ['/c', 'npx', '@vscode/vsce', 'package', '--allow-missing-repository']
-    : ['@vscode/vsce', 'package', '--allow-missing-repository'],
+    ? [
+        '/c',
+        'npx',
+        '@vscode/vsce',
+        'package',
+        '--allow-missing-repository',
+        '--baseContentUrl',
+        'https://example.com/at-terminal',
+        '--baseImagesUrl',
+        'https://example.com/at-terminal'
+      ]
+    : [
+        '@vscode/vsce',
+        'package',
+        '--allow-missing-repository',
+        '--baseContentUrl',
+        'https://example.com/at-terminal',
+        '--baseImagesUrl',
+        'https://example.com/at-terminal'
+      ],
   { cwd: stage, stdio: 'inherit' }
 );
 if (result.status !== 0) {
