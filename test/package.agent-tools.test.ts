@@ -11,11 +11,17 @@ describe('agent tool package contributions', () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: 'list_ssh_servers',
-          tags: ['ssh', 'server', 'read-only']
+          tags: ['ssh', 'server', 'read-only'],
+          canBeReferencedInPrompt: true,
+          toolReferenceName: 'list_ssh_servers',
+          userDescription: expect.any(String)
         }),
         expect.objectContaining({
           name: 'run_remote_command',
-          tags: ['ssh', 'terminal', 'remote']
+          tags: ['ssh', 'terminal', 'remote'],
+          canBeReferencedInPrompt: true,
+          toolReferenceName: 'run_remote_command',
+          userDescription: expect.any(String)
         })
       ])
     );

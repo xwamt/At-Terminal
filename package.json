@@ -2,7 +2,7 @@
   "name": "at-terminal",
   "displayName": "AT Terminal",
   "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "publisher": "local",
   "icon": "media/at-terminal-icon.png",
   "engines": {
@@ -23,8 +23,10 @@
       {
         "name": "list_ssh_servers",
         "tags": ["ssh", "server", "read-only"],
+        "canBeReferencedInPrompt": true,
         "toolReferenceName": "list_ssh_servers",
         "displayName": "List SSH Servers",
+        "userDescription": "List AT Terminal configured SSH servers.",
         "modelDescription": "List configured SSH servers from AT Terminal without exposing passwords or private keys.",
         "inputSchema": {
           "type": "object",
@@ -34,8 +36,10 @@
       {
         "name": "run_remote_command",
         "tags": ["ssh", "terminal", "remote"],
+        "canBeReferencedInPrompt": true,
         "toolReferenceName": "run_remote_command",
         "displayName": "Run Remote SSH Command",
+        "userDescription": "Run a confirmed non-interactive SSH command through AT Terminal.",
         "modelDescription": "Run a non-interactive shell command on a configured SSH server and return stdout, stderr, exit code, timeout, and truncation metadata. Use only after the user explicitly intends to run a remote command.",
         "inputSchema": {
           "type": "object",
