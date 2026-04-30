@@ -8,6 +8,25 @@ export interface TerminalContext {
   write(data: string): void;
 }
 
+export interface TerminalSummary {
+  terminalId: string;
+  serverId: string;
+  label: string;
+  host: string;
+  port: number;
+  username: string;
+  connected: boolean;
+  focused: boolean;
+  default: boolean;
+}
+
+export interface TerminalContextSnapshot {
+  focusedTerminal?: TerminalSummary;
+  defaultConnectedTerminal?: TerminalSummary;
+  connectedTerminals: TerminalSummary[];
+  knownTerminals: TerminalSummary[];
+}
+
 export class TerminalContextRegistry {
   private readonly onDidChangeActiveContextEmitter = new vscode.EventEmitter<TerminalContext | undefined>();
   readonly onDidChangeActiveContext = this.onDidChangeActiveContextEmitter.event;
@@ -31,6 +50,36 @@ export class TerminalContextRegistry {
       return lastConnected;
     }
     return this.findMostRecentConnected();
+  }
+
+  getConnectedTerminalById(terminalId: string | undefined): TerminalContext | undefined {
+    if (!terminalId) {
+      return undefined;
+    }
+    const context = this.contexts.get(terminalId);
+    return context?.connected ? context : undefined;
+  }
+
+  getConnectedTerminalByServerId(serverId: string | undefined): TerminalContext | undefined {
+    if (!serverId) {
+      return undefined;
+    }
+    return Array.from(this.contexts.values())
+      .reverse()
+      .find((context) => context.connected && context.server.id === serverId);
+  }
+
+  getSnapshot(): TerminalContextSnapshot {
+    const defaultConnected = this.getConnectedTerminal();
+    const knownTerminals = Array.from(this.contexts.values()).map((context) =>
+      this.toSummary(context, defaultConnected)
+    );
+    return {
+      focusedTerminal: this.active ? this.toSummary(this.active, defaultConnected) : undefined,
+      defaultConnectedTerminal: defaultConnected ? this.toSummary(defaultConnected, defaultConnected) : undefined,
+      connectedTerminals: knownTerminals.filter((terminal) => terminal.connected),
+      knownTerminals
+    };
   }
 
   setActive(context: TerminalContext): void {
@@ -90,5 +139,19 @@ export class TerminalContextRegistry {
     return Array.from(this.contexts.values())
       .reverse()
       .find((context) => context.connected);
+  }
+
+  private toSummary(context: TerminalContext, defaultConnected: TerminalContext | undefined): TerminalSummary {
+    return {
+      terminalId: context.terminalId,
+      serverId: context.server.id,
+      label: context.server.label,
+      host: context.server.host,
+      port: context.server.port,
+      username: context.server.username,
+      connected: context.connected,
+      focused: this.active?.terminalId === context.terminalId,
+      default: defaultConnected?.terminalId === context.terminalId
+    };
   }
 }

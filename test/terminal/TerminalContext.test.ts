@@ -86,4 +86,103 @@ describe('TerminalContextRegistry', () => {
     registry.clearIfActive('terminal-a');
     expect(registry.getActive()).toBeUndefined();
   });
+
+  it('returns focused, default connected, connected, and known terminal summaries', () => {
+    const registry = new TerminalContextRegistry();
+    registry.setActive({
+      terminalId: 'terminal-a',
+      server: server('a'),
+      connected: true,
+      write: vi.fn()
+    });
+    registry.setActive({
+      terminalId: 'terminal-b',
+      server: server('b'),
+      connected: false,
+      write: vi.fn()
+    });
+
+    expect(registry.getSnapshot()).toEqual({
+      focusedTerminal: {
+        terminalId: 'terminal-b',
+        serverId: 'b',
+        label: 'b',
+        host: 'b.example.com',
+        port: 22,
+        username: 'deploy',
+        connected: false,
+        focused: true,
+        default: false
+      },
+      defaultConnectedTerminal: {
+        terminalId: 'terminal-a',
+        serverId: 'a',
+        label: 'a',
+        host: 'a.example.com',
+        port: 22,
+        username: 'deploy',
+        connected: true,
+        focused: false,
+        default: true
+      },
+      connectedTerminals: [
+        {
+          terminalId: 'terminal-a',
+          serverId: 'a',
+          label: 'a',
+          host: 'a.example.com',
+          port: 22,
+          username: 'deploy',
+          connected: true,
+          focused: false,
+          default: true
+        }
+      ],
+      knownTerminals: [
+        {
+          terminalId: 'terminal-a',
+          serverId: 'a',
+          label: 'a',
+          host: 'a.example.com',
+          port: 22,
+          username: 'deploy',
+          connected: true,
+          focused: false,
+          default: true
+        },
+        {
+          terminalId: 'terminal-b',
+          serverId: 'b',
+          label: 'b',
+          host: 'b.example.com',
+          port: 22,
+          username: 'deploy',
+          connected: false,
+          focused: true,
+          default: false
+        }
+      ]
+    });
+  });
+
+  it('resolves connected terminals by terminal id and server id', () => {
+    const registry = new TerminalContextRegistry();
+    registry.setActive({
+      terminalId: 'terminal-a',
+      server: server('a'),
+      connected: true,
+      write: vi.fn()
+    });
+    registry.setActive({
+      terminalId: 'terminal-b',
+      server: server('b'),
+      connected: false,
+      write: vi.fn()
+    });
+
+    expect(registry.getConnectedTerminalById('terminal-a')?.server.id).toBe('a');
+    expect(registry.getConnectedTerminalById('terminal-b')).toBeUndefined();
+    expect(registry.getConnectedTerminalByServerId('a')?.terminalId).toBe('terminal-a');
+    expect(registry.getConnectedTerminalByServerId('b')).toBeUndefined();
+  });
 });
