@@ -22,7 +22,11 @@
     "languageModelTools": [
       {
         "name": "list_ssh_servers",
-        "tags": ["ssh", "server", "read-only"],
+        "tags": [
+          "ssh",
+          "server",
+          "read-only"
+        ],
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "list_ssh_servers",
         "displayName": "List SSH Servers",
@@ -35,7 +39,11 @@
       },
       {
         "name": "run_remote_command",
-        "tags": ["ssh", "terminal", "remote"],
+        "tags": [
+          "ssh",
+          "terminal",
+          "remote"
+        ],
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "run_remote_command",
         "displayName": "Run Remote SSH Command",
@@ -65,7 +73,9 @@
               "description": "Optional max bytes to keep separately for stdout and stderr. Values above 256000 are capped."
             }
           },
-          "required": ["command"]
+          "required": [
+            "command"
+          ]
         }
       }
     ],
@@ -321,6 +331,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",

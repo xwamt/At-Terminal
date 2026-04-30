@@ -19,6 +19,14 @@ const contexts = await Promise.all([
   }),
   esbuild.context({
     ...common,
+    entryPoints: ['src/mcp/server.ts'],
+    outfile: 'dist/mcp-server.js',
+    platform: 'node',
+    format: 'cjs',
+    external: ['vscode']
+  }),
+  esbuild.context({
+    ...common,
     entryPoints: ['webview/terminal/index.ts'],
     outfile: 'dist/webview/terminal.js',
     platform: 'browser',
