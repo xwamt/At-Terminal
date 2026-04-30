@@ -212,6 +212,31 @@ AT Terminal contributes VS Code language model tools so supported VS Code agents
 
 Every remote command asks for confirmation before execution. Use `serverId: "active"` to target the connected active SSH terminal, or pass a configured server id from `list_ssh_servers`.
 
+#### AT Terminal MCP
+
+AT Terminal also ships a local MCP stdio server for MCP-capable IDEs such as Continue, Cursor, and Kiro. The MCP server does not read AT Terminal credentials directly. It connects to a localhost bridge started by the AT Terminal VS Code extension, so existing server configuration, VS Code SecretStorage credentials, host key verification, and command confirmation remain in one place.
+
+Build the MCP server:
+
+```powershell
+npm run build
+```
+
+Continue workspace example:
+
+```yaml
+name: AT Terminal MCP
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: AT Terminal
+    command: node
+    args:
+      - C:\Users\alan\Desktop\ssh-plugins\.worktrees\codex-agent-remote-command-tools\dist\mcp-server.js
+```
+
+For local development, point the MCP config at the unpacked `dist/mcp-server.js` path above. For installed VSIX testing, point it at the installed extension directory under `%USERPROFILE%\.vscode\extensions\local.at-terminal-0.2.9\dist\mcp-server.js`. Keep VS Code with AT Terminal running so the MCP bridge discovery file is available, then use Continue Agent mode and ask for `list_ssh_servers` or `run_remote_command`.
+
 #### Local Editing For Remote Files
 
 Use `SFTP: Edit` from the `SFTP Files` view to open a remote file in the editor. AT Terminal downloads the file into a managed local edit session, detects the language from the file name, and uploads changes when you save.

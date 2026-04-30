@@ -1,0 +1,8 @@
+name: AT Terminal MCP
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: AT Terminal
+    command: node
+    args:
+      - C:/ABSOLUTE/PATH/TO/AT-TERMINAL/dist/mcp-server.js
