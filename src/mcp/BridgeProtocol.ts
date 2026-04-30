@@ -1,0 +1,34 @@
+export const BRIDGE_HOST = '127.0.0.1';
+export const BRIDGE_TOKEN_HEADER = 'x-at-terminal-token';
+
+export interface BridgeDiscovery {
+  port: number;
+  token: string;
+  pid: number;
+  updatedAt: number;
+}
+
+export interface BridgeServerSummary {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  username: string;
+  authType: 'password' | 'privateKey';
+}
+
+export interface ListSshServersBridgeResponse {
+  servers: BridgeServerSummary[];
+}
+
+export interface RunRemoteCommandBridgeRequest {
+  serverId?: string;
+  command: string;
+  cwd?: string;
+  timeoutMs?: number;
+  maxOutputBytes?: number;
+}
+
+export interface BridgeErrorResponse {
+  error: string;
+}
