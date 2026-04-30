@@ -203,6 +203,15 @@ The main value is local editing for remote files. AT Terminal downloads a remote
 
 ### Features
 
+#### Agent Tools
+
+AT Terminal contributes VS Code language model tools so supported VS Code agents can inspect configured SSH targets and run non-interactive remote commands.
+
+- `list_ssh_servers` lists configured server ids and connection metadata without exposing credentials.
+- `run_remote_command` runs a bounded command through SSH and returns stdout, stderr, exit code, timeout, duration, and truncation metadata.
+
+Every remote command asks for confirmation before execution. Use `serverId: "active"` to target the connected active SSH terminal, or pass a configured server id from `list_ssh_servers`.
+
 #### Local Editing For Remote Files
 
 Use `SFTP: Edit` from the `SFTP Files` view to open a remote file in the editor. AT Terminal downloads the file into a managed local edit session, detects the language from the file name, and uploads changes when you save.

@@ -56,8 +56,9 @@ class RunRemoteCommandTool implements vscode.LanguageModelTool<RunRemoteCommandI
     }
 
     const server = await this.resolveServer(input.serverId);
+    const warning = isObviouslyDestructive(command) ? '\n\nWarning: this command appears destructive.' : '';
     const answer = await vscode.window.showWarningMessage(
-      `Run remote command on ${server.label} (${server.host})?\n\n${command}`,
+      `Run remote command on ${server.label} (${server.host})?\n\n${command}${warning}`,
       { modal: true },
       'Run Command'
     );
@@ -101,4 +102,8 @@ function jsonToolResult(value: unknown): vscode.LanguageModelToolResult {
   return new vscode.LanguageModelToolResult([
     new vscode.LanguageModelTextPart(JSON.stringify(value, null, 2))
   ]);
+}
+
+function isObviouslyDestructive(command: string): boolean {
+  return /\b(rm\s+-[^\n]*r|mkfs|shutdown|reboot|poweroff|dd\s+if=)/i.test(command);
 }

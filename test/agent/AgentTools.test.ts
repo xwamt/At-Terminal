@@ -208,4 +208,38 @@ describe('registerAgentTools', () => {
       })
     ).rejects.toThrow('Remote command was cancelled.');
   });
+
+  it('adds a destructive warning for obviously dangerous commands', async () => {
+    registerAgentTools({
+      configManager: { listServers: async () => [server()], getServer: async () => server() } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: {
+        execute: vi.fn(async () => ({
+          serverId: 'server-1',
+          serverLabel: 'Production',
+          host: 'server-1.example.com',
+          command: 'rm -rf /var/www/app',
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          durationMs: 5,
+          timedOut: false,
+          truncated: false
+        }))
+      } as never
+    });
+
+    await registeredTool('run_remote_command').invoke({
+      input: {
+        serverId: 'server-1',
+        command: 'rm -rf /var/www/app'
+      }
+    });
+
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+      'Run remote command on Production (server-1.example.com)?\n\nrm -rf /var/www/app\n\nWarning: this command appears destructive.',
+      { modal: true },
+      'Run Command'
+    );
+  });
 });
