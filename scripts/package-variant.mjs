@@ -21,6 +21,7 @@ if (variant === 'base') {
   await rm(join(stage, 'dist', 'mcp-server.js.map'), { force: true });
 }
 await cp(join(root, 'media'), join(stage, 'media'), { recursive: true });
+await cp(join(root, 'docs', 'images'), join(stage, 'docs', 'images'), { recursive: true });
 await cp(join(root, 'webview'), join(stage, 'webview'), { recursive: true });
 await cp(join(root, '.vscodeignore'), join(stage, '.vscodeignore'));
 await writeFile(join(stage, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
@@ -46,19 +47,13 @@ const result = spawnSync(
         '@vscode/vsce',
         'package',
         '--allow-missing-repository',
-        '--baseContentUrl',
-        'https://example.com/at-terminal',
-        '--baseImagesUrl',
-        'https://example.com/at-terminal'
+        '--no-rewrite-relative-links'
       ]
     : [
         '@vscode/vsce',
         'package',
         '--allow-missing-repository',
-        '--baseContentUrl',
-        'https://example.com/at-terminal',
-        '--baseImagesUrl',
-        'https://example.com/at-terminal'
+        '--no-rewrite-relative-links'
       ],
   { cwd: stage, stdio: 'inherit' }
 );
