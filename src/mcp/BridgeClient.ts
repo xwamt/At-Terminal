@@ -3,6 +3,7 @@ import { readBridgeDiscovery } from './BridgeDiscovery';
 import {
   BRIDGE_HOST,
   BRIDGE_TOKEN_HEADER,
+  type GetTerminalContextBridgeResponse,
   type ListSshServersBridgeResponse,
   type RunRemoteCommandBridgeRequest
 } from './BridgeProtocol';
@@ -32,6 +33,10 @@ export class BridgeClient {
 
   async listServers(): Promise<ListSshServersBridgeResponse> {
     return this.call<ListSshServersBridgeResponse>('/tools/list_ssh_servers', {});
+  }
+
+  async getTerminalContext(): Promise<GetTerminalContextBridgeResponse> {
+    return this.call<GetTerminalContextBridgeResponse>('/tools/get_terminal_context', {});
   }
 
   async runRemoteCommand(input: RunRemoteCommandBridgeRequest): Promise<unknown> {

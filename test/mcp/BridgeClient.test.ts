@@ -64,6 +64,20 @@ describe('BridgeClient', () => {
     });
   });
 
+  it('calls terminal context bridge endpoint', async () => {
+    const home = await tempHome();
+    await writeBridgeDiscovery(home, { port: 12345, token: 'secret', pid: 1, updatedAt: 1 });
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ connectedTerminals: [], knownTerminals: [] })
+    }));
+    const client = new BridgeClient({ home, fetch: fetch as never });
+
+    await expect(client.getTerminalContext()).resolves.toEqual({ connectedTerminals: [], knownTerminals: [] });
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:12345/tools/get_terminal_context', expect.any(Object));
+  });
+
   it('surfaces bridge error responses', async () => {
     const home = await tempHome();
     await writeBridgeDiscovery(home, { port: 12345, token: 'secret', pid: 1, updatedAt: 1 });

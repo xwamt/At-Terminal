@@ -24,6 +24,16 @@ server.registerTool(
 );
 
 server.registerTool(
+  'get_terminal_context',
+  {
+    title: 'Get Terminal Context',
+    description: 'Return focused, default connected, connected, and known AT Terminal SSH terminal contexts.',
+    inputSchema: {}
+  },
+  async () => textResult(await bridge.getTerminalContext())
+);
+
+server.registerTool(
   'run_remote_command',
   {
     title: 'Run Remote SSH Command',

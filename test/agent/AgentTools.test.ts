@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { AgentToolService } from '../../src/agent/AgentToolService';
 import { registerAgentTools } from '../../src/agent/AgentTools';
 import type { RemoteCommandExecutor } from '../../src/agent/RemoteCommandExecutor';
 import type { ServerConfig } from '../../src/config/schema';
@@ -41,6 +42,10 @@ function registeredTool(name: string): ToolFixture {
   return tool;
 }
 
+function registerTestAgentTools(dependencies: ConstructorParameters<typeof AgentToolService>[0]): void {
+  registerAgentTools(new AgentToolService(dependencies));
+}
+
 function text(result: unknown): string {
   const toolResult = result as { content: Array<{ value: string }> };
   return toolResult.content[0].value;
@@ -53,18 +58,19 @@ beforeEach(() => {
 
 describe('registerAgentTools', () => {
   it('registers list and run tools', () => {
-    registerAgentTools({
+    registerTestAgentTools({
       configManager: { listServers: async () => [] } as never,
       terminalContext: new TerminalContextRegistry(),
       executor: { execute: vi.fn() } as never
     });
 
     expect(lmFixture().__getRegisteredTool('list_ssh_servers')).toBeDefined();
+    expect(lmFixture().__getRegisteredTool('get_terminal_context')).toBeDefined();
     expect(lmFixture().__getRegisteredTool('run_remote_command')).toBeDefined();
   });
 
   it('lists servers without exposing credentials', async () => {
-    registerAgentTools({
+    registerTestAgentTools({
       configManager: { listServers: async () => [server()] } as never,
       terminalContext: new TerminalContextRegistry(),
       executor: { execute: vi.fn() } as never
@@ -88,6 +94,19 @@ describe('registerAgentTools', () => {
     });
   });
 
+  it('registers get_terminal_context and returns service JSON', async () => {
+    const service = {
+      listServers: vi.fn(),
+      getTerminalContext: vi.fn(async () => ({ connectedTerminals: [], knownTerminals: [] })),
+      runRemoteCommand: vi.fn()
+    };
+    registerAgentTools(service as never);
+
+    const result = await registeredTool('get_terminal_context').invoke({ input: {} });
+
+    expect(JSON.parse(text(result))).toEqual({ connectedTerminals: [], knownTerminals: [] });
+  });
+
   it('runs a command against an explicit server after user confirmation', async () => {
     const execute = vi.fn(async () => ({
       serverId: 'server-1',
@@ -101,7 +120,7 @@ describe('registerAgentTools', () => {
       timedOut: false,
       truncated: false
     }));
-    registerAgentTools({
+    registerTestAgentTools({
       configManager: {
         listServers: async () => [server()],
         getServer: async () => server()
@@ -153,7 +172,7 @@ describe('registerAgentTools', () => {
       truncated: false
     }));
 
-    registerAgentTools({
+    registerTestAgentTools({
       configManager: { listServers: async () => [], getServer: async () => undefined } as never,
       terminalContext: registry,
       executor: { execute } as unknown as RemoteCommandExecutor
@@ -201,7 +220,7 @@ describe('registerAgentTools', () => {
       truncated: false
     }));
 
-    registerAgentTools({
+    registerTestAgentTools({
       configManager: { listServers: async () => [], getServer: async () => undefined } as never,
       terminalContext: registry,
       executor: { execute } as unknown as RemoteCommandExecutor
@@ -223,7 +242,7 @@ describe('registerAgentTools', () => {
   });
 
   it('throws when no server can be resolved', async () => {
-    registerAgentTools({
+    registerTestAgentTools({
       configManager: { listServers: async () => [], getServer: async () => undefined } as never,
       terminalContext: new TerminalContextRegistry(),
       executor: { execute: vi.fn() } as never
@@ -241,7 +260,7 @@ describe('registerAgentTools', () => {
 
   it('throws when the user cancels command confirmation', async () => {
     vi.mocked(vscode.window.showWarningMessage).mockResolvedValueOnce(undefined);
-    registerAgentTools({
+    registerTestAgentTools({
       configManager: { listServers: async () => [server()], getServer: async () => server() } as never,
       terminalContext: new TerminalContextRegistry(),
       executor: { execute: vi.fn() } as never
@@ -258,7 +277,7 @@ describe('registerAgentTools', () => {
   });
 
   it('adds a destructive warning for obviously dangerous commands', async () => {
-    registerAgentTools({
+    registerTestAgentTools({
       configManager: { listServers: async () => [server()], getServer: async () => server() } as never,
       terminalContext: new TerminalContextRegistry(),
       executor: {

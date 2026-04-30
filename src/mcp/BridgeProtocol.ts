@@ -1,3 +1,5 @@
+import type { TerminalContextSnapshot } from '../terminal/TerminalContext';
+
 export const BRIDGE_HOST = '127.0.0.1';
 export const BRIDGE_TOKEN_HEADER = 'x-at-terminal-token';
 
@@ -20,6 +22,8 @@ export interface BridgeServerSummary {
 export interface ListSshServersBridgeResponse {
   servers: BridgeServerSummary[];
 }
+
+export type GetTerminalContextBridgeResponse = TerminalContextSnapshot;
 
 export interface RunRemoteCommandBridgeRequest {
   serverId?: string;

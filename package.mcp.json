@@ -15,6 +15,7 @@
     "onView:sshManager.servers",
     "onView:sshManager.sftpFiles",
     "onLanguageModelTool:list_ssh_servers",
+    "onLanguageModelTool:get_terminal_context",
     "onLanguageModelTool:run_remote_command"
   ],
   "main": "./dist/extension.js",
@@ -32,6 +33,23 @@
         "displayName": "List SSH Servers",
         "userDescription": "List AT Terminal configured SSH servers.",
         "modelDescription": "List configured SSH servers from AT Terminal without exposing passwords or private keys.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "get_terminal_context",
+        "tags": [
+          "ssh",
+          "terminal",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "get_terminal_context",
+        "displayName": "Get Terminal Context",
+        "userDescription": "Show focused and default AT Terminal SSH terminal context.",
+        "modelDescription": "Return focusedTerminal, defaultConnectedTerminal, connectedTerminals, and knownTerminals for AT Terminal SSH sessions without exposing credentials.",
         "inputSchema": {
           "type": "object",
           "properties": {}

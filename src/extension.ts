@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { AgentToolService } from './agent/AgentToolService';
 import { registerAgentTools } from './agent/AgentTools';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
 import { MCP_ENABLED } from './buildFlags';
@@ -93,16 +94,13 @@ export function activate(context: vscode.ExtensionContext): void {
   let agentToolDisposables: vscode.Disposable[] = [];
   let bridgeServer: BridgeServer | undefined;
   if (MCP_ENABLED) {
-    agentToolDisposables = registerAgentTools({
+    const agentToolService = new AgentToolService({
       configManager,
       terminalContext,
       executor: remoteCommandExecutor
     });
-    bridgeServer = new BridgeServer({
-      configManager,
-      terminalContext,
-      executor: remoteCommandExecutor
-    });
+    agentToolDisposables = registerAgentTools(agentToolService);
+    bridgeServer = new BridgeServer(agentToolService);
     void bridgeServer.start().catch((error) => {
       void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
     });

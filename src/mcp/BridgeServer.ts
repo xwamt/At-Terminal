@@ -1,24 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
-import * as vscode from 'vscode';
-import type { RemoteCommandExecutor } from '../agent/RemoteCommandExecutor';
-import type { ConfigManager } from '../config/ConfigManager';
-import type { ServerConfig } from '../config/schema';
-import type { TerminalContextRegistry } from '../terminal/TerminalContext';
+import type { AgentToolService } from '../agent/AgentToolService';
 import { formatError } from '../utils/errors';
 import { removeBridgeDiscovery, writeBridgeDiscovery } from './BridgeDiscovery';
 import { BRIDGE_HOST, BRIDGE_TOKEN_HEADER, type RunRemoteCommandBridgeRequest } from './BridgeProtocol';
 
-export interface BridgeServerDependencies {
-  configManager: ConfigManager;
-  terminalContext: TerminalContextRegistry;
-  executor: RemoteCommandExecutor;
-}
-
-export interface BridgeHandlerDependencies extends BridgeServerDependencies {
+export interface BridgeHandlerDependencies {
+  service: AgentToolService;
   token: string;
-  confirmRun(server: ServerConfig, command: string): Promise<boolean>;
 }
 
 export interface BridgeRequest {
@@ -38,7 +28,7 @@ export class BridgeServer {
   private token = '';
 
   constructor(
-    private readonly dependencies: BridgeServerDependencies,
+    private readonly service: AgentToolService,
     private readonly home = homedir()
   ) {}
 
@@ -48,9 +38,8 @@ export class BridgeServer {
     }
     this.token = randomBytes(32).toString('hex');
     const handler = createBridgeRequestHandler({
-      ...this.dependencies,
-      token: this.token,
-      confirmRun: confirmRemoteCommand
+      service: this.service,
+      token: this.token
     });
     this.server = createServer((request, response) => {
       void handleNodeRequest(handler, request, response);
@@ -95,17 +84,10 @@ export function createBridgeRequestHandler(dependencies: BridgeHandlerDependenci
         return json(405, { error: 'Method not allowed.' });
       }
       if (request.path === '/tools/list_ssh_servers') {
-        const servers = await dependencies.configManager.listServers();
-        return json(200, {
-          servers: servers.map((server) => ({
-            id: server.id,
-            label: server.label,
-            host: server.host,
-            port: server.port,
-            username: server.username,
-            authType: server.authType
-          }))
-        });
+        return json(200, await dependencies.service.listServers());
+      }
+      if (request.path === '/tools/get_terminal_context') {
+        return json(200, await dependencies.service.getTerminalContext());
       }
       if (request.path === '/tools/run_remote_command') {
         const input = parseBody<RunRemoteCommandBridgeRequest>(request.body);
@@ -113,60 +95,20 @@ export function createBridgeRequestHandler(dependencies: BridgeHandlerDependenci
         if (!command) {
           return json(400, { error: 'Remote command cannot be empty.' });
         }
-        const server = await resolveServer(dependencies, input.serverId);
-        if (!(await dependencies.confirmRun(server, command))) {
-          return json(400, { error: 'Remote command was cancelled.' });
+        try {
+          return json(200, await dependencies.service.runRemoteCommand({ ...input, command }));
+        } catch (error) {
+          if (error instanceof Error && error.message === 'Remote command was cancelled.') {
+            return json(400, { error: error.message });
+          }
+          throw error;
         }
-        const result = await dependencies.executor.execute(server, {
-          command,
-          cwd: input.cwd,
-          timeoutMs: input.timeoutMs,
-          maxOutputBytes: input.maxOutputBytes
-        });
-        return json(200, result);
       }
       return json(404, { error: 'Unknown AT Terminal MCP bridge endpoint.' });
     } catch (error) {
       return json(500, { error: error instanceof Error ? error.message : String(error) });
     }
   };
-}
-
-async function resolveServer(
-  dependencies: BridgeHandlerDependencies,
-  serverId: string | undefined
-): Promise<ServerConfig> {
-  if (serverId === 'active' || !serverId) {
-    const connected = dependencies.terminalContext.getConnectedTerminal();
-    if (connected) {
-      return connected.server;
-    }
-    if (serverId === 'active') {
-      throw new Error('No connected active SSH terminal is available.');
-    }
-  }
-  if (!serverId) {
-    throw new Error('serverId is required when there is no connected active SSH terminal.');
-  }
-  const server = await dependencies.configManager.getServer(serverId);
-  if (!server) {
-    throw new Error(`SSH server "${serverId}" was not found.`);
-  }
-  return server;
-}
-
-async function confirmRemoteCommand(server: ServerConfig, command: string): Promise<boolean> {
-  const warning = isObviouslyDestructive(command) ? '\n\nWarning: this command appears destructive.' : '';
-  const answer = await vscode.window.showWarningMessage(
-    `Run remote command on ${server.label} (${server.host})?\n\n${command}${warning}`,
-    { modal: true },
-    'Run Command'
-  );
-  return answer === 'Run Command';
-}
-
-function isObviouslyDestructive(command: string): boolean {
-  return /\b(rm\s+-[^\n]*r|mkfs|shutdown|reboot|poweroff|dd\s+if=)/i.test(command);
 }
 
 function parseBody<T>(body: string | undefined): T {

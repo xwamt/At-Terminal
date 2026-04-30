@@ -6,6 +6,7 @@ const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
 describe('agent tool package contributions', () => {
   it('activates and contributes SSH language model tools', () => {
     expect(manifest.activationEvents).toContain('onLanguageModelTool:list_ssh_servers');
+    expect(manifest.activationEvents).toContain('onLanguageModelTool:get_terminal_context');
     expect(manifest.activationEvents).toContain('onLanguageModelTool:run_remote_command');
     expect(manifest.contributes.languageModelTools).toEqual(
       expect.arrayContaining([
@@ -14,6 +15,13 @@ describe('agent tool package contributions', () => {
           tags: ['ssh', 'server', 'read-only'],
           canBeReferencedInPrompt: true,
           toolReferenceName: 'list_ssh_servers',
+          userDescription: expect.any(String)
+        }),
+        expect.objectContaining({
+          name: 'get_terminal_context',
+          tags: ['ssh', 'terminal', 'read-only'],
+          canBeReferencedInPrompt: true,
+          toolReferenceName: 'get_terminal_context',
           userDescription: expect.any(String)
         }),
         expect.objectContaining({
