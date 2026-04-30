@@ -190,6 +190,44 @@ export class SftpSession {
     });
   }
 
+  async readFile(path: string, maxBytes: number): Promise<Buffer> {
+    const sftp = this.requireSftp();
+    const handle = await new Promise<Buffer>((resolve, reject) => {
+      sftp.open(path, 'r', (error, fileHandle) => (error ? reject(error) : resolve(fileHandle)));
+    });
+    try {
+      const chunks: Buffer[] = [];
+      let offset = 0;
+      while (offset < maxBytes) {
+        const length = Math.min(32_768, maxBytes - offset);
+        const buffer = Buffer.alloc(length);
+        const bytesRead = await new Promise<number>((resolve, reject) => {
+          sftp.read(handle, buffer, 0, length, offset, (error, read) => (error ? reject(error) : resolve(read)));
+        });
+        if (bytesRead <= 0) {
+          break;
+        }
+        chunks.push(buffer.subarray(0, bytesRead));
+        offset += bytesRead;
+      }
+      return Buffer.concat(chunks);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        sftp.close(handle, (error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }
+
+  async writeFile(path: string, content: Buffer): Promise<void> {
+    const sftp = this.requireSftp();
+    await new Promise<void>((resolve, reject) => {
+      const stream = sftp.createWriteStream(path, { encoding: 'binary' });
+      stream.once('error', reject);
+      stream.once('finish', () => resolve());
+      stream.end(content);
+    });
+  }
+
   dispose(): void {
     this.sftp = undefined;
     this.client?.end();

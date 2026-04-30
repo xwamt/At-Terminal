@@ -8,6 +8,8 @@ export interface SftpSessionLike {
   connect(): Promise<void>;
   realpath(path?: string): Promise<string>;
   listDirectory(path: string): Promise<SftpEntry[]>;
+  readFile(path: string, maxBytes: number): Promise<Buffer>;
+  writeFile(path: string, content: Buffer): Promise<void>;
   mkdir(path: string): Promise<void>;
   rename(oldPath: string, newPath: string): Promise<void>;
   deleteFile(path: string): Promise<void>;
