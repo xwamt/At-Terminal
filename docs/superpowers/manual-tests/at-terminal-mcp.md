@@ -51,3 +51,6 @@ Adjust the path to the actual installed extension directory.
 
 7. Run `AT Terminal: Install MCP Config`.
    - Expected: `.continue/mcpServers/at-terminal.yaml` is created or replaced.
+   - Expected: `~/.kiro/settings/mcp.json` is created or updated.
+   - Expected: the `AT Terminal` MCP server path points at the current installed `at-terminal-mcp` extension directory, not an old `.vscode/extensions/local.at-terminal-0.2.9` path.
+   - Expected: `autoApprove` includes `get_terminal_context` and the SFTP tools.

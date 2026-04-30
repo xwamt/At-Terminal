@@ -13,5 +13,6 @@ describe('MCP documentation', () => {
     expect(readme).toContain('get_terminal_context');
     expect(readme).toContain('sftp_read_file');
     expect(readme).toContain('AT Terminal: Install MCP Config');
+    expect(readme).toContain('~/.kiro/settings/mcp.json');
   });
 });

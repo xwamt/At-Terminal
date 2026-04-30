@@ -7,7 +7,7 @@ import { SftpWriteAuthorizer } from './agent/SftpWriteAuthorizer';
 import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import { BridgeServer } from './mcp/BridgeServer';
-import { installContinueMcpConfig } from './mcp/McpConfigInstaller';
+import { installContinueMcpConfig, installKiroMcpConfig } from './mcp/McpConfigInstaller';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
@@ -123,8 +123,11 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       const mcpServerPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'mcp-server.js').fsPath;
-      const target = await installContinueMcpConfig({ workspaceFolder, mcpServerPath });
-      await vscode.window.showInformationMessage(`AT Terminal MCP config installed: ${target}`);
+      const continueTarget = await installContinueMcpConfig({ workspaceFolder, mcpServerPath });
+      const kiroTarget = await installKiroMcpConfig({ mcpServerPath });
+      await vscode.window.showInformationMessage(
+        `AT Terminal MCP config installed: ${continueTarget}; ${kiroTarget}`
+      );
     });
   }
 

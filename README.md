@@ -238,7 +238,7 @@ mcpServers:
       - C:\Users\alan\Desktop\ssh-plugins\.worktrees\codex-agent-remote-command-tools\dist\mcp-server.js
 ```
 
-Run `AT Terminal: Install MCP Config` from the Command Palette to create `.continue/mcpServers/at-terminal.yaml` in the current workspace.
+Run `AT Terminal: Install MCP Config` from the Command Palette to create `.continue/mcpServers/at-terminal.yaml` in the current workspace and update Kiro's `~/.kiro/settings/mcp.json` with the currently installed AT Terminal MCP server path.
 
 For local development, point the MCP config at the unpacked `dist/mcp-server.js` path above. For installed VSIX testing, point it at the installed extension directory under `%USERPROFILE%\.vscode\extensions\local.at-terminal-mcp-0.2.9\dist\mcp-server.js`. Keep VS Code with AT Terminal running so the MCP bridge discovery file is available, then use Continue Agent mode and ask for `list_ssh_servers`, `get_terminal_context`, `run_remote_command`, or `sftp_read_file`.
 
