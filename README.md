@@ -64,13 +64,13 @@ npm run package:mcp
 
 生成：
 
-- `at-terminal-0.2.12.vsix`: 基础版，不含 MCP 工具。
-- `at-terminal-mcp-0.2.12.vsix`: MCP 版，包含 Agent 工具和 stdio MCP server。
+- `at-terminal-0.2.13.vsix`: 基础版，不含 MCP 工具。
+- `at-terminal-mcp-0.2.13.vsix`: MCP 版，包含 Agent 工具和 stdio MCP server。
 
 安装 MCP 版：
 
 ```powershell
-code --install-extension .\at-terminal-mcp-0.2.12.vsix
+code --install-extension .\at-terminal-mcp-0.2.13.vsix
 ```
 
 Kiro、Cursor 等 IDE 可以通过各自的扩展安装入口安装 VSIX。
@@ -104,7 +104,7 @@ Kiro 支持：
     "AT Terminal": {
       "command": "node",
       "args": [
-        "C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js"
+        "C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js"
       ],
       "autoApprove": [
         "list_ssh_servers",
@@ -138,7 +138,7 @@ Use sftp_list_directory to list /tmp on the connected AT Terminal server.
 Use sftp_read_file to read /etc/os-release on the connected AT Terminal server.
 ```
 
-如果出现 `MODULE_NOT_FOUND`，检查 `args[0]` 是否指向 Kiro 的扩展安装目录，例如 `.kiro/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js`，不要误指向 VS Code 的 `.vscode/extensions`。
+如果出现 `MODULE_NOT_FOUND`，检查 `args[0]` 是否指向 Kiro 的扩展安装目录，例如 `.kiro/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js`，不要误指向 VS Code 的 `.vscode/extensions`。
 
 ### Cursor 配置
 
@@ -155,7 +155,7 @@ Cursor 支持：
     "AT Terminal": {
       "command": "node",
       "args": [
-        "C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js"
+        "C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js"
       ]
     }
   }
@@ -170,7 +170,7 @@ Cursor 支持：
     "AT Terminal": {
       "command": "node",
       "args": [
-        "${userHome}/.cursor/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js"
+        "${userHome}/.cursor/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js"
       ]
     }
   }
@@ -191,7 +191,7 @@ mcpServers:
   - name: AT Terminal
     command: node
     args:
-      - C:/Users/alan/.vscode/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js
+      - C:/Users/alan/.vscode/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js
 ```
 
 仓库内示例文件：
@@ -202,7 +202,7 @@ docs/mcp/continue-at-terminal-mcp.yaml
 
 ### GitHub Copilot Chat
 
-在 VS Code 中安装 `at-terminal-mcp-0.2.12.vsix` 后，Copilot Chat Agent mode 可以发现 language model tools。
+在 VS Code 中安装 `at-terminal-mcp-0.2.13.vsix` 后，Copilot Chat Agent mode 可以发现 language model tools。
 
 示例提示词：
 
@@ -311,13 +311,13 @@ npm run package:mcp
 
 Generated files:
 
-- `at-terminal-0.2.12.vsix`: base extension without MCP tools.
-- `at-terminal-mcp-0.2.12.vsix`: MCP-enabled extension with tools and stdio MCP server.
+- `at-terminal-0.2.13.vsix`: base extension without MCP tools.
+- `at-terminal-mcp-0.2.13.vsix`: MCP-enabled extension with tools and stdio MCP server.
 
 Install the MCP build:
 
 ```powershell
-code --install-extension .\at-terminal-mcp-0.2.12.vsix
+code --install-extension .\at-terminal-mcp-0.2.13.vsix
 ```
 
 For Kiro and Cursor, install the VSIX through the IDE's extension UI or compatible command-line installer.
@@ -351,7 +351,7 @@ Example:
     "AT Terminal": {
       "command": "node",
       "args": [
-        "C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js"
+        "C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js"
       ],
       "autoApprove": [
         "list_ssh_servers",
@@ -382,7 +382,7 @@ Example:
     "AT Terminal": {
       "command": "node",
       "args": [
-        "C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js"
+        "C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js"
       ]
     }
   }
@@ -397,7 +397,7 @@ Project-local example with variables:
     "AT Terminal": {
       "command": "node",
       "args": [
-        "${userHome}/.cursor/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js"
+        "${userHome}/.cursor/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js"
       ]
     }
   }
@@ -418,12 +418,12 @@ mcpServers:
   - name: AT Terminal
     command: node
     args:
-      - C:/Users/alan/.vscode/extensions/local.at-terminal-mcp-0.2.12/dist/mcp-server.js
+      - C:/Users/alan/.vscode/extensions/local.at-terminal-mcp-0.2.13/dist/mcp-server.js
 ```
 
 ### GitHub Copilot Chat
 
-After installing `at-terminal-mcp-0.2.12.vsix` in VS Code, Copilot Chat Agent mode can discover the contributed language model tools.
+After installing `at-terminal-mcp-0.2.13.vsix` in VS Code, Copilot Chat Agent mode can discover the contributed language model tools.
 
 Example prompts:
 

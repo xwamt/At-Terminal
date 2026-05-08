@@ -14,8 +14,10 @@ function keyEvent(key: string): KeyboardEvent {
     ctrlKey: true,
     altKey: false,
     metaKey: false,
-    shiftKey: false
-  } as KeyboardEvent;
+    shiftKey: false,
+    preventDefault: vi.fn(),
+    stopImmediatePropagation: vi.fn()
+  } as unknown as KeyboardEvent;
 }
 
 class FakeEventTarget {
@@ -56,7 +58,8 @@ describe('terminal clipboard shortcuts', () => {
         hasSelection: () => true,
         getSelection: () => 'selected text',
         clearSelection: vi.fn(),
-        focus: vi.fn()
+        focus: vi.fn(),
+        paste: vi.fn()
       },
       { clipboard, sendInput }
     );
@@ -76,7 +79,8 @@ describe('terminal clipboard shortcuts', () => {
         hasSelection: () => false,
         getSelection: () => '',
         clearSelection: vi.fn(),
-        focus: vi.fn()
+        focus: vi.fn(),
+        paste: vi.fn()
       },
       {
         clipboard: { readText: vi.fn(), writeText: vi.fn() },
@@ -92,16 +96,19 @@ describe('terminal clipboard shortcuts', () => {
     expect(sendInput).toHaveBeenCalledWith('\x03');
   });
 
-  it('does not send input from Ctrl+V keydown before the browser paste event arrives', async () => {
+  it('pastes Ctrl+V through the terminal paste API when the xterm input is focused', async () => {
     const sendInput = vi.fn();
     const readText = vi.fn(async () => 'pasted text');
+    const event = keyEvent('v');
+    const terminal = {
+      hasSelection: () => false,
+      getSelection: () => '',
+      clearSelection: vi.fn(),
+      focus: vi.fn(),
+      paste: vi.fn()
+    };
     const handler = createTerminalKeyboardHandler(
-      {
-        hasSelection: () => false,
-        getSelection: () => '',
-        clearSelection: vi.fn(),
-        focus: vi.fn()
-      },
+      terminal,
       {
         clipboard: {
           readText,
@@ -111,10 +118,15 @@ describe('terminal clipboard shortcuts', () => {
       }
     );
 
-    expect(handler(keyEvent('v'))).toBe(true);
+    expect(handler(event)).toBe(false);
+    await Promise.resolve();
     await Promise.resolve();
 
-    expect(readText).not.toHaveBeenCalled();
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+    expect(readText).toHaveBeenCalledOnce();
+    expect(terminal.paste).toHaveBeenCalledWith('pasted text');
+    expect(terminal.focus).toHaveBeenCalledOnce();
     expect(sendInput).not.toHaveBeenCalled();
   });
 

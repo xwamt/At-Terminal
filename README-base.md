@@ -140,7 +140,7 @@ npm run package:base
 生成的基础版 VSIX：
 
 ```text
-at-terminal-0.2.12.vsix
+at-terminal-0.2.13.vsix
 ```
 
 ## English
@@ -232,5 +232,5 @@ npm run package:base
 Generated base VSIX:
 
 ```text
-at-terminal-0.2.12.vsix
+at-terminal-0.2.13.vsix
 ```

@@ -7,6 +7,7 @@ interface ClipboardTerminal {
   hasSelection(): boolean;
   getSelection(): string;
   clearSelection(): void;
+  paste(data: string): void;
   focus(): void;
 }
 
@@ -61,6 +62,20 @@ export function createTerminalKeyboardHandler(
         lastCtrlC = pressedAt;
       }
       terminal.focus();
+      return false;
+    }
+
+    if (key === 'v') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void options.clipboard
+        .readText()
+        .then((text) => {
+          if (text) {
+            terminal.paste(text);
+          }
+        })
+        .finally(() => terminal.focus());
       return false;
     }
 
