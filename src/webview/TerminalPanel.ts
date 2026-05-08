@@ -223,7 +223,9 @@ export class TerminalPanel {
     }
     this.idleDisconnectTimer = setTimeout(() => {
       this.disconnect();
-      this.postStatus(`Disconnected after ${this.settings.idleDisconnectMinutes} minute(s) of inactivity`);
+      const message = `AT Terminal disconnected after ${this.settings.idleDisconnectMinutes} minute(s) of inactivity.`;
+      this.postStatus(message);
+      void vscode.window.showWarningMessage(message);
     }, this.settings.idleDisconnectMinutes * 60_000);
   }
 
@@ -279,11 +281,15 @@ export function createTerminalViewColumn(): vscode.ViewColumn {
 
 export function renderTerminalBody(settings: TerminalSettings): string {
   return `<main class="terminal-shell">
-  <header class="terminal-status terminal-status--connecting" id="status">
+  <header class="terminal-status terminal-status--connecting" id="status" role="status" aria-live="polite">
     <span class="terminal-status-dot"></span>
     <span class="terminal-status-text">Starting...</span>
     <span class="terminal-host">xterm.js</span>
   </header>
+  <aside class="terminal-disconnect-notice" id="disconnectNotice" role="status" aria-live="polite" hidden>
+    <strong>Terminal disconnected</strong>
+    <span id="disconnectReason">Connection closed.</span>
+  </aside>
   <section id="terminal" class="terminal-surface" data-scrollback="${settings.scrollback}" data-font-size="${settings.fontSize}" data-font-family="${escapeAttr(settings.fontFamily)}" data-semantic-highlight="${settings.semanticHighlight}"></section>
 </main>`;
 }

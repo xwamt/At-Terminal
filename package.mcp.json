@@ -2,7 +2,7 @@
   "name": "at-terminal-mcp",
   "displayName": "AT Terminal MCP",
   "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
-  "version": "0.2.9",
+  "version": "0.2.11",
   "publisher": "local",
   "icon": "media/at-terminal-icon.png",
   "engines": {

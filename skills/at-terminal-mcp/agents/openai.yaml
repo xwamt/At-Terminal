@@ -1,0 +1,4 @@
+interface:
+  display_name: "AT Terminal MCP"
+  short_description: "Use AT Terminal MCP SSH and SFTP tools safely."
+  default_prompt: "Use $at-terminal-mcp to inspect my connected SSH host and read remote files through AT Terminal MCP."

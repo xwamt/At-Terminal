@@ -19,7 +19,7 @@ mcpServers:
   - name: AT Terminal
     command: node
     args:
-      - C:/Users/alan/.vscode/extensions/local.at-terminal-0.2.9/dist/mcp-server.js
+      - C:/Users/alan/.vscode/extensions/local.at-terminal-0.2.11/dist/mcp-server.js
 ```
 
 Adjust the path to the actual installed extension directory.

@@ -191,6 +191,9 @@ describe('TerminalPanel rendering helpers', () => {
 
     expect(body).toContain('class="terminal-shell"');
     expect(body).toContain('class="terminal-status terminal-status--connecting"');
+    expect(body).toContain('role="status"');
+    expect(body).toContain('id="disconnectNotice"');
+    expect(body).toContain('class="terminal-disconnect-notice"');
     expect(body).toContain('class="terminal-host"');
   });
 
@@ -274,6 +277,7 @@ describe('TerminalPanel rendering helpers', () => {
   it('disconnects an idle terminal after the configured timeout', async () => {
     try {
       vi.useFakeTimers();
+      vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined);
       vi.spyOn(vscode.workspace, 'getConfiguration').mockReturnValue({
         get: <T>(key: string, defaultValue: T): T => {
           const values: Record<string, unknown> = {
@@ -291,6 +295,9 @@ describe('TerminalPanel rendering helpers', () => {
 
       expect(disposeSession).toHaveBeenCalledTimes(1);
       expect(registry.getActive()?.connected).toBe(false);
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'AT Terminal disconnected after 1 minute(s) of inactivity.'
+      );
     } finally {
       vi.useRealTimers();
     }

@@ -14,5 +14,10 @@ describe('MCP documentation', () => {
     expect(readme).toContain('sftp_read_file');
     expect(readme).toContain('AT Terminal: Install MCP Config');
     expect(readme).toContain('~/.kiro/settings/mcp.json');
+    expect(readme).toContain('### Base Vs MCP Build');
+    expect(readme).toContain('### Agent Skill');
+    expect(readme).toContain('skills/at-terminal-mcp/SKILL.md');
+    expect(readme).toContain('Use `$at-terminal-mcp`');
+    expect(readme).toContain('| Capability | Base `AT Terminal` | `AT Terminal MCP` |');
   });
 });

@@ -1,0 +1,87 @@
+export interface TerminalClipboard {
+  readText(): Promise<string>;
+  writeText(value: string): Promise<void>;
+}
+
+interface ClipboardTerminal {
+  hasSelection(): boolean;
+  getSelection(): string;
+  clearSelection(): void;
+  focus(): void;
+}
+
+interface KeyboardHandlerOptions {
+  clipboard: TerminalClipboard;
+  sendInput(data: string): void;
+  now?: () => number;
+}
+
+interface FocusRecoveryOptions {
+  container: EventTarget;
+  document: EventTarget;
+  setTimeout: (callback: () => void, delay?: number) => unknown;
+}
+
+const INTERRUPT_BYTE = '\x03';
+const DOUBLE_CTRL_C_MS = 1_000;
+
+export function createTerminalKeyboardHandler(
+  terminal: ClipboardTerminal,
+  options: KeyboardHandlerOptions
+): (event: KeyboardEvent) => boolean {
+  const now = options.now ?? Date.now;
+  let lastCtrlC: number | undefined;
+
+  return (event: KeyboardEvent): boolean => {
+    if (event.type !== 'keydown' || !event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+      return true;
+    }
+
+    const key = event.key.toLowerCase();
+    if (key === 'c') {
+      if (terminal.hasSelection()) {
+        void options.clipboard
+          .writeText(terminal.getSelection())
+          .then(() => terminal.clearSelection())
+          .finally(() => terminal.focus());
+        lastCtrlC = undefined;
+        return false;
+      }
+
+      const pressedAt = now();
+      if (lastCtrlC !== undefined && pressedAt - lastCtrlC <= DOUBLE_CTRL_C_MS) {
+        options.sendInput(INTERRUPT_BYTE);
+        lastCtrlC = undefined;
+      } else {
+        lastCtrlC = pressedAt;
+      }
+      terminal.focus();
+      return false;
+    }
+
+    return true;
+  };
+}
+
+export function installTerminalFocusRecovery(
+  terminal: Pick<ClipboardTerminal, 'focus'>,
+  options: FocusRecoveryOptions
+): void {
+  const scheduleFocus = () => {
+    options.setTimeout(() => terminal.focus(), 0);
+  };
+
+  options.container.addEventListener('contextmenu', scheduleFocus);
+  options.document.addEventListener('copy', scheduleFocus);
+  options.document.addEventListener('paste', scheduleFocus);
+}
+
+export function resolveTerminalStatusClass(payload: string): 'connected' | 'disconnected' | 'connecting' {
+  if (payload === 'Connected') {
+    return 'connected';
+  }
+  if (payload.toLowerCase().includes('disconnected')) {
+    return 'disconnected';
+  }
+  return 'connecting';
+}

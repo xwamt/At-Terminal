@@ -3,6 +3,12 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import './index.css';
+import {
+  createTerminalKeyboardHandler,
+  installTerminalFocusRecovery,
+  resolveTerminalStatusClass,
+  type TerminalClipboard
+} from './clipboard';
 import { createTerminalOptions } from './options';
 import { writeTerminalOutputMessage } from './output';
 import { watchTerminalTheme } from './theme';
@@ -15,6 +21,8 @@ declare const acquireVsCodeApi: () => VsCodeApi;
 const vscode = acquireVsCodeApi();
 const container = document.querySelector<HTMLElement>('#terminal');
 const status = document.querySelector<HTMLElement>('#status');
+const disconnectNotice = document.querySelector<HTMLElement>('#disconnectNotice');
+const disconnectReason = document.querySelector<HTMLElement>('#disconnectReason');
 
 if (!container) {
   throw new Error('Missing terminal container');
@@ -39,6 +47,24 @@ watchTerminalTheme(term);
 watchTerminalZebraStripes(term);
 fitAddon.fit();
 
+const clipboard: TerminalClipboard = {
+  readText: () => navigator.clipboard?.readText() ?? Promise.resolve(''),
+  writeText: (value) => navigator.clipboard?.writeText(value) ?? Promise.resolve()
+};
+
+term.attachCustomKeyEventHandler(
+  createTerminalKeyboardHandler(term, {
+    clipboard,
+    sendInput: (data) => vscode.postMessage({ type: 'input', payload: data })
+  })
+);
+
+installTerminalFocusRecovery(term, {
+  container,
+  document,
+  setTimeout: window.setTimeout.bind(window)
+});
+
 term.onData((data) => {
   vscode.postMessage({ type: 'input', payload: data });
 });
@@ -59,9 +85,16 @@ window.addEventListener('message', (event: MessageEvent) => {
     } else {
       status.textContent = message.payload;
     }
-    status.classList.toggle('terminal-status--connected', message.payload === 'Connected');
-    status.classList.toggle('terminal-status--disconnected', message.payload === 'Disconnected');
-    status.classList.toggle('terminal-status--connecting', message.payload !== 'Connected' && message.payload !== 'Disconnected');
+    const statusClass = resolveTerminalStatusClass(message.payload);
+    status.classList.toggle('terminal-status--connected', statusClass === 'connected');
+    status.classList.toggle('terminal-status--disconnected', statusClass === 'disconnected');
+    status.classList.toggle('terminal-status--connecting', statusClass === 'connecting');
+    if (disconnectNotice) {
+      disconnectNotice.hidden = statusClass !== 'disconnected';
+      if (disconnectReason) {
+        disconnectReason.textContent = message.payload;
+      }
+    }
   }
 });
 

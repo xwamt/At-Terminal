@@ -24,7 +24,7 @@ import { activate, deactivate } from '../../src/extension';
 
 function extensionContext(): vscode.ExtensionContext {
   return {
-    extensionUri: vscode.Uri.file('C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.9'),
+    extensionUri: vscode.Uri.file('C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10'),
     globalStorageUri: vscode.Uri.file('C:/tmp/at-terminal-storage'),
     globalState: {
       get: vi.fn((_key: string, defaultValue: unknown) => defaultValue),
@@ -69,7 +69,7 @@ describe('sshManager.installMcpConfig command', () => {
     await registeredCommands.get('sshManager.installMcpConfig')?.();
 
     expect(mocks.installKiroMcpConfig).toHaveBeenCalledWith({
-      mcpServerPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.9/dist/mcp-server.js'
+      mcpServerPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10/dist/mcp-server.js'
     });
     expect(mocks.installContinueMcpConfig).not.toHaveBeenCalled();
     expect(vscode.window.showErrorMessage).not.toHaveBeenCalledWith(

@@ -7,7 +7,7 @@ import { BridgeClient } from './BridgeClient';
 const bridge = new BridgeClient();
 const server = new McpServer({
   name: 'at-terminal',
-  version: '0.2.9'
+  version: '0.2.11'
 });
 
 const sftpTargetSchema = {

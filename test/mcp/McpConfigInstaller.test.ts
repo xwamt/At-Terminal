@@ -12,8 +12,8 @@ import {
 describe('McpConfigInstaller', () => {
   it('builds Continue MCP config with normalized mcp server path', () => {
     expect(
-      buildContinueMcpConfig('C:\\Users\\alan\\.vscode\\extensions\\local.at-terminal-0.2.9\\dist\\mcp-server.js')
-    ).toContain('C:/Users/alan/.vscode/extensions/local.at-terminal-0.2.9/dist/mcp-server.js');
+      buildContinueMcpConfig('C:\\Users\\alan\\.vscode\\extensions\\local.at-terminal-0.2.10\\dist\\mcp-server.js')
+    ).toContain('C:/Users/alan/.vscode/extensions/local.at-terminal-0.2.10/dist/mcp-server.js');
   });
 
   it('creates workspace Continue MCP config', async () => {
@@ -57,7 +57,7 @@ describe('McpConfigInstaller', () => {
           fetch: { command: 'uvx', args: ['mcp-server-fetch'], disabled: true },
           'AT Terminal': {
             command: 'node',
-            args: ['C:/Users/alan/.vscode/extensions/local.at-terminal-0.2.9/dist/mcp-server.js'],
+            args: ['C:/Users/alan/.vscode/extensions/local.at-terminal-0.2.10/dist/mcp-server.js'],
             autoApprove: ['run_remote_command', 'list_ssh_servers']
           }
         }
@@ -67,14 +67,14 @@ describe('McpConfigInstaller', () => {
 
     await installKiroMcpConfig({
       home,
-      mcpServerPath: 'C:\\Users\\alan\\.kiro\\extensions\\local.at-terminal-mcp-0.2.9\\dist\\mcp-server.js'
+      mcpServerPath: 'C:\\Users\\alan\\.kiro\\extensions\\local.at-terminal-mcp-0.2.10\\dist\\mcp-server.js'
     });
 
     const parsed = JSON.parse(await readFile(configPath, 'utf8'));
     expect(parsed.mcpServers.fetch).toMatchObject({ command: 'uvx', disabled: true });
     expect(parsed.mcpServers['AT Terminal']).toEqual({
       command: 'node',
-      args: ['C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.9/dist/mcp-server.js'],
+      args: ['C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10/dist/mcp-server.js'],
       autoApprove: [
         'list_ssh_servers',
         'get_terminal_context',
