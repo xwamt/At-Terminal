@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createTerminalKeyboardHandler,
+  installTerminalClipboardPasteHandler,
   installTerminalFocusRecovery,
   resolveTerminalStatusClass,
   type TerminalClipboard
@@ -18,19 +19,29 @@ function keyEvent(key: string): KeyboardEvent {
 }
 
 class FakeEventTarget {
-  private readonly listeners = new Map<string, Array<() => void>>();
+  private readonly listeners = new Map<string, Array<(event?: unknown) => void>>();
 
-  addEventListener(type: string, listener: () => void): void {
+  addEventListener(type: string, listener: (event?: unknown) => void): void {
     const listeners = this.listeners.get(type) ?? [];
     listeners.push(listener);
     this.listeners.set(type, listeners);
   }
 
-  fire(type: string): void {
+  fire(type: string, event?: unknown): void {
     for (const listener of this.listeners.get(type) ?? []) {
-      listener();
+      listener(event);
     }
   }
+}
+
+function pasteEvent(text: string) {
+  return {
+    clipboardData: {
+      getData: vi.fn((type: string) => (type === 'text/plain' ? text : ''))
+    },
+    preventDefault: vi.fn(),
+    stopImmediatePropagation: vi.fn()
+  };
 }
 
 describe('terminal clipboard shortcuts', () => {
@@ -81,7 +92,7 @@ describe('terminal clipboard shortcuts', () => {
     expect(sendInput).toHaveBeenCalledWith('\x03');
   });
 
-  it('lets xterm handle Ctrl+V paste input so pasted text is sent only once', async () => {
+  it('does not send input from Ctrl+V keydown before the browser paste event arrives', async () => {
     const sendInput = vi.fn();
     const readText = vi.fn(async () => 'pasted text');
     const handler = createTerminalKeyboardHandler(
@@ -106,10 +117,27 @@ describe('terminal clipboard shortcuts', () => {
     expect(readText).not.toHaveBeenCalled();
     expect(sendInput).not.toHaveBeenCalled();
   });
+
+  it('pastes from the browser paste event so focused xterm input still pastes once', () => {
+    const target = new FakeEventTarget();
+    const terminal = {
+      paste: vi.fn(),
+      focus: vi.fn()
+    };
+    const event = pasteEvent('pasted text');
+
+    installTerminalClipboardPasteHandler(terminal, target as never);
+    target.fire('paste', event);
+
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+    expect(terminal.paste).toHaveBeenCalledWith('pasted text');
+    expect(terminal.focus).toHaveBeenCalledOnce();
+  });
 });
 
 describe('terminal focus recovery', () => {
-  it('refocuses xterm after context-menu copy and paste actions', () => {
+  it('refocuses xterm after copy and paste actions without stealing context-menu focus', () => {
     const container = new FakeEventTarget();
     const document = new FakeEventTarget();
     const focus = vi.fn();
@@ -136,7 +164,7 @@ describe('terminal focus recovery', () => {
       timer();
     }
 
-    expect(focus).toHaveBeenCalledTimes(3);
+    expect(focus).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -145,5 +173,9 @@ describe('terminal status classes', () => {
     expect(resolveTerminalStatusClass('AT Terminal disconnected after 1 minute(s) of inactivity.')).toBe(
       'disconnected'
     );
+  });
+
+  it('treats Chinese disconnect messages as disconnected status', () => {
+    expect(resolveTerminalStatusClass('空闲时间超过30分钟，断开连接')).toBe('disconnected');
   });
 });

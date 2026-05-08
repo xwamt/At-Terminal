@@ -144,12 +144,17 @@ export class TerminalPanel {
   }
 
   disconnect(): void {
+    this.disconnectWithStatus('Disconnected', '连接已断开');
+  }
+
+  private disconnectWithStatus(statusMessage: string, terminalNotice: string): void {
     this.connectionGeneration++;
     this.clearIdleDisconnect();
     this.session.dispose();
     this.connected = false;
     this.terminalContext?.markDisconnected(this.terminalId);
-    this.postStatus('Disconnected');
+    this.postStatus(statusMessage);
+    this.postTerminalNotice(terminalNotice);
   }
 
   private bind(): void {
@@ -207,11 +212,16 @@ export class TerminalPanel {
     this.postWebviewMessage({ type: 'status', payload: message });
   }
 
+  private postTerminalNotice(message: string): void {
+    this.postWebviewMessage({ type: 'output', payload: formatTerminalNotice(message) });
+  }
+
   private handleSessionStatus(message: string, generation: number): void {
     if (message === 'Disconnected' && generation === this.connectionGeneration) {
       this.connected = false;
       this.terminalContext?.markDisconnected(this.terminalId);
       this.clearIdleDisconnect();
+      this.postTerminalNotice('连接已断开');
     }
     this.postStatus(message);
   }
@@ -222,9 +232,8 @@ export class TerminalPanel {
       return;
     }
     this.idleDisconnectTimer = setTimeout(() => {
-      this.disconnect();
-      const message = `AT Terminal disconnected after ${this.settings.idleDisconnectMinutes} minute(s) of inactivity.`;
-      this.postStatus(message);
+      const message = `空闲时间超过${this.settings.idleDisconnectMinutes}分钟，断开连接`;
+      this.disconnectWithStatus(message, message);
       void vscode.window.showWarningMessage(message);
     }, this.settings.idleDisconnectMinutes * 60_000);
   }
@@ -286,12 +295,12 @@ export function renderTerminalBody(settings: TerminalSettings): string {
     <span class="terminal-status-text">Starting...</span>
     <span class="terminal-host">xterm.js</span>
   </header>
-  <aside class="terminal-disconnect-notice" id="disconnectNotice" role="status" aria-live="polite" hidden>
-    <strong>Terminal disconnected</strong>
-    <span id="disconnectReason">Connection closed.</span>
-  </aside>
   <section id="terminal" class="terminal-surface" data-scrollback="${settings.scrollback}" data-font-size="${settings.fontSize}" data-font-family="${escapeAttr(settings.fontFamily)}" data-semantic-highlight="${settings.semanticHighlight}"></section>
 </main>`;
+}
+
+export function formatTerminalNotice(message: string): string {
+  return `\r\n\x1b[31m${message}\x1b[0m\r\n`;
 }
 
 function escapeAttr(value: string): string {

@@ -10,6 +10,11 @@ interface ClipboardTerminal {
   focus(): void;
 }
 
+interface PasteTerminal {
+  paste(data: string): void;
+  focus(): void;
+}
+
 interface KeyboardHandlerOptions {
   clipboard: TerminalClipboard;
   sendInput(data: string): void;
@@ -71,16 +76,35 @@ export function installTerminalFocusRecovery(
     options.setTimeout(() => terminal.focus(), 0);
   };
 
-  options.container.addEventListener('contextmenu', scheduleFocus);
   options.document.addEventListener('copy', scheduleFocus);
   options.document.addEventListener('paste', scheduleFocus);
+}
+
+export function installTerminalClipboardPasteHandler(terminal: PasteTerminal, target: EventTarget): void {
+  target.addEventListener(
+    'paste',
+    (event) => {
+      const clipboardEvent = event as ClipboardEvent;
+      const text = clipboardEvent.clipboardData?.getData('text/plain') ?? '';
+      if (!text) {
+        return;
+      }
+
+      clipboardEvent.preventDefault();
+      clipboardEvent.stopImmediatePropagation();
+      terminal.paste(text);
+      terminal.focus();
+    },
+    true
+  );
 }
 
 export function resolveTerminalStatusClass(payload: string): 'connected' | 'disconnected' | 'connecting' {
   if (payload === 'Connected') {
     return 'connected';
   }
-  if (payload.toLowerCase().includes('disconnected')) {
+  const lowerPayload = payload.toLowerCase();
+  if (lowerPayload.includes('disconnected') || payload.includes('断开')) {
     return 'disconnected';
   }
   return 'connecting';

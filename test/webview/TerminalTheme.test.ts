@@ -78,4 +78,11 @@ describe('terminal theme integration', () => {
     expect(css).not.toContain('#141414');
     expect(css).not.toContain('#1e1e1e');
   });
+
+  it('reserves space below xterm so the prompt does not sit on the last visible row', () => {
+    const css = readFileSync(join(process.cwd(), 'webview/terminal/index.css'), 'utf8');
+
+    expect(css).toContain('height: calc(100% - 1.5em)');
+    expect(css).toContain('margin-bottom: 1.5em');
+  });
 });

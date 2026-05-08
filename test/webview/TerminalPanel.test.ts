@@ -6,6 +6,7 @@ import { TerminalContextRegistry } from '../../src/terminal/TerminalContext';
 import {
   createTerminalAssets,
   createTerminalViewColumn,
+  formatTerminalNotice,
   handleTerminalMessage,
   renderTerminalBody,
   resolveTerminalSettings,
@@ -192,9 +193,15 @@ describe('TerminalPanel rendering helpers', () => {
     expect(body).toContain('class="terminal-shell"');
     expect(body).toContain('class="terminal-status terminal-status--connecting"');
     expect(body).toContain('role="status"');
-    expect(body).toContain('id="disconnectNotice"');
-    expect(body).toContain('class="terminal-disconnect-notice"');
+    expect(body).not.toContain('id="disconnectNotice"');
+    expect(body).not.toContain('class="terminal-disconnect-notice"');
     expect(body).toContain('class="terminal-host"');
+  });
+
+  it('formats terminal notices as red terminal output', () => {
+    expect(formatTerminalNotice('空闲时间超过30分钟，断开连接')).toBe(
+      '\r\n\x1b[31m空闲时间超过30分钟，断开连接\x1b[0m\r\n'
+    );
   });
 
   it('publishes active terminal context as disconnected on open and connected after connect succeeds', async () => {
@@ -272,6 +279,10 @@ describe('TerminalPanel rendering helpers', () => {
 
     expect(registry.getActive()?.connected).toBe(false);
     expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'status', payload: 'Disconnected' });
+    expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'output',
+      payload: '\r\n\x1b[31m连接已断开\x1b[0m\r\n'
+    });
   });
 
   it('disconnects an idle terminal after the configured timeout', async () => {
@@ -296,6 +307,9 @@ describe('TerminalPanel rendering helpers', () => {
       expect(disposeSession).toHaveBeenCalledTimes(1);
       expect(registry.getActive()?.connected).toBe(false);
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        '空闲时间超过1分钟，断开连接'
+      );
+      expect(vscode.window.showWarningMessage).not.toHaveBeenCalledWith(
         'AT Terminal disconnected after 1 minute(s) of inactivity.'
       );
     } finally {

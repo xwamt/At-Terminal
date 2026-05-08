@@ -14,7 +14,6 @@ body {
 .terminal-shell {
   display: grid;
   grid-template-rows: 32px minmax(0, 1fr);
-  position: relative;
   width: 100vw;
   height: 100vh;
   background: var(--vscode-terminal-background, var(--vscode-editor-background));
@@ -60,33 +59,6 @@ body {
   white-space: nowrap;
 }
 
-.terminal-disconnect-notice {
-  position: absolute;
-  top: 48px;
-  left: 50%;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: min(520px, calc(100vw - 32px));
-  padding: 12px 14px;
-  color: var(--vscode-inputValidation-errorForeground, var(--vscode-foreground));
-  background: var(--vscode-inputValidation-errorBackground, var(--vscode-editorWidget-background));
-  border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-testing-iconFailed));
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  font: 12px var(--vscode-font-family);
-  transform: translateX(-50%);
-}
-
-.terminal-disconnect-notice[hidden] {
-  display: none;
-}
-
-.terminal-disconnect-notice strong {
-  font-size: 13px;
-}
-
 #terminal {
   min-height: 0;
   width: 100%;
@@ -97,7 +69,8 @@ body {
 }
 
 .xterm {
-  height: 100%;
+  height: calc(100% - 1.5em);
+  margin-bottom: 1.5em;
   box-sizing: border-box;
   border-radius: 6px;
   padding: 8px;

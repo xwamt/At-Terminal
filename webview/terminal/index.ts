@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css';
 import './index.css';
 import {
   createTerminalKeyboardHandler,
+  installTerminalClipboardPasteHandler,
   installTerminalFocusRecovery,
   resolveTerminalStatusClass,
   type TerminalClipboard
@@ -21,8 +22,6 @@ declare const acquireVsCodeApi: () => VsCodeApi;
 const vscode = acquireVsCodeApi();
 const container = document.querySelector<HTMLElement>('#terminal');
 const status = document.querySelector<HTMLElement>('#status');
-const disconnectNotice = document.querySelector<HTMLElement>('#disconnectNotice');
-const disconnectReason = document.querySelector<HTMLElement>('#disconnectReason');
 
 if (!container) {
   throw new Error('Missing terminal container');
@@ -58,6 +57,9 @@ term.attachCustomKeyEventHandler(
     sendInput: (data) => vscode.postMessage({ type: 'input', payload: data })
   })
 );
+if (term.textarea) {
+  installTerminalClipboardPasteHandler(term, term.textarea);
+}
 
 installTerminalFocusRecovery(term, {
   container,
@@ -89,12 +91,6 @@ window.addEventListener('message', (event: MessageEvent) => {
     status.classList.toggle('terminal-status--connected', statusClass === 'connected');
     status.classList.toggle('terminal-status--disconnected', statusClass === 'disconnected');
     status.classList.toggle('terminal-status--connecting', statusClass === 'connecting');
-    if (disconnectNotice) {
-      disconnectNotice.hidden = statusClass !== 'disconnected';
-      if (disconnectReason) {
-        disconnectReason.textContent = message.payload;
-      }
-    }
   }
 });
 
