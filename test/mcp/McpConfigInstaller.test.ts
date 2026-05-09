@@ -6,7 +6,8 @@ import {
   buildContinueMcpConfig,
   installContinueMcpConfig,
   installKiroMcpConfig,
-  kiroMcpConfigPath
+  kiroMcpConfigPath,
+  ensureKiroMcpConfig
 } from '../../src/mcp/McpConfigInstaller';
 
 describe('McpConfigInstaller', () => {
@@ -87,5 +88,109 @@ describe('McpConfigInstaller', () => {
         'sftp_create_directory'
       ]
     });
+  });
+
+  it('repairs stale Kiro AT Terminal config with the current server path', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'at-terminal-kiro-config-'));
+    const configPath = kiroMcpConfigPath(home);
+    await mkdir(join(home, '.kiro', 'settings'), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          fetch: { command: 'uvx', args: ['mcp-server-fetch'], disabled: true },
+          'AT Terminal': {
+            command: 'node',
+            args: ['C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.9/dist/mcp-server.js'],
+            autoApprove: ['run_remote_command']
+          }
+        }
+      }),
+      'utf8'
+    );
+
+    await expect(
+      ensureKiroMcpConfig({
+        home,
+        mcpServerPath: 'C:\\Users\\alan\\.kiro\\extensions\\local.at-terminal-mcp-0.2.14\\dist\\mcp-server.js'
+      })
+    ).resolves.toBe(configPath);
+
+    const parsed = JSON.parse(await readFile(configPath, 'utf8'));
+    expect(parsed.mcpServers.fetch).toMatchObject({ command: 'uvx', disabled: true });
+    expect(parsed.mcpServers['AT Terminal'].args).toEqual([
+      'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.14/dist/mcp-server.js'
+    ]);
+    expect(parsed.mcpServers['AT Terminal'].autoApprove).toContain('sftp_write_file');
+  });
+
+  it('repairs Kiro MCP config files that start with a UTF-8 BOM', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'at-terminal-kiro-config-'));
+    const configPath = kiroMcpConfigPath(home);
+    await mkdir(join(home, '.kiro', 'settings'), { recursive: true });
+    await writeFile(
+      configPath,
+      `\uFEFF${JSON.stringify({
+        mcpServers: {
+          'AT Terminal': {
+            command: 'node',
+            args: ['C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.9/dist/mcp-server.js'],
+            autoApprove: ['run_remote_command']
+          }
+        }
+      })}`,
+      'utf8'
+    );
+
+    await expect(
+      ensureKiroMcpConfig({
+        home,
+        mcpServerPath: 'C:\\Users\\alan\\.kiro\\extensions\\local.at-terminal-mcp-0.2.14\\dist\\mcp-server.js'
+      })
+    ).resolves.toBe(configPath);
+
+    const parsed = JSON.parse(await readFile(configPath, 'utf8'));
+    expect(parsed.mcpServers['AT Terminal'].args).toEqual([
+      'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.14/dist/mcp-server.js'
+    ]);
+  });
+
+  it('leaves current Kiro AT Terminal config unchanged', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'at-terminal-kiro-config-'));
+    const configPath = kiroMcpConfigPath(home);
+    await mkdir(join(home, '.kiro', 'settings'), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        mcpServers: {
+          'AT Terminal': {
+            command: 'node',
+            args: ['C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.14/dist/mcp-server.js'],
+            autoApprove: [
+              'list_ssh_servers',
+              'get_terminal_context',
+              'run_remote_command',
+              'sftp_list_directory',
+              'sftp_stat_path',
+              'sftp_read_file',
+              'sftp_write_file',
+              'sftp_create_file',
+              'sftp_create_directory'
+            ]
+          }
+        }
+      }),
+      'utf8'
+    );
+    const before = await readFile(configPath, 'utf8');
+
+    await expect(
+      ensureKiroMcpConfig({
+        home,
+        mcpServerPath: 'C:\\Users\\alan\\.kiro\\extensions\\local.at-terminal-mcp-0.2.14\\dist\\mcp-server.js'
+      })
+    ).resolves.toBeUndefined();
+
+    await expect(readFile(configPath, 'utf8')).resolves.toBe(before);
   });
 });

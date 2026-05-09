@@ -55,7 +55,7 @@ export function kiroMcpConfigPath(home = homedir()): string {
 export async function installKiroMcpConfig(options: InstallKiroMcpConfigOptions): Promise<string> {
   const target = kiroMcpConfigPath(options.home);
   const config = await readJsonObject(target);
-  const mcpServers = isRecord(config.mcpServers) ? config.mcpServers : {};
+  const mcpServers = readMcpServers(config);
   config.name = typeof config.name === 'string' ? config.name : 'AT Terminal MCP';
   config.version = typeof config.version === 'string' ? config.version : '0.0.1';
   config.schema = typeof config.schema === 'string' ? config.schema : 'v1';
@@ -72,9 +72,20 @@ export async function installKiroMcpConfig(options: InstallKiroMcpConfigOptions)
   return target;
 }
 
+export async function ensureKiroMcpConfig(options: InstallKiroMcpConfigOptions): Promise<string | undefined> {
+  const target = kiroMcpConfigPath(options.home);
+  const config = await readJsonObject(target);
+  const server = readMcpServers(config)['AT Terminal'];
+  if (hasCurrentKiroMcpServer(server, options.mcpServerPath)) {
+    return undefined;
+  }
+  return installKiroMcpConfig(options);
+}
+
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
   try {
-    const parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
+    const text = await readFile(path, 'utf8');
+    const parsed = JSON.parse(stripJsonBom(text)) as unknown;
     return isRecord(parsed) ? parsed : {};
   } catch (error) {
     const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
@@ -85,8 +96,33 @@ async function readJsonObject(path: string): Promise<Record<string, unknown>> {
   }
 }
 
+function stripJsonBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readMcpServers(config: Record<string, unknown>): Record<string, unknown> {
+  return isRecord(config.mcpServers) ? config.mcpServers : {};
+}
+
+function hasCurrentKiroMcpServer(value: unknown, mcpServerPath: string): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  if (value.command !== 'node') {
+    return false;
+  }
+  if (!Array.isArray(value.args) || value.args[0] !== normalizePath(mcpServerPath)) {
+    return false;
+  }
+  const autoApprove = value.autoApprove;
+  if (!Array.isArray(autoApprove)) {
+    return false;
+  }
+  return AT_TERMINAL_MCP_TOOL_NAMES.every((toolName) => autoApprove.includes(toolName));
 }
 
 function normalizePath(path: string): string {

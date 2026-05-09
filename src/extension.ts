@@ -7,7 +7,7 @@ import { SftpWriteAuthorizer } from './agent/SftpWriteAuthorizer';
 import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import { BridgeServer } from './mcp/BridgeServer';
-import { installContinueMcpConfig, installKiroMcpConfig } from './mcp/McpConfigInstaller';
+import { ensureKiroMcpConfig, installContinueMcpConfig, installKiroMcpConfig } from './mcp/McpConfigInstaller';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
@@ -99,6 +99,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let sftpAgentService: SftpAgentService | undefined;
   let installMcpConfigCommand: vscode.Disposable | undefined;
   if (MCP_ENABLED) {
+    const mcpServerPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'mcp-server.js').fsPath;
     const sftpWriteAuthorizer = new SftpWriteAuthorizer();
     sftpAgentService = new SftpAgentService({
       terminalContext,
@@ -116,8 +117,10 @@ export function activate(context: vscode.ExtensionContext): void {
     void bridgeServer.start().catch((error) => {
       void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
     });
+    void ensureKiroMcpConfig({ mcpServerPath }).catch((error) => {
+      void vscode.window.showWarningMessage(`AT Terminal MCP config could not be updated: ${formatError(error)}`);
+    });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
-      const mcpServerPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'mcp-server.js').fsPath;
       const kiroTarget = await installKiroMcpConfig({ mcpServerPath });
       const targets = [kiroTarget];
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

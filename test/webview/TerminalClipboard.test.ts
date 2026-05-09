@@ -46,6 +46,12 @@ function pasteEvent(text: string) {
   };
 }
 
+async function flushClipboardPromise(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('terminal clipboard shortcuts', () => {
   it('copies the current xterm selection on Ctrl+C without sending interrupt input', async () => {
     const clipboard: TerminalClipboard = {
@@ -91,7 +97,7 @@ describe('terminal clipboard shortcuts', () => {
     expect(sendInput).toHaveBeenCalledWith('\x03');
   });
 
-  it('leaves Ctrl+V to the browser paste event so clipboardData remains available', () => {
+  it('pastes Ctrl+V through the terminal paste API when the xterm input is focused', async () => {
     const sendInput = vi.fn();
     const readText = vi.fn(async () => 'pasted text');
     const event = keyEvent('v');
@@ -113,12 +119,47 @@ describe('terminal clipboard shortcuts', () => {
       }
     );
 
-    expect(handler(event)).toBe(true);
-    expect(event.preventDefault).not.toHaveBeenCalled();
-    expect(event.stopImmediatePropagation).not.toHaveBeenCalled();
-    expect(readText).not.toHaveBeenCalled();
+    expect(handler(event)).toBe(false);
+    await flushClipboardPromise();
+
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
+    expect(readText).toHaveBeenCalledOnce();
+    expect(terminal.paste).toHaveBeenCalledWith('pasted text');
+    expect(terminal.focus).toHaveBeenCalledOnce();
+    expect(sendInput).not.toHaveBeenCalled();
+  });
+
+  it('keeps focus and does not send input when Ctrl+V clipboard access fails', async () => {
+    const sendInput = vi.fn();
+    const event = keyEvent('v');
+    const terminal = {
+      hasSelection: () => false,
+      getSelection: () => '',
+      clearSelection: vi.fn(),
+      focus: vi.fn(),
+      paste: vi.fn()
+    };
+    const handler = createTerminalKeyboardHandler(
+      terminal,
+      {
+        clipboard: {
+          readText: vi.fn(async () => {
+            throw new Error('clipboard denied');
+          }),
+          writeText: vi.fn()
+        },
+        sendInput
+      }
+    );
+
+    expect(handler(event)).toBe(false);
+    await flushClipboardPromise();
+
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
     expect(terminal.paste).not.toHaveBeenCalled();
-    expect(terminal.focus).not.toHaveBeenCalled();
+    expect(terminal.focus).toHaveBeenCalledOnce();
     expect(sendInput).not.toHaveBeenCalled();
   });
 

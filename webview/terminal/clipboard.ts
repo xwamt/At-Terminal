@@ -54,7 +54,18 @@ export function createTerminalKeyboardHandler(
     }
 
     if (key === 'v') {
-      return true;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void options.clipboard
+        .readText()
+        .then((text) => {
+          if (text) {
+            terminal.paste(text);
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => terminal.focus());
+      return false;
     }
 
     return true;

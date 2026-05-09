@@ -4,18 +4,20 @@ import * as vscode from 'vscode';
 const mocks = vi.hoisted(() => ({
   bridgeDispose: vi.fn(async () => undefined),
   bridgeStart: vi.fn(async () => undefined),
+  ensureKiroMcpConfig: vi.fn(async () => undefined),
   installContinueMcpConfig: vi.fn(async () => 'continue-config'),
   installKiroMcpConfig: vi.fn(async () => 'kiro-config')
 }));
 
 vi.mock('../../src/mcp/BridgeServer', () => ({
-  BridgeServer: vi.fn().mockImplementation(() => ({
-    dispose: mocks.bridgeDispose,
-    start: mocks.bridgeStart
-  }))
+  BridgeServer: class {
+    dispose = mocks.bridgeDispose;
+    start = mocks.bridgeStart;
+  }
 }));
 
 vi.mock('../../src/mcp/McpConfigInstaller', () => ({
+  ensureKiroMcpConfig: mocks.ensureKiroMcpConfig,
   installContinueMcpConfig: mocks.installContinueMcpConfig,
   installKiroMcpConfig: mocks.installKiroMcpConfig
 }));
@@ -47,6 +49,7 @@ describe('sshManager.installMcpConfig command', () => {
     registeredCommands.clear();
     mocks.bridgeDispose.mockClear();
     mocks.bridgeStart.mockClear();
+    mocks.ensureKiroMcpConfig.mockClear();
     mocks.installContinueMcpConfig.mockClear();
     mocks.installKiroMcpConfig.mockClear();
     delete (vscode.workspace as { workspaceFolders?: unknown }).workspaceFolders;
@@ -75,5 +78,13 @@ describe('sshManager.installMcpConfig command', () => {
     expect(vscode.window.showErrorMessage).not.toHaveBeenCalledWith(
       'Open a workspace folder before installing AT Terminal MCP config.'
     );
+  });
+
+  it('ensures Kiro MCP config points at the current bundled server on activation', () => {
+    activate(extensionContext());
+
+    expect(mocks.ensureKiroMcpConfig).toHaveBeenCalledWith({
+      mcpServerPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10/dist/mcp-server.js'
+    });
   });
 });
