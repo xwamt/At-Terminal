@@ -199,8 +199,8 @@ describe('TerminalPanel rendering helpers', () => {
   });
 
   it('formats terminal notices as red terminal output', () => {
-    expect(formatTerminalNotice('空闲时间超过30分钟，断开连接')).toBe(
-      '\r\n\x1b[31m空闲时间超过30分钟，断开连接\x1b[0m\r\n'
+    expect(formatTerminalNotice('Disconnected after 30 minute(s) of inactivity.')).toBe(
+      '\r\n\x1b[31mDisconnected after 30 minute(s) of inactivity.\x1b[0m\r\n'
     );
   });
 
@@ -281,7 +281,7 @@ describe('TerminalPanel rendering helpers', () => {
     expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'status', payload: 'Disconnected' });
     expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({
       type: 'output',
-      payload: '\r\n\x1b[31m连接已断开\x1b[0m\r\n'
+      payload: '\r\n\x1b[31mConnection disconnected\x1b[0m\r\n'
     });
   });
 
@@ -307,10 +307,10 @@ describe('TerminalPanel rendering helpers', () => {
       expect(disposeSession).toHaveBeenCalledTimes(1);
       expect(registry.getActive()?.connected).toBe(false);
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        '空闲时间超过1分钟，断开连接'
+        'Disconnected after 1 minute(s) of inactivity.'
       );
       expect(vscode.window.showWarningMessage).not.toHaveBeenCalledWith(
-        'AT Terminal disconnected after 1 minute(s) of inactivity.'
+        expect.stringMatching(/[^\x00-\x7F]/)
       );
     } finally {
       vi.useRealTimers();

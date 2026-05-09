@@ -19,7 +19,6 @@ interface PasteTerminal {
 interface KeyboardHandlerOptions {
   clipboard: TerminalClipboard;
   sendInput(data: string): void;
-  now?: () => number;
 }
 
 interface FocusRecoveryOptions {
@@ -29,15 +28,11 @@ interface FocusRecoveryOptions {
 }
 
 const INTERRUPT_BYTE = '\x03';
-const DOUBLE_CTRL_C_MS = 1_000;
 
 export function createTerminalKeyboardHandler(
   terminal: ClipboardTerminal,
   options: KeyboardHandlerOptions
 ): (event: KeyboardEvent) => boolean {
-  const now = options.now ?? Date.now;
-  let lastCtrlC: number | undefined;
-
   return (event: KeyboardEvent): boolean => {
     if (event.type !== 'keydown' || !event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
       return true;
@@ -50,33 +45,16 @@ export function createTerminalKeyboardHandler(
           .writeText(terminal.getSelection())
           .then(() => terminal.clearSelection())
           .finally(() => terminal.focus());
-        lastCtrlC = undefined;
         return false;
       }
 
-      const pressedAt = now();
-      if (lastCtrlC !== undefined && pressedAt - lastCtrlC <= DOUBLE_CTRL_C_MS) {
-        options.sendInput(INTERRUPT_BYTE);
-        lastCtrlC = undefined;
-      } else {
-        lastCtrlC = pressedAt;
-      }
+      options.sendInput(INTERRUPT_BYTE);
       terminal.focus();
       return false;
     }
 
     if (key === 'v') {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      void options.clipboard
-        .readText()
-        .then((text) => {
-          if (text) {
-            terminal.paste(text);
-          }
-        })
-        .finally(() => terminal.focus());
-      return false;
+      return true;
     }
 
     return true;
@@ -119,7 +97,7 @@ export function resolveTerminalStatusClass(payload: string): 'connected' | 'disc
     return 'connected';
   }
   const lowerPayload = payload.toLowerCase();
-  if (lowerPayload.includes('disconnected') || payload.includes('断开')) {
+  if (lowerPayload.includes('disconnected')) {
     return 'disconnected';
   }
   return 'connecting';

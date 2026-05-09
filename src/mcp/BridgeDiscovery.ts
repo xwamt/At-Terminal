@@ -3,6 +3,12 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { BridgeDiscovery } from './BridgeProtocol';
 
+export interface RemoveBridgeDiscoveryOwner {
+  port: number;
+  token: string;
+  pid: number;
+}
+
 export function bridgeDiscoveryFile(home = homedir()): string {
   return join(home, '.at-terminal', 'mcp-bridge.json');
 }
@@ -38,6 +44,12 @@ export async function readBridgeDiscovery(home = homedir()): Promise<BridgeDisco
   }
 }
 
-export async function removeBridgeDiscovery(home = homedir()): Promise<void> {
+export async function removeBridgeDiscovery(home = homedir(), owner?: RemoveBridgeDiscoveryOwner): Promise<void> {
+  if (owner) {
+    const current = await readBridgeDiscovery(home);
+    if (!current || current.port !== owner.port || current.token !== owner.token || current.pid !== owner.pid) {
+      return;
+    }
+  }
   await rm(bridgeDiscoveryFile(home), { force: true });
 }

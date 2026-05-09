@@ -71,8 +71,7 @@ describe('terminal clipboard shortcuts', () => {
     expect(sendInput).not.toHaveBeenCalled();
   });
 
-  it('requires two Ctrl+C presses before sending the terminal interrupt byte', () => {
-    const now = vi.fn().mockReturnValueOnce(1_000).mockReturnValueOnce(1_500);
+  it('sends the terminal interrupt byte on a single Ctrl+C when there is no selection', () => {
     const sendInput = vi.fn();
     const handler = createTerminalKeyboardHandler(
       {
@@ -84,19 +83,15 @@ describe('terminal clipboard shortcuts', () => {
       },
       {
         clipboard: { readText: vi.fn(), writeText: vi.fn() },
-        sendInput,
-        now
+        sendInput
       }
     );
-
-    expect(handler(keyEvent('c'))).toBe(false);
-    expect(sendInput).not.toHaveBeenCalled();
 
     expect(handler(keyEvent('c'))).toBe(false);
     expect(sendInput).toHaveBeenCalledWith('\x03');
   });
 
-  it('pastes Ctrl+V through the terminal paste API when the xterm input is focused', async () => {
+  it('leaves Ctrl+V to the browser paste event so clipboardData remains available', () => {
     const sendInput = vi.fn();
     const readText = vi.fn(async () => 'pasted text');
     const event = keyEvent('v');
@@ -118,15 +113,12 @@ describe('terminal clipboard shortcuts', () => {
       }
     );
 
-    expect(handler(event)).toBe(false);
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(event.preventDefault).toHaveBeenCalledOnce();
-    expect(event.stopImmediatePropagation).toHaveBeenCalledOnce();
-    expect(readText).toHaveBeenCalledOnce();
-    expect(terminal.paste).toHaveBeenCalledWith('pasted text');
-    expect(terminal.focus).toHaveBeenCalledOnce();
+    expect(handler(event)).toBe(true);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(event.stopImmediatePropagation).not.toHaveBeenCalled();
+    expect(readText).not.toHaveBeenCalled();
+    expect(terminal.paste).not.toHaveBeenCalled();
+    expect(terminal.focus).not.toHaveBeenCalled();
     expect(sendInput).not.toHaveBeenCalled();
   });
 
@@ -187,7 +179,7 @@ describe('terminal status classes', () => {
     );
   });
 
-  it('treats Chinese disconnect messages as disconnected status', () => {
-    expect(resolveTerminalStatusClass('空闲时间超过30分钟，断开连接')).toBe('disconnected');
+  it('treats plain disconnect notices as disconnected status', () => {
+    expect(resolveTerminalStatusClass('Disconnected after 30 minute(s) of inactivity.')).toBe('disconnected');
   });
 });

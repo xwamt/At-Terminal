@@ -43,6 +43,8 @@ pnpm-debug.log*
 !.env.example
 !.env.sample
 *.local
+.kiro/
+ATmcp.json
 
 # Binary planning/export artifacts
 *.docx

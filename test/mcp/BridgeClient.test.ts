@@ -107,4 +107,32 @@ describe('BridgeClient', () => {
 
     await expect(client.runRemoteCommand({ command: 'pwd' })).rejects.toThrow('Remote command was cancelled.');
   });
+
+  it('turns unreachable stale bridge discovery into a clear bridge error', async () => {
+    const home = await tempHome();
+    await writeBridgeDiscovery(home, { port: 12345, token: 'secret', pid: 1, updatedAt: 1 });
+    const fetch = vi.fn(async () => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:12345');
+    });
+    const client = new BridgeClient({ home, fetch: fetch as never });
+
+    await expect(client.listServers()).rejects.toThrow(
+      'AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.'
+    );
+  });
+
+  it('reports non-json bridge responses without masking the HTTP status', async () => {
+    const home = await tempHome();
+    await writeBridgeDiscovery(home, { port: 12345, token: 'secret', pid: 1, updatedAt: 1 });
+    const fetch = vi.fn(async () => ({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new Error('Unexpected token');
+      }
+    }));
+    const client = new BridgeClient({ home, fetch: fetch as never });
+
+    await expect(client.listServers()).rejects.toThrow('Bridge request failed with HTTP 502.');
+  });
 });

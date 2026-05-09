@@ -81,16 +81,21 @@ export class BridgeClient {
     }
 
     const fetchImpl = this.options.fetch ?? fetch;
-    const response = await fetchImpl(`http://${BRIDGE_HOST}:${discovery.port}${path}`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        [BRIDGE_TOKEN_HEADER]: discovery.token
-      },
-      body: JSON.stringify(body)
-    });
+    let response: FetchLikeResponse;
+    try {
+      response = await fetchImpl(`http://${BRIDGE_HOST}:${discovery.port}${path}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          [BRIDGE_TOKEN_HEADER]: discovery.token
+        },
+        body: JSON.stringify(body)
+      });
+    } catch {
+      throw new Error('AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.');
+    }
 
-    const parsed = await response.json();
+    const parsed = await parseJsonResponse(response);
     if (!response.ok) {
       const message =
         typeof parsed === 'object' && parsed !== null && 'error' in parsed
@@ -100,5 +105,16 @@ export class BridgeClient {
     }
 
     return parsed as T;
+  }
+}
+
+async function parseJsonResponse(response: FetchLikeResponse): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    if (!response.ok) {
+      throw new Error(`Bridge request failed with HTTP ${response.status}.`);
+    }
+    throw new Error('AT Terminal MCP bridge returned an invalid JSON response.');
   }
 }

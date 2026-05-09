@@ -26,6 +26,7 @@ export interface BridgeResponse {
 export class BridgeServer {
   private server: Server | undefined;
   private token = '';
+  private port: number | undefined;
 
   constructor(
     private readonly service: AgentToolService,
@@ -52,6 +53,7 @@ export class BridgeServer {
     if (!address || typeof address === 'string') {
       throw new Error('Failed to start AT Terminal MCP bridge.');
     }
+    this.port = address.port;
     await writeBridgeDiscovery(this.home, {
       port: address.port,
       token: this.token,
@@ -62,8 +64,14 @@ export class BridgeServer {
 
   async dispose(): Promise<void> {
     const server = this.server;
+    const port = this.port;
+    const token = this.token;
     this.server = undefined;
-    await removeBridgeDiscovery(this.home);
+    this.port = undefined;
+    await removeBridgeDiscovery(
+      this.home,
+      port && token ? { port, token, pid: process.pid } : undefined
+    );
     if (!server) {
       return;
     }

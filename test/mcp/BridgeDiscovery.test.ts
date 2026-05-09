@@ -74,4 +74,22 @@ describe('BridgeDiscovery', () => {
 
     await expect(readBridgeDiscovery(home)).resolves.toBeUndefined();
   });
+
+  it('does not remove discovery metadata owned by a newer bridge instance', async () => {
+    const home = await tempHome();
+    await writeBridgeDiscovery(home, {
+      port: 53128,
+      token: 'new-token',
+      pid: 456,
+      updatedAt: 123456
+    });
+
+    await removeBridgeDiscovery(home, { token: 'old-token', port: 53127, pid: 123 });
+
+    await expect(readBridgeDiscovery(home)).resolves.toMatchObject({
+      port: 53128,
+      token: 'new-token',
+      pid: 456
+    });
+  });
 });

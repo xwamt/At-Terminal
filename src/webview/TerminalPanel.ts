@@ -144,7 +144,7 @@ export class TerminalPanel {
   }
 
   disconnect(): void {
-    this.disconnectWithStatus('Disconnected', '连接已断开');
+    this.disconnectWithStatus('Disconnected', 'Connection disconnected');
   }
 
   private disconnectWithStatus(statusMessage: string, terminalNotice: string): void {
@@ -221,7 +221,7 @@ export class TerminalPanel {
       this.connected = false;
       this.terminalContext?.markDisconnected(this.terminalId);
       this.clearIdleDisconnect();
-      this.postTerminalNotice('连接已断开');
+      this.postTerminalNotice('Connection disconnected');
     }
     this.postStatus(message);
   }
@@ -232,7 +232,7 @@ export class TerminalPanel {
       return;
     }
     this.idleDisconnectTimer = setTimeout(() => {
-      const message = `空闲时间超过${this.settings.idleDisconnectMinutes}分钟，断开连接`;
+      const message = `Disconnected after ${this.settings.idleDisconnectMinutes} minute(s) of inactivity.`;
       this.disconnectWithStatus(message, message);
       void vscode.window.showWarningMessage(message);
     }, this.settings.idleDisconnectMinutes * 60_000);
