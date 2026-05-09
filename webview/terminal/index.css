@@ -69,11 +69,10 @@ body {
 }
 
 .xterm {
-  height: calc(100% - 1.5em);
-  margin-bottom: 1.5em;
+  height: 100%;
   box-sizing: border-box;
   border-radius: 6px;
-  padding: 8px;
+  padding: 8px 8px calc(8px + 1.5em);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   overflow: hidden;
 }

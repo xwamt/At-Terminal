@@ -79,10 +79,12 @@ describe('terminal theme integration', () => {
     expect(css).not.toContain('#1e1e1e');
   });
 
-  it('reserves space below xterm so the prompt does not sit on the last visible row', () => {
+  it('reserves bottom space through xterm padding so FitAddon reduces the row count', () => {
     const css = readFileSync(join(process.cwd(), 'webview/terminal/index.css'), 'utf8');
 
-    expect(css).toContain('height: calc(100% - 1.5em)');
-    expect(css).toContain('margin-bottom: 1.5em');
+    expect(css).toContain('height: 100%');
+    expect(css).toContain('padding: 8px 8px calc(8px + 1.5em)');
+    expect(css).not.toContain('height: calc(100% - 1.5em)');
+    expect(css).not.toContain('margin-bottom: 1.5em');
   });
 });
