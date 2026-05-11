@@ -155,6 +155,13 @@ export class SftpManager {
     );
   }
 
+  async readFile(remotePath: string, maxBytes: number): Promise<Buffer> {
+    if (!this.terminalContext?.connected) {
+      throw new Error('No connected SSH terminal is active.');
+    }
+    return await (await this.ensureSession()).readFile(remotePath, maxBytes);
+  }
+
   async createFile(path: string): Promise<void> {
     await this.runConnected(`New file ${path}`, async (session) => session.createFile(path));
   }

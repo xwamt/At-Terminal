@@ -23,6 +23,7 @@ import { SftpTreeProvider } from './tree/SftpTreeProvider';
 import { SftpDirectoryTreeItem, SftpFileTreeItem } from './tree/SftpTreeItems';
 import { ServerTreeItem } from './tree/TreeItems';
 import { formatError } from './utils/errors';
+import { showTimedNotification } from './utils/notifications';
 import { ServerFormPanel } from './webview/ServerFormPanel';
 import { TerminalPanel } from './webview/TerminalPanel';
 
@@ -76,8 +77,9 @@ export function activate(context: vscode.ExtensionContext): void {
         return true;
       }
       if (status === 'changed') {
-        await vscode.window.showErrorMessage(
-          `Host key for ${host}:${port} changed. Connection blocked. Fingerprint: ${fingerprint}`
+        await showTimedNotification(
+          `Host key for ${host}:${port} changed. Connection blocked. Fingerprint: ${fingerprint}`,
+          'error'
         );
         return false;
       }
@@ -115,10 +117,10 @@ export function activate(context: vscode.ExtensionContext): void {
     agentToolDisposables = registerAgentTools(agentToolService);
     bridgeServer = new BridgeServer(agentToolService);
     void bridgeServer.start().catch((error) => {
-      void vscode.window.showWarningMessage(`AT Terminal MCP bridge failed to start: ${formatError(error)}`);
+      void showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');
     });
     void ensureKiroMcpConfig({ mcpServerPath }).catch((error) => {
-      void vscode.window.showWarningMessage(`AT Terminal MCP config could not be updated: ${formatError(error)}`);
+      void showTimedNotification(`AT Terminal MCP config could not be updated: ${formatError(error)}`, 'warning');
     });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
       const kiroTarget = await installKiroMcpConfig({ mcpServerPath });
@@ -127,7 +129,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (workspaceFolder) {
         targets.push(await installContinueMcpConfig({ workspaceFolder, mcpServerPath }));
       }
-      await vscode.window.showInformationMessage(`AT Terminal MCP config installed: ${targets.join('; ')}`);
+      await showTimedNotification(`AT Terminal MCP config installed: ${targets.join('; ')}`);
     });
   }
 
@@ -153,6 +155,9 @@ export function activate(context: vscode.ExtensionContext): void {
       if (document.uri.scheme === SFTP_PREVIEW_SCHEME) {
         void sftpPreviewStore.deletePreviewFile(document.uri);
       }
+    }),
+    vscode.window.tabGroups.onDidChangeTabs((event) => {
+      void sftpPreviewStore.deletePreviewFilesForClosedTabs(event.closed);
     }),
     vscode.commands.registerCommand('sshManager.addServer', () => {
       ServerFormPanel.open(context, configManager, () => treeProvider.refresh());
@@ -353,7 +358,7 @@ async function runSftpCommand(command: () => Promise<void>): Promise<void> {
   try {
     await command();
   } catch (error) {
-    await vscode.window.showErrorMessage(formatError(error));
+    await showTimedNotification(formatError(error), 'error');
   }
 }
 

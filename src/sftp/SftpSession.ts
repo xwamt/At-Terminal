@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { Client, type ConnectConfig, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
+import { Client, type ClientChannel, type ConnectConfig, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
+import { quotePosixShellPath, safePreviewName } from './RemotePath';
 import type { TransferProgress } from './TransferService';
 import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './SftpTypes';
 
@@ -162,6 +164,22 @@ export class SftpSession {
 
   async uploadFile(localPath: string, remotePath: string, progress?: TransferProgress): Promise<void> {
     const sftp = this.requireSftp();
+    try {
+      await this.fastPut(sftp, localPath, remotePath, progress);
+    } catch (error) {
+      if (!isPermissionDeniedError(error)) {
+        throw error;
+      }
+      await this.uploadFileWithSudo(localPath, remotePath, progress, error);
+    }
+  }
+
+  private async fastPut(
+    sftp: SFTPWrapper,
+    localPath: string,
+    remotePath: string,
+    progress?: TransferProgress
+  ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       sftp.fastPut(
         localPath,
@@ -172,6 +190,40 @@ export class SftpSession {
         },
         (error) => (error ? reject(error) : resolve())
       );
+    });
+  }
+
+  private async uploadFileWithSudo(
+    localPath: string,
+    remotePath: string,
+    progress: TransferProgress | undefined,
+    permissionError: unknown
+  ): Promise<void> {
+    const sftp = this.requireSftp();
+    const tempPath = `/tmp/at-terminal-upload-${randomUUID()}-${safePreviewName(remotePath)}`;
+    try {
+      await this.fastPut(sftp, localPath, tempPath, progress);
+      await this.execSudoOverwrite(tempPath, remotePath);
+    } catch (sudoError) {
+      await removeRemoteTempFile(sftp, tempPath);
+      throw new Error(
+        `SFTP upload to ${remotePath} failed with permission denied, and sudo fallback failed: ${errorMessage(sudoError)}. Original error: ${errorMessage(permissionError)}`
+      );
+    }
+  }
+
+  private async execSudoOverwrite(tempPath: string, remotePath: string): Promise<void> {
+    const client = this.requireClient();
+    const script = `set -e; cat ${quotePosixShellPath(tempPath)} > ${quotePosixShellPath(remotePath)}; rm -f ${quotePosixShellPath(tempPath)}`;
+    const command = `sudo -n sh -c ${quotePosixShellPath(script)}`;
+    await new Promise<string>((resolve, reject) => {
+      client.exec(command, (error, stream) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        collectExecResult(stream, resolve, reject);
+      });
     });
   }
 
@@ -240,6 +292,56 @@ export class SftpSession {
     }
     return this.sftp;
   }
+
+  private requireClient(): Client {
+    if (!this.client) {
+      throw new Error('SSH connection is not available.');
+    }
+    return this.client;
+  }
+}
+
+function collectExecResult(
+  stream: ClientChannel,
+  resolve: (stderr: string) => void,
+  reject: (error: Error) => void
+): void {
+  const stderrChunks: Buffer[] = [];
+  stream.stderr.on('data', (data: Buffer) => stderrChunks.push(data));
+  stream.once('error', reject);
+  stream.once('close', (code: number | null) => {
+    const stderr = Buffer.concat(stderrChunks).toString('utf8');
+    if (code && code !== 0) {
+      reject(new Error(stderr.trim() || `sudo fallback exited with code ${code}`));
+      return;
+    }
+    resolve(stderr);
+  });
+}
+
+function isPermissionDeniedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const candidate = error as { code?: unknown; message?: unknown };
+  return candidate.code === 3 || (typeof candidate.message === 'string' && /permission denied|eacces/i.test(candidate.message));
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    return typeof message === 'string' ? message : String(error);
+  }
+  return String(error);
+}
+
+async function removeRemoteTempFile(sftp: SFTPWrapper, tempPath: string): Promise<void> {
+  await new Promise<void>((resolve) => {
+    sftp.unlink(tempPath, () => resolve());
+  });
 }
 
 function appendRemoteChild(parent: string, child: string): string {

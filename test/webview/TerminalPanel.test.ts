@@ -288,7 +288,9 @@ describe('TerminalPanel rendering helpers', () => {
   it('disconnects an idle terminal after the configured timeout', async () => {
     try {
       vi.useFakeTimers();
-      vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined);
+      vi.spyOn(vscode.window, 'withProgress').mockImplementation(async (_options, task) =>
+        task({ report: vi.fn() }, {} as never) as never
+      );
       vi.spyOn(vscode.workspace, 'getConfiguration').mockReturnValue({
         get: <T>(key: string, defaultValue: T): T => {
           const values: Record<string, unknown> = {
@@ -306,11 +308,13 @@ describe('TerminalPanel rendering helpers', () => {
 
       expect(disposeSession).toHaveBeenCalledTimes(1);
       expect(registry.getActive()?.connected).toBe(false);
-      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        'Disconnected after 1 minute(s) of inactivity.'
-      );
-      expect(vscode.window.showWarningMessage).not.toHaveBeenCalledWith(
-        expect.stringMatching(/[^\x00-\x7F]/)
+      expect(vscode.window.withProgress).toHaveBeenCalledWith(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: '$(warning) Disconnected after 1 minute(s) of inactivity.',
+          cancellable: false
+        },
+        expect.any(Function)
       );
     } finally {
       vi.useRealTimers();

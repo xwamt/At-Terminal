@@ -236,6 +236,31 @@ describe('SftpManager', () => {
     expect(downloadFile.mock.calls[0][2]).toHaveProperty('report');
   });
 
+  it('reads remote file content through the active SFTP session', async () => {
+    const readFile = vi.fn(async () => Buffer.from('remote content'));
+    const session = {
+      connect: vi.fn(),
+      realpath: vi.fn(async () => '/home/deploy'),
+      listDirectory: vi.fn(async () => []),
+      readFile,
+      writeFile: vi.fn(),
+      mkdir: vi.fn(),
+      rename: vi.fn(),
+      deleteFile: vi.fn(),
+      deleteDirectory: vi.fn(),
+      uploadFile: vi.fn(),
+      downloadFile: vi.fn(),
+      createFile: vi.fn(),
+      stat: vi.fn(async () => ({ size: 0, modifiedAt: 0 })),
+      dispose: vi.fn()
+    };
+    const manager = new SftpManager({ createSession: () => session });
+    manager.setTerminalContext(context(true));
+
+    await expect(manager.readFile('/home/deploy/app.js', 1024)).resolves.toEqual(Buffer.from('remote content'));
+    expect(readFile).toHaveBeenCalledWith('/home/deploy/app.js', 1024);
+  });
+
   it('waits for an in-flight SFTP connection before listing directories', async () => {
     const pendingConnect = deferred<void>();
     const session = {

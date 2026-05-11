@@ -59,6 +59,7 @@ describe('sshManager.installMcpConfig command', () => {
     });
     vi.spyOn(vscode.window, 'showErrorMessage').mockResolvedValue(undefined);
     vi.spyOn(vscode.window, 'showInformationMessage').mockResolvedValue(undefined);
+    vi.spyOn(vscode.window, 'withProgress').mockResolvedValue(undefined);
   });
 
   afterEach(() => {

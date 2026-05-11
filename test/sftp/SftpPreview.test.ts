@@ -88,4 +88,32 @@ describe('SftpPreview', () => {
       await rm(storagePath, { recursive: true, force: true });
     }
   });
+
+  it('deletes cached preview files when their editor tabs are closed', async () => {
+    const storagePath = await mkdtemp(join(tmpdir(), 'sftp-preview-close-tab-'));
+    const previewStore = new SftpPreviewDocumentStore();
+    let downloadedLocalPath = '';
+
+    try {
+      const previewUri = await openRemotePreviewFile({
+        storageUri: vscode.Uri.file(storagePath),
+        remotePath: '/etc/hosts',
+        previewStore,
+        downloadFile: async (_remotePath, localPath) => {
+          downloadedLocalPath = localPath;
+          await writeFile(localPath, '127.0.0.1 localhost\n');
+        },
+        openUri: async () => undefined
+      });
+
+      expect(existsSync(downloadedLocalPath)).toBe(true);
+
+      await previewStore.deletePreviewFilesForClosedTabs([{ input: { uri: previewUri } } as vscode.Tab]);
+
+      expect(existsSync(downloadedLocalPath)).toBe(false);
+      expect(await previewStore.provideTextDocumentContent(previewUri)).toBe('');
+    } finally {
+      await rm(storagePath, { recursive: true, force: true });
+    }
+  });
 });

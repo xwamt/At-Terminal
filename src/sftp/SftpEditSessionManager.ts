@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import * as vscode from 'vscode';
+import { formatError } from '../utils/errors';
+import { showTimedNotification } from '../utils/notifications';
 import { safePreviewName } from './RemotePath';
 import type { SftpFileStat } from './SftpTypes';
 
@@ -12,6 +15,7 @@ export type SftpEditCloseChoice = 'keep' | 'discard';
 export interface SftpEditSftpClient {
   getActiveServerId(): string | undefined;
   stat(remotePath: string): Promise<SftpFileStat>;
+  readFile?(remotePath: string, maxBytes: number): Promise<Buffer>;
   downloadFile(remotePath: string, localPath: string): Promise<void>;
   uploadFile(localPath: string, remotePath: string): Promise<void>;
 }
@@ -21,6 +25,7 @@ export interface SftpEditUi {
   confirmAutoSync(remotePath: string): Promise<boolean>;
   resolveConflict(remotePath: string): Promise<SftpEditConflictChoice>;
   showStatus(state: SftpEditSyncState, message: string): void;
+  showError?(remotePath: string, message: string): Promise<void>;
   promptUnsyncedClose(remotePath: string): Promise<SftpEditCloseChoice>;
 }
 
@@ -34,6 +39,7 @@ export interface SftpEditSession {
   syncState: SftpEditSyncState;
   uploadInProgress: boolean;
   pendingUpload: boolean;
+  uploadTask: Promise<void> | undefined;
   debounceTimer: ReturnType<typeof setTimeout> | undefined;
   lastError: string | undefined;
 }
@@ -80,6 +86,9 @@ export class SftpEditSessionManager {
       }),
       vscode.workspace.onDidCloseTextDocument((document) => {
         void this.handleClosedDocument(document);
+      }),
+      vscode.window.tabGroups.onDidChangeTabs((event) => {
+        void this.handleClosedTabs(event.closed);
       })
     );
   }
@@ -112,6 +121,7 @@ export class SftpEditSessionManager {
       syncState: 'idle',
       uploadInProgress: false,
       pendingUpload: false,
+      uploadTask: undefined,
       debounceTimer: undefined,
       lastError: undefined
     };
@@ -138,15 +148,20 @@ export class SftpEditSessionManager {
     if (!session) {
       return;
     }
-    if (this.hasUnsynchronizedState(session)) {
-      const choice = await this.options.ui.promptUnsyncedClose(session.remotePath);
-      if (choice === 'keep') {
-        return;
+    await this.closeSession(session);
+  }
+
+  async handleClosedTabs(tabs: readonly vscode.Tab[]): Promise<void> {
+    for (const tab of tabs) {
+      const localPath = getTabInputUri(tab)?.fsPath;
+      if (!localPath) {
+        continue;
+      }
+      const session = this.sessionsByLocalPath.get(localPath);
+      if (session) {
+        await this.closeSession(session);
       }
     }
-
-    this.unregisterSession(session);
-    await this.deleteSessionCache(session);
   }
 
   dispose(): void {
@@ -184,6 +199,15 @@ export class SftpEditSessionManager {
     this.sessionsByLocalPath.delete(session.localUri.fsPath);
   }
 
+  private async closeSession(session: SftpEditSession): Promise<void> {
+    await this.flushUploadBeforeClose(session);
+    if (session.syncState === 'pending' || session.syncState === 'uploading' || session.syncState === 'conflict') {
+      await this.failSync(session, new Error('Remote sync did not complete before the editor was closed.'));
+    }
+    this.unregisterSession(session);
+    await this.deleteSessionCache(session);
+  }
+
   private scheduleUpload(session: SftpEditSession): void {
     session.syncState = 'pending';
     session.pendingUpload = true;
@@ -192,8 +216,33 @@ export class SftpEditSessionManager {
     }
     session.debounceTimer = setTimeout(() => {
       session.debounceTimer = undefined;
-      void this.drainUploadQueue(session);
+      void this.startUploadDrain(session);
     }, this.debounceMs);
+  }
+
+  private startUploadDrain(session: SftpEditSession): Promise<void> {
+    if (session.uploadTask) {
+      return session.uploadTask;
+    }
+    const task = this.drainUploadQueue(session).finally(() => {
+      if (session.uploadTask === task) {
+        session.uploadTask = undefined;
+      }
+    });
+    session.uploadTask = task;
+    return task;
+  }
+
+  private async flushUploadBeforeClose(session: SftpEditSession): Promise<void> {
+    if (session.debounceTimer) {
+      clearTimeout(session.debounceTimer);
+      session.debounceTimer = undefined;
+      await this.startUploadDrain(session);
+      return;
+    }
+    if (session.uploadTask) {
+      await session.uploadTask;
+    }
   }
 
   private async drainUploadQueue(session: SftpEditSession): Promise<void> {
@@ -207,7 +256,7 @@ export class SftpEditSessionManager {
       if (!session.firstSaveConfirmed) {
         const confirmed = await this.options.ui.confirmAutoSync(session.remotePath);
         if (!confirmed) {
-          session.syncState = 'idle';
+          await this.failSync(session, new Error('Remote sync was not enabled. Save was not uploaded.'));
           return;
         }
         session.firstSaveConfirmed = true;
@@ -225,9 +274,7 @@ export class SftpEditSessionManager {
         session.syncState = 'idle';
         this.options.ui.showStatus('idle', 'Remote file synced');
       } catch (error) {
-        session.syncState = 'failed';
-        session.lastError = error instanceof Error ? error.message : String(error);
-        this.options.ui.showStatus('failed', 'Remote sync failed');
+        await this.failSync(session, error);
       } finally {
         session.uploadInProgress = false;
       }
@@ -242,14 +289,56 @@ export class SftpEditSessionManager {
       this.options.ui.showStatus('conflict', 'Remote file changed');
       const choice = await this.options.ui.resolveConflict(session.remotePath);
       if (choice === 'cancel') {
-        return false;
+        throw new Error(`Remote sync cancelled because ${session.remotePath} changed on the server.`);
       }
       session.syncState = 'uploading';
     }
     await this.options.sftp.uploadFile(session.localUri.fsPath, session.remotePath);
-    session.baseRemoteStat = await this.options.sftp.stat(session.remotePath);
+    const uploadedRemoteStat = await this.options.sftp.stat(session.remotePath);
+    await this.verifyUploadedContent(session, uploadedRemoteStat);
+    session.baseRemoteStat = uploadedRemoteStat;
     return true;
   }
+
+  private async verifyUploadedContent(session: SftpEditSession, remoteStat: SftpFileStat): Promise<void> {
+    const localContent = readFileSync(session.localUri.fsPath);
+    if (remoteStat.size !== localContent.byteLength) {
+      throw new Error(
+        `Remote sync verification failed for ${session.remotePath}: remote size is ${remoteStat.size} bytes, expected ${localContent.byteLength} bytes.`
+      );
+    }
+
+    if (!this.options.sftp.readFile) {
+      return;
+    }
+
+    const remoteContent = await this.options.sftp.readFile(session.remotePath, localContent.byteLength);
+    if (!remoteContent.equals(localContent)) {
+      throw new Error(
+        `Remote sync verification failed for ${session.remotePath}: remote content does not match local edits. Check remote file permissions or server-side write restrictions.`
+      );
+    }
+  }
+
+  private async failSync(session: SftpEditSession, error: unknown): Promise<void> {
+    session.syncState = 'failed';
+    session.lastError = formatError(error);
+    this.options.ui.showStatus('failed', `Remote sync failed: ${session.lastError}`);
+    try {
+      await this.options.ui.showError?.(session.remotePath, session.lastError);
+    } catch {
+      // Ignore notification failures; the session state still records the sync failure.
+    }
+  }
+}
+
+function getTabInputUri(tab: vscode.Tab): vscode.Uri | undefined {
+  const input = tab.input;
+  if (typeof input !== 'object' || input === null || !('uri' in input)) {
+    return undefined;
+  }
+  const uri = (input as { uri?: unknown }).uri;
+  return uri instanceof vscode.Uri ? uri : undefined;
 }
 
 export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): SftpEditUi {
@@ -294,6 +383,9 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
       if (state === 'idle') {
         setTimeout(() => statusBarItem.hide(), 2000);
       }
+    },
+    async showError(remotePath, message) {
+      await showTimedNotification(`Remote sync failed for ${remotePath}: ${message}`, 'error');
     },
     async promptUnsyncedClose(remotePath) {
       const answer = await vscode.window.showWarningMessage(

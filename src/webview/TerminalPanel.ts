@@ -8,6 +8,7 @@ import type { HostKeyVerifier } from '../ssh/SshConnectionConfig';
 import { SshSession } from '../ssh/SshSession';
 import type { TerminalContextRegistry } from '../terminal/TerminalContext';
 import { formatError } from '../utils/errors';
+import { showTimedNotification } from '../utils/notifications';
 import { renderWebviewHtml, type WebviewAsset } from './html';
 
 type TerminalMessage =
@@ -234,7 +235,7 @@ export class TerminalPanel {
     this.idleDisconnectTimer = setTimeout(() => {
       const message = `Disconnected after ${this.settings.idleDisconnectMinutes} minute(s) of inactivity.`;
       this.disconnectWithStatus(message, message);
-      void vscode.window.showWarningMessage(message);
+      void showTimedNotification(message, 'warning');
     }, this.settings.idleDisconnectMinutes * 60_000);
   }
 

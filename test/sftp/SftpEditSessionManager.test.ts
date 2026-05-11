@@ -212,9 +212,11 @@ describe('SftpEditSessionManager save synchronization', () => {
       const session = await manager.openRemoteFile('/srv/app/index.js');
       await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
       await vi.advanceTimersByTimeAsync(25);
+      await flushPromises();
 
       await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
       await vi.advanceTimersByTimeAsync(25);
+      await flushPromises();
 
       expect(confirmAutoSync).toHaveBeenCalledTimes(1);
       expect(sftp.uploadFile).toHaveBeenCalledTimes(2);
@@ -295,8 +297,10 @@ describe('SftpEditSessionManager conflicts and failures', () => {
 
     try {
       const session = await manager.openRemoteFile('/srv/app/index.js');
+      await writeFile(session.localUri.fsPath, 'changed!!');
       await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
       await vi.advanceTimersByTimeAsync(10);
+      await flushPromises();
 
       expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js');
       expect(session.baseRemoteStat).toEqual({ size: 9, modifiedAt: 12 });
@@ -311,6 +315,7 @@ describe('SftpEditSessionManager conflicts and failures', () => {
     vi.useFakeTimers();
     const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-cancel-conflict-')));
     const showStatus = vi.fn();
+    const showError = vi.fn();
     const sftp = {
       getActiveServerId: vi.fn(() => 'srv'),
       stat: vi.fn().mockResolvedValueOnce({ size: 7, modifiedAt: 10 }).mockResolvedValueOnce({ size: 8, modifiedAt: 11 }),
@@ -326,6 +331,7 @@ describe('SftpEditSessionManager conflicts and failures', () => {
         confirmAutoSync: vi.fn(async () => true),
         resolveConflict: vi.fn(async () => 'cancel' as const),
         showStatus,
+        showError,
         promptUnsyncedClose: vi.fn()
       }
     });
@@ -336,8 +342,12 @@ describe('SftpEditSessionManager conflicts and failures', () => {
       await vi.advanceTimersByTimeAsync(10);
 
       expect(sftp.uploadFile).not.toHaveBeenCalled();
-      expect(session.syncState).toBe('conflict');
+      expect(session.syncState).toBe('failed');
       expect(showStatus).toHaveBeenCalledWith('conflict', 'Remote file changed');
+      expect(showError).toHaveBeenCalledWith(
+        '/srv/app/index.js',
+        'Remote sync cancelled because /srv/app/index.js changed on the server.'
+      );
     } finally {
       vi.useRealTimers();
       manager.dispose();
@@ -383,7 +393,98 @@ describe('SftpEditSessionManager conflicts and failures', () => {
       await rm(storage.fsPath, { recursive: true, force: true });
     }
   });
+
+  it('reports an error when an upload succeeds but the remote content did not change', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-verify-failed-')));
+    const showStatus = vi.fn();
+    const showError = vi.fn();
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn(),
+      readFile: vi.fn(async () => Buffer.from('initial'))
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(),
+        showStatus,
+        showError,
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await writeFile(session.localUri.fsPath, 'changed');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+      await flushPromises();
+
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js');
+      expect(sftp.readFile).toHaveBeenCalledWith('/srv/app/index.js', 7);
+      expect(session.syncState).toBe('failed');
+      expect(session.lastError).toContain('remote content does not match local edits');
+      expect(showStatus).toHaveBeenCalledWith('failed', expect.stringContaining('remote content does not match'));
+      expect(showError).toHaveBeenCalledWith('/srv/app/index.js', expect.stringContaining('remote content does not match'));
+      expect(session.baseRemoteStat).toEqual({ size: 7, modifiedAt: 10 });
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('reports an error when the user declines remote sync after saving', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-sync-declined-')));
+    const showError = vi.fn();
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn()
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => false),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        showError,
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(sftp.uploadFile).not.toHaveBeenCalled();
+      expect(session.syncState).toBe('failed');
+      expect(showError).toHaveBeenCalledWith('/srv/app/index.js', 'Remote sync was not enabled. Save was not uploaded.');
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
 });
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 describe('SftpEditSessionManager close cleanup', () => {
   it('deletes cache and unregisters clean idle sessions on close', async () => {
@@ -420,9 +521,9 @@ describe('SftpEditSessionManager close cleanup', () => {
     }
   });
 
-  it('keeps local cache when a failed session is closed and the user chooses keep', async () => {
-    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-keep-')));
-    const promptUnsyncedClose = vi.fn(async () => 'keep' as const);
+  it('deletes cache and unregisters failed sessions on close without replacing the original error', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-failed-')));
+    const showError = vi.fn();
     const manager = new SftpEditSessionManager({
       storageUri: storage,
       sftp: {
@@ -437,51 +538,20 @@ describe('SftpEditSessionManager close cleanup', () => {
         confirmAutoSync: vi.fn(),
         resolveConflict: vi.fn(),
         showStatus: vi.fn(),
-        promptUnsyncedClose
+        showError,
+        promptUnsyncedClose: vi.fn()
       }
     });
 
     try {
       const session = await manager.openRemoteFile('/srv/app/index.js');
       session.syncState = 'failed';
+      session.lastError = 'permission denied';
 
       await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
 
-      expect(promptUnsyncedClose).toHaveBeenCalledWith('/srv/app/index.js');
-      expect(existsSync(session.localUri.fsPath)).toBe(true);
-      expect(manager.getSessionByLocalPath(session.localUri.fsPath)).toBe(session);
-    } finally {
-      manager.dispose();
-      await rm(storage.fsPath, { recursive: true, force: true });
-    }
-  });
-
-  it('discards local cache when a failed session is closed and the user chooses discard', async () => {
-    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-discard-')));
-    const manager = new SftpEditSessionManager({
-      storageUri: storage,
-      sftp: {
-        getActiveServerId: vi.fn(() => 'srv'),
-        stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
-        downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
-        uploadFile: vi.fn()
-      },
-      debounceMs: 10,
-      ui: {
-        openFile: vi.fn(),
-        confirmAutoSync: vi.fn(),
-        resolveConflict: vi.fn(),
-        showStatus: vi.fn(),
-        promptUnsyncedClose: vi.fn(async () => 'discard' as const)
-      }
-    });
-
-    try {
-      const session = await manager.openRemoteFile('/srv/app/index.js');
-      session.syncState = 'failed';
-
-      await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
-
+      expect(showError).not.toHaveBeenCalled();
+      expect(session.lastError).toBe('permission denied');
       expect(existsSync(session.localUri.fsPath)).toBe(false);
       expect(manager.getSessionByLocalPath(session.localUri.fsPath)).toBeUndefined();
     } finally {
@@ -489,4 +559,110 @@ describe('SftpEditSessionManager close cleanup', () => {
       await rm(storage.fsPath, { recursive: true, force: true });
     }
   });
+
+  it('deletes cache on closed editor tabs so reopening downloads a fresh remote copy', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-tab-')));
+    let remoteContent = 'initial';
+    const opened: vscode.Uri[] = [];
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi.fn(async () => ({ size: remoteContent.length, modifiedAt: remoteContent.length })),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, remoteContent)),
+      uploadFile: vi.fn()
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: async (uri) => {
+          opened.push(uri);
+        },
+        confirmAutoSync: vi.fn(),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const first = await manager.openRemoteFile('/srv/app/index.js');
+      expect(existsSync(first.localUri.fsPath)).toBe(true);
+
+      await manager.handleClosedTabs([{ input: { uri: first.localUri } } as vscode.Tab]);
+
+      expect(existsSync(first.localUri.fsPath)).toBe(false);
+      expect(manager.getSessionByLocalPath(first.localUri.fsPath)).toBeUndefined();
+
+      remoteContent = 'changed';
+      const second = await manager.openRemoteFile('/srv/app/index.js');
+
+      expect(second.localUri.fsPath).toBe(first.localUri.fsPath);
+      expect(sftp.downloadFile).toHaveBeenCalledTimes(2);
+      expect(opened).toEqual([first.localUri, second.localUri]);
+    } finally {
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for an in-flight upload before deleting cache on editor tab close', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-uploading-')));
+    const upload = deferred<void>();
+    const showError = vi.fn();
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn(() => upload.promise)
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        showError,
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+      await flushPromises();
+
+      const close = manager.handleClosedTabs([{ input: { uri: session.localUri } } as vscode.Tab]);
+      await flushPromises();
+
+      expect(session.syncState).toBe('uploading');
+      expect(existsSync(session.localUri.fsPath)).toBe(true);
+      expect(showError).not.toHaveBeenCalled();
+
+      upload.resolve();
+      await close;
+
+      expect(session.syncState).toBe('idle');
+      expect(existsSync(session.localUri.fsPath)).toBe(false);
+      expect(manager.getSessionByLocalPath(session.localUri.fsPath)).toBeUndefined();
+      expect(showError).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}

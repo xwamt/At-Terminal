@@ -35,6 +35,15 @@ export class SftpPreviewDocumentStore implements vscode.TextDocumentContentProvi
     this.filesByUri.delete(uri.toString());
     await rm(localPath, { force: true });
   }
+
+  async deletePreviewFilesForClosedTabs(tabs: readonly vscode.Tab[]): Promise<void> {
+    for (const tab of tabs) {
+      const uri = getTabInputUri(tab);
+      if (uri?.scheme === SFTP_PREVIEW_SCHEME) {
+        await this.deletePreviewFile(uri);
+      }
+    }
+  }
 }
 
 export interface OpenRemotePreviewFileOptions {
@@ -66,4 +75,13 @@ export async function openRemotePreviewFile(options: OpenRemotePreviewFileOption
   const readonlyUri = options.previewStore.createReadonlyUri(options.remotePath, localPreviewUri.fsPath);
   await options.openUri(readonlyUri, { preview: false });
   return readonlyUri;
+}
+
+function getTabInputUri(tab: vscode.Tab): vscode.Uri | undefined {
+  const input = tab.input;
+  if (typeof input !== 'object' || input === null || !('uri' in input)) {
+    return undefined;
+  }
+  const uri = (input as { uri?: unknown }).uri;
+  return uri instanceof vscode.Uri ? uri : undefined;
 }

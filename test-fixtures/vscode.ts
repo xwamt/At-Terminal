@@ -82,6 +82,12 @@ export enum StatusBarAlignment {
   Right = 2
 }
 
+export enum ProgressLocation {
+  SourceControl = 1,
+  Window = 10,
+  Notification = 15
+}
+
 export class StatusBarItem {
   text = '';
   tooltip: string | undefined;
@@ -103,15 +109,27 @@ export class StatusBarItem {
 
 const didSaveTextDocument = new EventEmitter<TextDocument>();
 const didCloseTextDocument = new EventEmitter<TextDocument>();
+const didChangeTabs = new EventEmitter<{ closed: unknown[] }>();
 
 export const window = {
   showErrorMessage: async () => undefined,
   showInformationMessage: async () => undefined,
   showWarningMessage: async () => undefined,
+  withProgress: async <T>(
+    _options: unknown,
+    task: (progress: { report(value: unknown): void }, token: unknown) => PromiseLike<T> | T
+  ): Promise<T> =>
+    task({
+      report: () => undefined
+    }, {}),
   createTreeView: () => ({ dispose: () => undefined }),
   createWebviewPanel: () => ({ dispose: () => undefined }),
   showTextDocument: async (document: TextDocument) => document,
-  createStatusBarItem: (_alignment?: StatusBarAlignment, _priority?: number) => new StatusBarItem()
+  createStatusBarItem: (_alignment?: StatusBarAlignment, _priority?: number) => new StatusBarItem(),
+  tabGroups: {
+    onDidChangeTabs: didChangeTabs.event,
+    __fireDidChangeTabs: (event: { closed: unknown[] }) => didChangeTabs.fire(event)
+  }
 };
 
 export const languages = {
