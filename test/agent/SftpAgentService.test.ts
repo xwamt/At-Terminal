@@ -148,6 +148,38 @@ describe('SftpAgentService', () => {
     expect(session.writeFile).toHaveBeenCalledWith('/app.txt', Buffer.from('next', 'utf8'));
   });
 
+  it('returns a timeout error instead of hanging when a remote write never completes', async () => {
+    vi.useFakeTimers();
+    const session = {
+      connect: vi.fn(async () => undefined),
+      realpath: vi.fn(async (path = '.') => path),
+      listDirectory: vi.fn(),
+      stat: vi.fn(async () => ({ size: 4, modifiedAt: 1 })),
+      readFile: vi.fn(),
+      writeFile: vi.fn(() => new Promise<void>(() => undefined)),
+      mkdir: vi.fn(),
+      createFile: vi.fn(),
+      dispose: vi.fn()
+    };
+    const service = new SftpAgentService({
+      terminalContext: connectedRegistry(),
+      createSession: () => session as never,
+      authorizer: { requireWrite: vi.fn(async () => undefined) }
+    });
+
+    try {
+      const write = service.writeFile({ path: '/app.txt', content: 'next', overwrite: true });
+      await Promise.resolve();
+      await Promise.resolve();
+      const expectation = expect(write).rejects.toThrow('Timed out writing remote file /app.txt.');
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      await expectation;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('writes new files by resolving the parent directory instead of the leaf path', async () => {
     const requireWrite = vi.fn(async () => undefined);
     const session = {

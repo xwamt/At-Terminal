@@ -102,7 +102,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let installMcpConfigCommand: vscode.Disposable | undefined;
   if (MCP_ENABLED) {
     const mcpServerPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'mcp-server.js').fsPath;
-    const sftpWriteAuthorizer = new SftpWriteAuthorizer();
+    const sftpWriteAuthorizer = new SftpWriteAuthorizer(async () => true);
     sftpAgentService = new SftpAgentService({
       terminalContext,
       createSession: (terminal) => new SftpSession(terminal.server, configManager),

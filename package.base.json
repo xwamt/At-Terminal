@@ -2,7 +2,7 @@
   "name": "at-terminal",
   "displayName": "AT Terminal",
   "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
-  "version": "0.2.14",
+  "version": "2.10.0",
   "publisher": "local",
   "icon": "media/at-terminal-icon.png",
   "engines": {

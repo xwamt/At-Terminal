@@ -1,15 +1,19 @@
 import { homedir } from 'node:os';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 export interface InstallContinueMcpConfigOptions {
   workspaceFolder: string;
   mcpServerPath: string;
+  waitForServerMs?: number;
+  pollIntervalMs?: number;
 }
 
 export interface InstallKiroMcpConfigOptions {
   home?: string;
   mcpServerPath: string;
+  waitForServerMs?: number;
+  pollIntervalMs?: number;
 }
 
 export const AT_TERMINAL_MCP_TOOL_NAMES = [
@@ -42,6 +46,7 @@ export function continueMcpConfigPath(workspaceFolder: string): string {
 }
 
 export async function installContinueMcpConfig(options: InstallContinueMcpConfigOptions): Promise<string> {
+  await waitForMcpServerBundle(options);
   const target = continueMcpConfigPath(options.workspaceFolder);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, buildContinueMcpConfig(options.mcpServerPath), 'utf8');
@@ -53,6 +58,7 @@ export function kiroMcpConfigPath(home = homedir()): string {
 }
 
 export async function installKiroMcpConfig(options: InstallKiroMcpConfigOptions): Promise<string> {
+  await waitForMcpServerBundle(options);
   const target = kiroMcpConfigPath(options.home);
   const config = await readJsonObject(target);
   const mcpServers = readMcpServers(config);
@@ -73,6 +79,7 @@ export async function installKiroMcpConfig(options: InstallKiroMcpConfigOptions)
 }
 
 export async function ensureKiroMcpConfig(options: InstallKiroMcpConfigOptions): Promise<string | undefined> {
+  await waitForMcpServerBundle(options);
   const target = kiroMcpConfigPath(options.home);
   const config = await readJsonObject(target);
   const server = readMcpServers(config)['AT Terminal'];
@@ -127,4 +134,38 @@ function hasCurrentKiroMcpServer(value: unknown, mcpServerPath: string): boolean
 
 function normalizePath(path: string): string {
   return path.replaceAll('\\', '/');
+}
+
+async function waitForMcpServerBundle(options: { mcpServerPath: string; waitForServerMs?: number; pollIntervalMs?: number }): Promise<void> {
+  const timeoutMs = options.waitForServerMs ?? 15_000;
+  const pollIntervalMs = options.pollIntervalMs ?? 250;
+  const deadline = Date.now() + timeoutMs;
+
+  while (true) {
+    if (await isFile(options.mcpServerPath)) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `AT Terminal MCP server bundle is missing: ${normalizePath(options.mcpServerPath)}. Reinstall the MCP VSIX after packaging completes.`
+      );
+    }
+    await delay(Math.min(pollIntervalMs, Math.max(1, deadline - Date.now())));
+  }
+}
+
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+    if (code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
+function delay(durationMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
 }

@@ -20,6 +20,7 @@ describe('package variants', () => {
 
   it('keeps the MCP manifest as the only manifest with agent and MCP contributions', () => {
     expect(mcpManifest.displayName).toBe('AT Terminal MCP');
+    expect(mcpManifest.activationEvents).toContain('onStartupFinished');
     expect(mcpManifest.activationEvents).toContain('onLanguageModelTool:list_ssh_servers');
     expect(JSON.stringify(mcpManifest.contributes.languageModelTools)).toContain('list_ssh_servers');
   });

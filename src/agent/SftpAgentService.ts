@@ -29,6 +29,7 @@ export interface SftpTargetInput {
 
 const DEFAULT_READ_BYTES = 64 * 1024;
 const MAX_READ_BYTES = 256 * 1024;
+const WRITE_TIMEOUT_MS = 60_000;
 
 export class SftpAgentService {
   private readonly sessions = new Map<string, Promise<AgentSftpSession>>();
@@ -89,13 +90,17 @@ export class SftpAgentService {
     if (exists && !input.overwrite) {
       throw new Error('Remote file already exists. Pass overwrite: true to replace it.');
     }
-    await this.options.authorizer.requireWrite(target.context.server, {
-      operation: 'write_file',
-      path,
-      overwrite: Boolean(exists)
-    });
+    await withTimeout(
+      this.options.authorizer.requireWrite(target.context.server, {
+        operation: 'write_file',
+        path,
+        overwrite: Boolean(exists)
+      }),
+      WRITE_TIMEOUT_MS,
+      `Timed out waiting for SFTP write authorization for ${path}.`
+    );
     const content = Buffer.from(input.content, 'utf8');
-    await session.writeFile(path, content);
+    await withTimeout(session.writeFile(path, content), WRITE_TIMEOUT_MS, `Timed out writing remote file ${path}.`);
     return {
       terminalId: target.context.terminalId,
       serverId: target.context.server.id,
@@ -112,15 +117,23 @@ export class SftpAgentService {
     if (await pathExists(session, path)) {
       throw new Error('Remote file already exists.');
     }
-    await this.options.authorizer.requireWrite(target.context.server, {
-      operation: 'create_file',
-      path,
-      overwrite: false
-    });
+    await withTimeout(
+      this.options.authorizer.requireWrite(target.context.server, {
+        operation: 'create_file',
+        path,
+        overwrite: false
+      }),
+      WRITE_TIMEOUT_MS,
+      `Timed out waiting for SFTP create authorization for ${path}.`
+    );
     if (input.content === undefined) {
-      await session.createFile(path);
+      await withTimeout(session.createFile(path), WRITE_TIMEOUT_MS, `Timed out creating remote file ${path}.`);
     } else {
-      await session.writeFile(path, Buffer.from(input.content, 'utf8'));
+      await withTimeout(
+        session.writeFile(path, Buffer.from(input.content, 'utf8')),
+        WRITE_TIMEOUT_MS,
+        `Timed out writing remote file ${path}.`
+      );
     }
     return { terminalId: target.context.terminalId, serverId: target.context.server.id, path };
   }
@@ -129,12 +142,16 @@ export class SftpAgentService {
     const target = await this.resolveTarget(input);
     const session = await this.ensureSession(target.context);
     const path = await this.resolveWritablePath(target.context.terminalId, session, input.path);
-    await this.options.authorizer.requireWrite(target.context.server, {
-      operation: 'create_directory',
-      path,
-      overwrite: false
-    });
-    await session.mkdir(path);
+    await withTimeout(
+      this.options.authorizer.requireWrite(target.context.server, {
+        operation: 'create_directory',
+        path,
+        overwrite: false
+      }),
+      WRITE_TIMEOUT_MS,
+      `Timed out waiting for SFTP create directory authorization for ${path}.`
+    );
+    await withTimeout(session.mkdir(path), WRITE_TIMEOUT_MS, `Timed out creating remote directory ${path}.`);
     return { terminalId: target.context.terminalId, serverId: target.context.server.id, path };
   }
 
@@ -249,4 +266,20 @@ function clampReadBytes(value: number | undefined): number {
 
 function looksBinary(buffer: Buffer): boolean {
   return buffer.includes(0);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
 }

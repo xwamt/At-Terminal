@@ -5,6 +5,7 @@ const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
 
 describe('agent tool package contributions', () => {
   it('activates and contributes SSH language model tools', () => {
+    expect(manifest.activationEvents).toContain('onStartupFinished');
     expect(manifest.activationEvents).toContain('onLanguageModelTool:list_ssh_servers');
     expect(manifest.activationEvents).toContain('onLanguageModelTool:get_terminal_context');
     expect(manifest.activationEvents).toContain('onLanguageModelTool:run_remote_command');

@@ -41,7 +41,7 @@ Kiro/Cursor JSON:
   "mcpServers": {
     "AT Terminal": {
       "command": "node",
-      "args": ["C:/ABSOLUTE/PATH/TO/local.at-terminal-mcp-0.2.14/dist/mcp-server.js"]
+      "args": ["C:/ABSOLUTE/PATH/TO/local.at-terminal-mcp-2.10.0/dist/mcp-server.js"]
     }
   }
 }
@@ -57,7 +57,7 @@ mcpServers:
   - name: AT Terminal
     command: node
     args:
-      - C:/ABSOLUTE/PATH/TO/local.at-terminal-mcp-0.2.14/dist/mcp-server.js
+      - C:/ABSOLUTE/PATH/TO/local.at-terminal-mcp-2.10.0/dist/mcp-server.js
 ```
 
 ## Tool Selection
