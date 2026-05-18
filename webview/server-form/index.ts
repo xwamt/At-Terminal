@@ -9,7 +9,10 @@ const authCards = Array.from(document.querySelectorAll<HTMLButtonElement>('[data
 const privateKeyPath = document.querySelector<HTMLInputElement>('#privateKeyPath');
 const privateKeyBrowse = document.querySelector<HTMLButtonElement>('#privateKeyBrowse');
 const password = document.querySelector<HTMLInputElement>('#password');
+const passwordToggle = document.querySelector<HTMLButtonElement>('#passwordToggle');
 const error = document.querySelector<HTMLElement>('#form-error');
+const testStatus = document.querySelector<HTMLElement>('#testStatus');
+const testConnectionButton = document.querySelector<HTMLButtonElement>('#testConnectionButton');
 const submitButton = document.querySelector<HTMLButtonElement>('#submitButton');
 const submitLabel = document.querySelector<HTMLElement>('#submitLabel');
 const defaultSubmitLabel = submitLabel?.textContent ?? 'Save Server';
@@ -33,11 +36,31 @@ function clearError(): void {
   setError('');
 }
 
+function setTestStatus(message: string, state?: 'success' | 'error'): void {
+  if (!testStatus) {
+    return;
+  }
+  testStatus.textContent = message;
+  testStatus.classList.toggle('is-success', state === 'success');
+  testStatus.classList.toggle('is-error', state === 'error');
+}
+
+function clearTestStatus(): void {
+  setTestStatus('');
+}
+
 function setSaving(isSaving: boolean): void {
   submitButton?.toggleAttribute('disabled', isSaving);
   submitButton?.classList.toggle('is-loading', isSaving);
   if (submitLabel) {
     submitLabel.textContent = isSaving ? 'Saving...' : defaultSubmitLabel;
+  }
+}
+
+function setTesting(isTesting: boolean): void {
+  testConnectionButton?.toggleAttribute('disabled', isTesting);
+  if (testConnectionButton) {
+    testConnectionButton.textContent = isTesting ? 'Testing...' : 'Test Connection';
   }
 }
 
@@ -50,6 +73,7 @@ function selectAuth(value: string): void {
   if (authType) {
     authType.value = next;
   }
+  clearTestStatus();
   updateAuthFields();
   updateSummary();
 }
@@ -94,26 +118,71 @@ authCards.forEach((card) => {
 
 privateKeyBrowse?.addEventListener('click', () => {
   clearError();
+  clearTestStatus();
   vscode.postMessage({ type: 'selectPrivateKey' });
 });
 
-form?.addEventListener('input', updateSummary);
+passwordToggle?.addEventListener('click', () => {
+  if (!password || !passwordToggle) {
+    return;
+  }
+  const nextVisible = password.type === 'password';
+  password.type = nextVisible ? 'text' : 'password';
+  passwordToggle.textContent = nextVisible ? 'Hide' : 'Show';
+  passwordToggle.setAttribute('aria-label', nextVisible ? 'Hide password' : 'Show password');
+  passwordToggle.setAttribute('aria-pressed', String(nextVisible));
+});
+
+form?.addEventListener('input', () => {
+  clearTestStatus();
+  updateSummary();
+});
 updateAuthFields();
 updateSummary();
+
+function currentPayload(): Record<string, FormDataEntryValue> | undefined {
+  if (!form) {
+    return undefined;
+  }
+  const data = new FormData(form);
+  return Object.fromEntries(data.entries());
+}
+
+function validatePayload(payload: Record<string, FormDataEntryValue>): boolean {
+  if (!payload.label || !payload.host || !payload.username) {
+    setSaving(false);
+    setTesting(false);
+    clearTestStatus();
+    setError('Label, host, and username are required.');
+    return false;
+  }
+  if (selectedAuth() === 'privateKey' && !String(payload.privateKeyPath ?? '').trim()) {
+    setSaving(false);
+    setTesting(false);
+    clearTestStatus();
+    setError('Select or enter a private key path.');
+    return false;
+  }
+  return true;
+}
+
+testConnectionButton?.addEventListener('click', () => {
+  clearError();
+  setTestStatus('Testing connection...');
+  const payload = currentPayload();
+  if (!payload || !validatePayload(payload)) {
+    return;
+  }
+  setTesting(true);
+  vscode.postMessage({ type: 'testConnection', payload });
+});
 
 form?.addEventListener('submit', (event) => {
   event.preventDefault();
   clearError();
-  const data = new FormData(form);
-  const payload = Object.fromEntries(data.entries());
-  if (!payload.label || !payload.host || !payload.username) {
-    setSaving(false);
-    setError('Label, host, and username are required.');
-    return;
-  }
-  if (selectedAuth() === 'privateKey' && !String(payload.privateKeyPath ?? '').trim()) {
-    setSaving(false);
-    setError('Select or enter a private key path.');
+  clearTestStatus();
+  const payload = currentPayload();
+  if (!payload || !validatePayload(payload)) {
     return;
   }
   setSaving(true);
@@ -127,14 +196,28 @@ window.addEventListener('message', (event: MessageEvent) => {
       privateKeyPath.value = message.payload.path;
     }
     clearError();
+    clearTestStatus();
     updateSummary();
   }
   if (message.type === 'error' && typeof message.payload === 'string') {
     setSaving(false);
     setError(message.payload);
   }
+  if (message.type === 'connectionTestResult' && isConnectionTestPayload(message.payload)) {
+    setTesting(false);
+    setTestStatus(message.payload.message, message.payload.ok ? 'success' : 'error');
+  }
 });
 
 function isPrivateKeyPayload(value: unknown): value is { path: string } {
   return Boolean(value && typeof value === 'object' && typeof (value as { path?: unknown }).path === 'string');
+}
+
+function isConnectionTestPayload(value: unknown): value is { ok: boolean; message: string } {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      typeof (value as { ok?: unknown }).ok === 'boolean' &&
+      typeof (value as { message?: unknown }).message === 'string'
+  );
 }

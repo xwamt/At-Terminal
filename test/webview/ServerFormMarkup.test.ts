@@ -14,6 +14,9 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('id="authType"');
     expect(html).toContain('id="privateKeyBrowse"');
     expect(html).toContain('id="connectionSummary"');
+    expect(html).toContain('id="passwordToggle"');
+    expect(html).toContain('aria-label="Show password"');
+    expect(html).toContain('id="testConnectionButton"');
     expect(html).toContain('id="submitButton"');
     expect(html).toContain('id="submitLabel"');
     expect(html).toContain('id="submitSpinner"');
@@ -44,6 +47,8 @@ describe('ServerFormPanel markup', () => {
     expect(css).toContain('.auth-card-grid');
     expect(css).toContain('.auth-card');
     expect(css).toContain('.auth-card.is-selected');
+    expect(css).toContain('.password-input-row');
+    expect(css).toContain('.test-status');
     expect(css).toContain('.file-picker-row');
     expect(css).toContain('.connection-summary');
     expect(css).toContain('.primary-action.is-loading');

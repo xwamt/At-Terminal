@@ -160,7 +160,7 @@ export function activate(context: vscode.ExtensionContext): void {
       void sftpPreviewStore.deletePreviewFilesForClosedTabs(event.closed);
     }),
     vscode.commands.registerCommand('sshManager.addServer', () => {
-      ServerFormPanel.open(context, configManager, () => treeProvider.refresh());
+      ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), undefined, hostKeyVerifier);
     }),
     vscode.commands.registerCommand('sshManager.editServer', async (item?: ServerTreeItem) => {
       if (!item) {
@@ -168,7 +168,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const server = await configManager.getServer(item.server.id);
       if (server) {
-        ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), server);
+        ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), server, hostKeyVerifier);
       }
     }),
     vscode.commands.registerCommand('sshManager.deleteServer', async (item?: ServerTreeItem) => {

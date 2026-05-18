@@ -217,6 +217,16 @@ select:focus {
   gap: 8px;
 }
 
+.password-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.password-toggle {
+  min-width: 58px;
+}
+
 .secondary-action {
   color: var(--vscode-button-secondaryForeground);
   background: var(--vscode-button-secondaryBackground);
@@ -228,6 +238,11 @@ select:focus {
 
 .secondary-action:hover {
   background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.secondary-action[disabled] {
+  cursor: not-allowed;
+  opacity: 0.72;
 }
 
 .connection-summary {
@@ -261,8 +276,30 @@ select:focus {
   line-height: 1.35;
 }
 
+.form-feedback {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.test-status {
+  min-width: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.test-status.is-success {
+  color: var(--vscode-testing-iconPassed, var(--vscode-terminal-ansiGreen));
+}
+
+.test-status.is-error {
+  color: var(--vscode-errorForeground);
+}
+
 .form-actions {
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
   flex: 0 0 auto;
 }
@@ -333,9 +370,11 @@ select:focus {
   }
 
   .form-actions {
+    display: grid;
     justify-content: stretch;
   }
 
+  .secondary-action,
   .primary-action {
     width: 100%;
   }

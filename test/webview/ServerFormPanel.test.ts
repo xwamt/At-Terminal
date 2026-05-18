@@ -145,4 +145,76 @@ describe('ServerFormPanel message handling', () => {
     expect(handled).toBe(true);
     expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ id: 'server-1' }), undefined);
   });
+
+  it('tests the current form connection without saving or closing the panel', async () => {
+    const postMessage = vi.fn();
+    const saveServer = vi.fn();
+    const dispose = vi.fn();
+    const testConnection = vi.fn(async () => undefined);
+
+    const handled = await handleServerFormMessage(
+      {
+        type: 'testConnection',
+        payload: {
+          label: 'Production',
+          group: 'prod',
+          host: 'example.com',
+          port: 22,
+          username: 'deploy',
+          authType: 'password',
+          password: 'secret',
+          keepAliveInterval: 30
+        }
+      },
+      undefined,
+      { saveServer, getPassword: vi.fn() } as never,
+      vi.fn(),
+      { dispose, webview: { postMessage } } as never,
+      { testConnection }
+    );
+
+    expect(handled).toBe(true);
+    expect(saveServer).not.toHaveBeenCalled();
+    expect(dispose).not.toHaveBeenCalled();
+    expect(testConnection).toHaveBeenCalledWith(expect.objectContaining({ host: 'example.com' }), 'secret');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'connectionTestResult',
+      payload: { ok: true, message: 'Connection test succeeded.' }
+    });
+  });
+
+  it('uses the saved password when testing an edited password-auth server with a blank password', async () => {
+    const postMessage = vi.fn();
+    const getPassword = vi.fn(async () => 'saved-secret');
+    const testConnection = vi.fn(async () => undefined);
+
+    const handled = await handleServerFormMessage(
+      {
+        type: 'testConnection',
+        payload: {
+          label: 'Production',
+          group: 'prod',
+          host: 'example.com',
+          port: 22,
+          username: 'deploy',
+          authType: 'password',
+          password: '',
+          keepAliveInterval: 30
+        }
+      },
+      server(),
+      { saveServer: vi.fn(), getPassword } as never,
+      vi.fn(),
+      { dispose: vi.fn(), webview: { postMessage } } as never,
+      { testConnection }
+    );
+
+    expect(handled).toBe(true);
+    expect(getPassword).toHaveBeenCalledWith('server-1');
+    expect(testConnection).toHaveBeenCalledWith(expect.objectContaining({ id: 'server-1' }), 'saved-secret');
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'connectionTestResult',
+      payload: { ok: true, message: 'Connection test succeeded.' }
+    });
+  });
 });

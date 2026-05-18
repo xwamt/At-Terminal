@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { parseServerConfig } from '../config/schema';
+import { testSshConnection } from '../ssh/SshConnectionTester';
+import type { HostKeyVerifier } from '../ssh/SshConnectionConfig';
 import { formatError } from '../utils/errors';
 import { renderWebviewHtml } from './html';
 
@@ -10,6 +12,7 @@ type SubmitPayload = Record<string, unknown>;
 
 type ServerFormMessage =
   | { type?: 'submit'; payload?: SubmitPayload }
+  | { type?: 'testConnection'; payload?: SubmitPayload }
   | { type?: 'selectPrivateKey'; payload?: undefined }
   | { type?: string; payload?: SubmitPayload };
 
@@ -19,6 +22,8 @@ interface PrivateKeySelection {
 
 interface ServerFormMessageOptions {
   selectPrivateKey?: () => Thenable<PrivateKeySelection[] | undefined> | Promise<PrivateKeySelection[] | undefined>;
+  testConnection?: (server: ServerConfig, password?: string) => Promise<void>;
+  hostKeyVerifier?: HostKeyVerifier;
 }
 
 export class ServerFormPanel {
@@ -26,7 +31,8 @@ export class ServerFormPanel {
     context: vscode.ExtensionContext,
     configManager: ConfigManager,
     onSaved: () => void,
-    existing?: ServerConfig
+    existing?: ServerConfig,
+    hostKeyVerifier?: HostKeyVerifier
   ): void {
     const panel = vscode.window.createWebviewPanel(
       'sshServerForm',
@@ -49,6 +55,7 @@ export class ServerFormPanel {
 
     panel.webview.onDidReceiveMessage(async (message: ServerFormMessage) => {
       await handleServerFormMessage(message, existing, configManager, onSaved, panel, {
+        hostKeyVerifier,
         selectPrivateKey: () =>
           vscode.window.showOpenDialog({
             canSelectFiles: true,
@@ -64,7 +71,7 @@ export class ServerFormPanel {
 export async function handleServerFormMessage(
   message: ServerFormMessage,
   existing: ServerConfig | undefined,
-  configManager: Pick<ConfigManager, 'saveServer'>,
+  configManager: Pick<ConfigManager, 'saveServer' | 'getPassword'>,
   onSaved: () => void,
   panel: Pick<vscode.WebviewPanel, 'dispose' | 'webview'>,
   options: ServerFormMessageOptions = {}
@@ -91,28 +98,17 @@ export async function handleServerFormMessage(
   }
 
   if (message.type !== 'submit' || !message.payload) {
+    if (message.type === 'testConnection' && message.payload) {
+      await handleConnectionTest(message.payload, existing, configManager, panel, options);
+      return true;
+    }
     return false;
   }
 
   try {
-    const now = Date.now();
     const authType = String(message.payload.authType);
     const password = authType === 'password' ? optionalString(message.payload.password) : undefined;
-
-    const server = parseServerConfig({
-      id: existing?.id ?? randomUUID(),
-      label: String(message.payload.label ?? '').trim(),
-      group: optionalString(message.payload.group),
-      host: String(message.payload.host ?? '').trim(),
-      port: Number(message.payload.port ?? 22),
-      username: String(message.payload.username ?? '').trim(),
-      authType,
-      privateKeyPath: optionalString(message.payload.privateKeyPath),
-      keepAliveInterval: Number(message.payload.keepAliveInterval ?? 30),
-      encoding: 'utf-8',
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now
-    });
+    const server = serverFromPayload(message.payload, existing);
     if (!existing && authType === 'password' && !password) {
       await panel.webview.postMessage({ type: 'error', payload: 'Password is required for new password-auth servers.' });
       return true;
@@ -126,6 +122,76 @@ export async function handleServerFormMessage(
   }
 
   return true;
+}
+
+async function handleConnectionTest(
+  payload: SubmitPayload,
+  existing: ServerConfig | undefined,
+  configManager: Pick<ConfigManager, 'getPassword'>,
+  panel: Pick<vscode.WebviewPanel, 'webview'>,
+  options: ServerFormMessageOptions
+): Promise<void> {
+  try {
+    const server = serverFromPayload(payload, existing);
+    const password = await passwordForConnectionTest(payload, server, existing, configManager);
+    const runTest =
+      options.testConnection ??
+      ((candidate: ServerConfig, candidatePassword?: string) =>
+        testSshConnection(
+          candidate,
+          { getPassword: async () => candidatePassword },
+          options.hostKeyVerifier
+        ));
+
+    await runTest(server, password);
+    await panel.webview.postMessage({
+      type: 'connectionTestResult',
+      payload: { ok: true, message: 'Connection test succeeded.' }
+    });
+  } catch (error) {
+    await panel.webview.postMessage({
+      type: 'connectionTestResult',
+      payload: { ok: false, message: formatError(error) }
+    });
+  }
+}
+
+async function passwordForConnectionTest(
+  payload: SubmitPayload,
+  server: ServerConfig,
+  existing: ServerConfig | undefined,
+  configManager: Pick<ConfigManager, 'getPassword'>
+): Promise<string | undefined> {
+  if (server.authType !== 'password') {
+    return undefined;
+  }
+
+  const password = optionalString(payload.password);
+  if (password) {
+    return password;
+  }
+  if (existing) {
+    return configManager.getPassword(existing.id);
+  }
+  throw new Error('Password is required for new password-auth servers.');
+}
+
+function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | undefined): ServerConfig {
+  const now = Date.now();
+  return parseServerConfig({
+    id: existing?.id ?? randomUUID(),
+    label: String(payload.label ?? '').trim(),
+    group: optionalString(payload.group),
+    host: String(payload.host ?? '').trim(),
+    port: Number(payload.port ?? 22),
+    username: String(payload.username ?? '').trim(),
+    authType: String(payload.authType),
+    privateKeyPath: optionalString(payload.privateKeyPath),
+    keepAliveInterval: Number(payload.keepAliveInterval ?? 30),
+    encoding: 'utf-8',
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now
+  });
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -183,7 +249,10 @@ export function renderServerForm(server?: ServerConfig): string {
         </div>
         <div class="auth-fields">
           <label class="field-stack auth-password-field">Password
-            <input id="password" name="password" type="password" autocomplete="new-password">
+            <div class="password-input-row">
+              <input id="password" name="password" type="password" autocomplete="new-password">
+              <button id="passwordToggle" class="secondary-action password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+            </div>
             <span class="field-help">${passwordHelp}</span>
           </label>
           <label class="field-stack auth-key-field">Private key
@@ -209,8 +278,12 @@ export function renderServerForm(server?: ServerConfig): string {
       </section>
     </div>
     <footer class="form-footer">
-      <div id="form-error" class="form-error" role="status" aria-live="polite"></div>
+      <div class="form-feedback">
+        <div id="form-error" class="form-error" role="status" aria-live="polite"></div>
+        <div id="testStatus" class="test-status" role="status" aria-live="polite"></div>
+      </div>
       <div class="form-actions">
+        <button id="testConnectionButton" class="secondary-action" type="button">Test Connection</button>
         <button id="submitButton" class="primary-action" type="submit">
           <span id="submitSpinner" class="submit-spinner" aria-hidden="true"></span>
           <span id="submitLabel">${submitText}</span>
