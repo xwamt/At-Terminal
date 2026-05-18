@@ -1,7 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { ServerConfig } from '../../src/config/schema';
 import { renderServerForm } from '../../src/webview/ServerFormPanel';
+
+const jumpHost: ServerConfig = {
+  id: 'jump-1',
+  label: 'Bastion CN',
+  host: 'bastion.example.com',
+  port: 22,
+  username: 'ops',
+  authType: 'password',
+  keepAliveInterval: 30,
+  encoding: 'utf-8',
+  createdAt: 1,
+  updatedAt: 1
+};
 
 describe('ServerFormPanel markup', () => {
   it('renders the refreshed server form structure', () => {
@@ -52,5 +66,37 @@ describe('ServerFormPanel markup', () => {
     expect(css).toContain('.file-picker-row');
     expect(css).toContain('.connection-summary');
     expect(css).toContain('.primary-action.is-loading');
+  });
+
+  it('renders jump host options in the connection panel', () => {
+    const html = renderServerForm(undefined, [jumpHost]);
+
+    expect(html).toContain('name="jumpHostId"');
+    expect(html).toContain('Direct connection');
+    expect(html).toContain('Bastion CN - ops@bastion.example.com:22');
+    expect(html).toContain('data-summary="route"');
+  });
+
+  it('excludes the edited server from jump host options', () => {
+    const html = renderServerForm(jumpHost, [jumpHost]);
+
+    expect(html).toContain('Direct connection');
+    expect(html).not.toContain('Bastion CN - ops@bastion.example.com:22');
+  });
+
+  it('marks the saved jump host as selected when editing', () => {
+    const html = renderServerForm(
+      {
+        ...jumpHost,
+        id: 'app-1',
+        label: 'App',
+        host: '10.0.0.20',
+        jumpHostId: 'jump-1'
+      },
+      [jumpHost]
+    );
+
+    expect(html).toContain('<option value="jump-1" selected>');
+    expect(html).toContain('Route: via Bastion CN');
   });
 });

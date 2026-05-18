@@ -27,13 +27,13 @@ interface ServerFormMessageOptions {
 }
 
 export class ServerFormPanel {
-  static open(
+  static async open(
     context: vscode.ExtensionContext,
     configManager: ConfigManager,
     onSaved: () => void,
     existing?: ServerConfig,
     hostKeyVerifier?: HostKeyVerifier
-  ): void {
+  ): Promise<void> {
     const panel = vscode.window.createWebviewPanel(
       'sshServerForm',
       existing ? `Edit SSH Server: ${existing.label}` : 'Add SSH Server',
@@ -43,6 +43,7 @@ export class ServerFormPanel {
         localResourceRoots: [context.extensionUri]
       }
     );
+    const servers = await configManager.listServers();
 
     panel.webview.html = renderWebviewHtml(
       panel.webview,
@@ -50,7 +51,7 @@ export class ServerFormPanel {
         script: vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview', 'server-form.js'),
         style: vscode.Uri.joinPath(context.extensionUri, 'webview', 'server-form', 'index.css')
       },
-      renderServerForm(existing)
+      renderServerForm(existing, servers)
     );
 
     panel.webview.onDidReceiveMessage(async (message: ServerFormMessage) => {
@@ -187,6 +188,7 @@ function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | unde
     username: String(payload.username ?? '').trim(),
     authType: String(payload.authType),
     privateKeyPath: optionalString(payload.privateKeyPath),
+    jumpHostId: optionalString(payload.jumpHostId),
     keepAliveInterval: Number(payload.keepAliveInterval ?? 30),
     encoding: 'utf-8',
     createdAt: existing?.createdAt ?? now,
@@ -199,12 +201,14 @@ function optionalString(value: unknown): string | undefined {
   return text.length > 0 ? text : undefined;
 }
 
-export function renderServerForm(server?: ServerConfig): string {
+export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] = []): string {
   const authType = server?.authType ?? 'password';
   const isPassword = authType === 'password';
   const isPrivateKey = authType === 'privateKey';
   const submitText = server ? 'Save Server' : 'Add Server';
   const passwordHelp = server ? 'Leave blank to keep the saved password.' : 'Stored securely in VS Code SecretStorage.';
+  const jumpHostOptions = servers.filter((candidate) => candidate.id !== server?.id);
+  const selectedJumpHost = jumpHostOptions.find((candidate) => candidate.id === server?.jumpHostId);
 
   return `<main class="server-form-shell">
   <header class="form-header">
@@ -228,6 +232,17 @@ export function renderServerForm(server?: ServerConfig): string {
           <label class="field-stack">Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
           <label class="field-stack">Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">Keepalive <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
+          <label class="field-stack field-wide">Jump Host
+            <select name="jumpHostId">
+              <option value="">Direct connection</option>
+              ${jumpHostOptions
+                .map((candidate) => {
+                  const selected = candidate.id === server?.jumpHostId ? ' selected' : '';
+                  return `<option value="${escapeAttr(candidate.id)}"${selected}>${escapeHtml(formatJumpHostOption(candidate))}</option>`;
+                })
+                .join('')}
+            </select>
+          </label>
         </div>
       </section>
 
@@ -274,6 +289,9 @@ export function renderServerForm(server?: ServerConfig): string {
           <div class="summary-line" data-summary="target">Enter host and username</div>
           <div class="summary-line" data-summary="auth">Authentication: ${isPrivateKey ? 'Private Key' : 'Password'}</div>
           <div class="summary-line" data-summary="group">Group: ${escapeHtml(server?.group?.trim() || 'Default')}</div>
+          <div class="summary-line" data-summary="route">Route: ${
+            selectedJumpHost ? `via ${escapeHtml(selectedJumpHost.label)}` : 'Direct connection'
+          }</div>
         </div>
       </section>
     </div>
@@ -300,4 +318,8 @@ function escapeAttr(value: string): string {
 
 function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function formatJumpHostOption(server: ServerConfig): string {
+  return `${server.label} - ${server.username}@${server.host}:${server.port}`;
 }

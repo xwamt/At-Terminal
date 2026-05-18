@@ -10,6 +10,7 @@ const privateKeyPath = document.querySelector<HTMLInputElement>('#privateKeyPath
 const privateKeyBrowse = document.querySelector<HTMLButtonElement>('#privateKeyBrowse');
 const password = document.querySelector<HTMLInputElement>('#password');
 const passwordToggle = document.querySelector<HTMLButtonElement>('#passwordToggle');
+const jumpHost = document.querySelector<HTMLSelectElement>('select[name="jumpHostId"]');
 const error = document.querySelector<HTMLElement>('#form-error');
 const testStatus = document.querySelector<HTMLElement>('#testStatus');
 const testConnectionButton = document.querySelector<HTMLButtonElement>('#testConnectionButton');
@@ -19,6 +20,7 @@ const defaultSubmitLabel = submitLabel?.textContent ?? 'Save Server';
 const summaryTarget = document.querySelector<HTMLElement>('[data-summary="target"]');
 const summaryAuth = document.querySelector<HTMLElement>('[data-summary="auth"]');
 const summaryGroup = document.querySelector<HTMLElement>('[data-summary="group"]');
+const summaryRoute = document.querySelector<HTMLElement>('[data-summary="route"]');
 
 function field(name: string): HTMLInputElement | null {
   return form?.elements.namedItem(name) instanceof HTMLInputElement
@@ -98,6 +100,7 @@ function updateSummary(): void {
   const host = field('host')?.value.trim() ?? '';
   const port = field('port')?.value.trim() || '22';
   const group = field('group')?.value.trim() || 'Default';
+  const jumpHostLabel = jumpHost?.selectedOptions[0]?.textContent?.trim() ?? 'Direct connection';
 
   if (summaryTarget) {
     summaryTarget.textContent = username && host ? `${username}@${host}:${port}` : 'Enter host and username';
@@ -107,6 +110,10 @@ function updateSummary(): void {
   }
   if (summaryGroup) {
     summaryGroup.textContent = `Group: ${group}`;
+  }
+  if (summaryRoute) {
+    summaryRoute.textContent =
+      jumpHost?.value && jumpHostLabel ? `Route: via ${jumpHostLabel.split(' - ')[0]}` : 'Route: Direct connection';
   }
 }
 
@@ -168,7 +175,10 @@ function validatePayload(payload: Record<string, FormDataEntryValue>): boolean {
 
 testConnectionButton?.addEventListener('click', () => {
   clearError();
-  setTestStatus('Testing connection...');
+  const jumpHostLabel = jumpHost?.selectedOptions[0]?.textContent?.trim();
+  setTestStatus(
+    jumpHost?.value && jumpHostLabel ? `Testing connection via ${jumpHostLabel.split(' - ')[0]}...` : 'Testing connection...'
+  );
   const payload = currentPayload();
   if (!payload || !validatePayload(payload)) {
     return;

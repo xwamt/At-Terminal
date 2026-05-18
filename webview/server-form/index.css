@@ -149,6 +149,10 @@ select:focus {
   outline-offset: -1px;
 }
 
+.field-stack select {
+  min-height: 32px;
+}
+
 .field-wide {
   grid-column: 1 / -1;
 }
