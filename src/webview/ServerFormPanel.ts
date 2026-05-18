@@ -72,7 +72,7 @@ export class ServerFormPanel {
 export async function handleServerFormMessage(
   message: ServerFormMessage,
   existing: ServerConfig | undefined,
-  configManager: Pick<ConfigManager, 'saveServer' | 'getPassword'>,
+  configManager: Pick<ConfigManager, 'saveServer' | 'getPassword' | 'getServer'>,
   onSaved: () => void,
   panel: Pick<vscode.WebviewPanel, 'dispose' | 'webview'>,
   options: ServerFormMessageOptions = {}
@@ -128,7 +128,7 @@ export async function handleServerFormMessage(
 async function handleConnectionTest(
   payload: SubmitPayload,
   existing: ServerConfig | undefined,
-  configManager: Pick<ConfigManager, 'getPassword'>,
+  configManager: Pick<ConfigManager, 'getPassword' | 'getServer'>,
   panel: Pick<vscode.WebviewPanel, 'webview'>,
   options: ServerFormMessageOptions
 ): Promise<void> {
@@ -140,7 +140,10 @@ async function handleConnectionTest(
       ((candidate: ServerConfig, candidatePassword?: string) =>
         testSshConnection(
           candidate,
-          { getPassword: async () => candidatePassword },
+          {
+            getPassword: async () => candidatePassword,
+            getServer: (id) => configManager.getServer(id)
+          },
           options.hostKeyVerifier
         ));
 

@@ -6,6 +6,7 @@ import { SftpAgentService } from './agent/SftpAgentService';
 import { SftpWriteAuthorizer } from './agent/SftpWriteAuthorizer';
 import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
+import type { ServerConfig } from './config/schema';
 import { BridgeServer } from './mcp/BridgeServer';
 import { ensureKiroMcpConfig, installContinueMcpConfig, installKiroMcpConfig } from './mcp/McpConfigInstaller';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
@@ -160,7 +161,7 @@ export function activate(context: vscode.ExtensionContext): void {
       void sftpPreviewStore.deletePreviewFilesForClosedTabs(event.closed);
     }),
     vscode.commands.registerCommand('sshManager.addServer', () => {
-      ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), undefined, hostKeyVerifier);
+      void ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), undefined, hostKeyVerifier);
     }),
     vscode.commands.registerCommand('sshManager.editServer', async (item?: ServerTreeItem) => {
       if (!item) {
@@ -168,11 +169,16 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const server = await configManager.getServer(item.server.id);
       if (server) {
-        ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), server, hostKeyVerifier);
+        await ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), server, hostKeyVerifier);
       }
     }),
     vscode.commands.registerCommand('sshManager.deleteServer', async (item?: ServerTreeItem) => {
       if (!item) {
+        return;
+      }
+      const references = await configManager.findJumpHostReferences(item.server.id);
+      if (references.length > 0) {
+        await showTimedNotification(formatJumpHostDeleteBlockMessage(item.server, references), 'warning');
         return;
       }
       const answer = await vscode.window.showWarningMessage(
@@ -370,4 +376,10 @@ function getTargetDirectory(
     return rootPath;
   }
   return item instanceof SftpFileTreeItem ? dirname(item.entry.path) : item.entry.path;
+}
+
+export function formatJumpHostDeleteBlockMessage(server: ServerConfig, references: ServerConfig[]): string {
+  return `Cannot delete "${server.label}" because it is used as a jump host by: ${references
+    .map((reference) => reference.label)
+    .join(', ')}`;
 }

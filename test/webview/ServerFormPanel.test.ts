@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ServerConfig } from '../../src/config/schema';
+import { testSshConnection } from '../../src/ssh/SshConnectionTester';
 import { handleServerFormMessage } from '../../src/webview/ServerFormPanel';
+
+vi.mock('../../src/ssh/SshConnectionTester', () => ({
+  testSshConnection: vi.fn(async () => undefined)
+}));
 
 function server(overrides: Partial<ServerConfig> = {}): ServerConfig {
   return {
@@ -243,5 +248,42 @@ describe('ServerFormPanel message handling', () => {
       type: 'connectionTestResult',
       payload: { ok: true, message: 'Connection test succeeded.' }
     });
+  });
+
+  it('provides jump host lookup to the default connection tester', async () => {
+    vi.mocked(testSshConnection).mockClear();
+    const postMessage = vi.fn();
+    const getServer = vi.fn(async (id: string) => server({ id, label: 'Bastion' }));
+
+    const handled = await handleServerFormMessage(
+      {
+        type: 'testConnection',
+        payload: {
+          label: 'Production',
+          group: 'prod',
+          host: 'example.com',
+          port: 22,
+          username: 'deploy',
+          authType: 'password',
+          password: 'secret',
+          jumpHostId: 'jump-1',
+          keepAliveInterval: 30
+        }
+      },
+      undefined,
+      { saveServer: vi.fn(), getPassword: vi.fn(), getServer } as never,
+      vi.fn(),
+      { dispose: vi.fn(), webview: { postMessage } } as never
+    );
+
+    expect(handled).toBe(true);
+    expect(testSshConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ jumpHostId: 'jump-1' }),
+      expect.objectContaining({ getServer: expect.any(Function) }),
+      undefined
+    );
+    const provider = vi.mocked(testSshConnection).mock.calls[0][1] as { getServer(id: string): Promise<ServerConfig | undefined> };
+    await expect(provider.getServer('jump-1')).resolves.toMatchObject({ id: 'jump-1', label: 'Bastion' });
+    expect(getServer).toHaveBeenCalledWith('jump-1');
   });
 });
