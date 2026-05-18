@@ -56,6 +56,42 @@ describe('server config schema', () => {
     ).toThrow();
   });
 
+  it('accepts an optional jumpHostId reference', () => {
+    const parsed = parseServerConfig({
+      id: 'server-5',
+      label: 'Private API',
+      host: '10.0.0.20',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      jumpHostId: 'jump-1',
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.jumpHostId).toBe('jump-1');
+  });
+
+  it('rejects an empty jumpHostId', () => {
+    expect(() =>
+      parseServerConfig({
+        id: 'server-6',
+        label: 'Bad Jump',
+        host: '10.0.0.21',
+        port: 22,
+        username: 'deploy',
+        authType: 'password',
+        jumpHostId: '',
+        keepAliveInterval: 30,
+        encoding: 'utf-8',
+        createdAt: 1,
+        updatedAt: 2
+      })
+    ).toThrow();
+  });
+
   it('requires privateKeyPath for private key auth', () => {
     expect(() =>
       parseServerConfig({

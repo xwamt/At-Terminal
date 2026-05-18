@@ -81,4 +81,18 @@ describe('ConfigManager', () => {
     expect(await manager.listServers()).toEqual([]);
     expect(await manager.getPassword('server-1')).toBeUndefined();
   });
+
+  it('finds servers that reference a jump host', async () => {
+    const manager = new ConfigManager(new MemoryMemento(), new MemorySecretStore());
+
+    await manager.saveServer(server({ id: 'jump-1', label: 'Bastion', host: 'bastion.example.com' }));
+    await manager.saveServer(server({ id: 'app-1', label: 'App One', jumpHostId: 'jump-1' }));
+    await manager.saveServer(server({ id: 'app-2', label: 'App Two', jumpHostId: 'jump-1' }));
+    await manager.saveServer(server({ id: 'direct-1', label: 'Direct' }));
+
+    expect(await manager.findJumpHostReferences('jump-1')).toEqual([
+      expect.objectContaining({ id: 'app-1', label: 'App One' }),
+      expect.objectContaining({ id: 'app-2', label: 'App Two' })
+    ]);
+  });
 });

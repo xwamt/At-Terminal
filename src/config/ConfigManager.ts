@@ -28,6 +28,10 @@ export class ConfigManager {
     return (await this.listServers()).find((server) => server.id === id);
   }
 
+  async findJumpHostReferences(id: string): Promise<ServerConfig[]> {
+    return (await this.listServers()).filter((server) => server.jumpHostId === id);
+  }
+
   async saveServer(server: ServerConfig, password?: string): Promise<void> {
     const parsed = parseServerConfig(server);
     const servers = await this.listServers();
