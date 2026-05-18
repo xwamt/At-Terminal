@@ -1,9 +1,20 @@
 import { readFile } from 'node:fs/promises';
-import type { ConnectConfig, VerifyCallback } from 'ssh2';
+import { Client, type ConnectConfig, type VerifyCallback } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
 
 export interface PasswordProvider {
   getPassword(id: string): Promise<string | undefined>;
+}
+
+export interface ServerLookup {
+  getServer(id: string): Promise<ServerConfig | undefined>;
+}
+
+export type SshConnectionProvider = PasswordProvider & Partial<ServerLookup>;
+
+export interface SshConnectionHandle {
+  config: ConnectConfig;
+  dispose(): void;
 }
 
 export interface HostKeyVerifier {
@@ -40,6 +51,62 @@ export async function buildSshConnectConfig(
     ...base,
     privateKey: await readFile(server.privateKeyPath, 'utf8')
   };
+}
+
+export async function buildSshConnectionHandle(
+  server: ServerConfig,
+  provider: SshConnectionProvider,
+  hostKeyVerifier?: HostKeyVerifier
+): Promise<SshConnectionHandle> {
+  if (!server.jumpHostId) {
+    return {
+      config: await buildSshConnectConfig(server, provider, hostKeyVerifier),
+      dispose: () => undefined
+    };
+  }
+
+  if (!provider.getServer) {
+    throw new Error('Jump host lookup is not available.');
+  }
+
+  const jumpHost = await provider.getServer(server.jumpHostId);
+  if (!jumpHost) {
+    throw new Error(`Jump host "${server.jumpHostId}" was not found.`);
+  }
+
+  const jumpClient = new Client();
+  try {
+    const jumpConfig = await buildSshConnectConfig({ ...jumpHost, jumpHostId: undefined }, provider, hostKeyVerifier);
+
+    await new Promise<void>((resolve, reject) => {
+      jumpClient.once('ready', resolve);
+      jumpClient.once('error', reject);
+      jumpClient.connect(jumpConfig);
+    });
+
+    const sock = await new Promise<ConnectConfig['sock']>((resolve, reject) => {
+      jumpClient.forwardOut('127.0.0.1', 0, server.host, server.port, (error, channel) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(channel);
+      });
+    });
+
+    return {
+      config: {
+        ...(await buildSshConnectConfig(server, provider, hostKeyVerifier)),
+        sock
+      },
+      dispose: () => {
+        jumpClient.end();
+      }
+    };
+  } catch (error) {
+    jumpClient.end();
+    throw error;
+  }
 }
 
 function createHostVerifier(
