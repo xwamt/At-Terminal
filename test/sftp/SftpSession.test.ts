@@ -1,8 +1,34 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildSftpConnectConfig } from '../../src/sftp/SftpSession';
 import { SftpSession } from '../../src/sftp/SftpSession';
 import type { ServerConfig } from '../../src/config/schema';
+
+const sshMocks = vi.hoisted(() => ({
+  end: vi.fn(),
+  connect: vi.fn(function (this: { handlers?: Record<string, () => void> }) {
+    this.handlers?.ready?.();
+  }),
+  forwardOut: vi.fn((_srcIp, _srcPort, _dstHost, _dstPort, callback) => callback(undefined, { readable: true }))
+}));
+
+vi.mock('ssh2', () => ({
+  Client: vi.fn(() => {
+    const client = {
+      handlers: {} as Record<string, () => void>,
+      once: vi.fn((event: string, handler: () => void) => {
+        client.handlers[event] = handler;
+        return client;
+      }),
+      connect: sshMocks.connect,
+      end: sshMocks.end,
+      forwardOut: sshMocks.forwardOut,
+      sftp: vi.fn((callback) => callback(undefined, { realpath: vi.fn() })),
+      exec: vi.fn()
+    };
+    return client;
+  })
+}));
 
 function server(authType: 'password' | 'privateKey'): ServerConfig {
   return {
@@ -19,6 +45,12 @@ function server(authType: 'password' | 'privateKey'): ServerConfig {
     updatedAt: 1
   };
 }
+
+beforeEach(() => {
+  sshMocks.end.mockClear();
+  sshMocks.connect.mockClear();
+  sshMocks.forwardOut.mockClear();
+});
 
 describe('buildSftpConnectConfig', () => {
   it('uses the stored password for password auth', async () => {
@@ -41,6 +73,31 @@ describe('buildSftpConnectConfig', () => {
         getPassword: async () => undefined
       })
     ).rejects.toThrow('Missing password');
+  });
+});
+
+describe('SftpSession jump host lifecycle', () => {
+  it('disposes both target and jump host clients', async () => {
+    const target = {
+      ...server('password'),
+      id: 'target-1',
+      jumpHostId: 'jump-1'
+    };
+    const jump = {
+      ...server('password'),
+      id: 'jump-1',
+      host: 'bastion.example.com'
+    };
+    const session = new SftpSession(target, {
+      getPassword: async () => 'secret',
+      getServer: async (id) => (id === 'jump-1' ? jump : undefined)
+    } as never);
+
+    await session.connect();
+    session.dispose();
+
+    expect(sshMocks.forwardOut).toHaveBeenCalledWith('127.0.0.1', 0, 'example.com', 2222, expect.any(Function));
+    expect(sshMocks.end).toHaveBeenCalledTimes(2);
   });
 });
 

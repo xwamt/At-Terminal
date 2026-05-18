@@ -2,10 +2,12 @@ import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RemoteCommandExecutor } from '../../src/agent/RemoteCommandExecutor';
 import type { ServerConfig } from '../../src/config/schema';
+import { buildSshConnectionHandle } from '../../src/ssh/SshConnectionConfig';
 
 const connect = vi.fn();
 const end = vi.fn();
 const exec = vi.fn();
+const disposeHandle = vi.fn();
 const clients: FakeClient[] = [];
 
 class FakeClient extends EventEmitter {
@@ -23,7 +25,10 @@ vi.mock('ssh2', () => ({
 }));
 
 vi.mock('../../src/ssh/SshConnectionConfig', () => ({
-  buildSshConnectConfig: vi.fn(async () => ({ host: 'example.com' }))
+  buildSshConnectionHandle: vi.fn(async () => ({
+    config: { host: 'example.com' },
+    dispose: disposeHandle
+  }))
 }));
 
 function server(): ServerConfig {
@@ -61,6 +66,8 @@ beforeEach(() => {
   connect.mockReset();
   end.mockReset();
   exec.mockReset();
+  disposeHandle.mockReset();
+  vi.mocked(buildSshConnectionHandle).mockClear();
   clients.length = 0;
 });
 
@@ -95,6 +102,7 @@ describe('RemoteCommandExecutor', () => {
       truncated: false
     });
     expect(end).toHaveBeenCalledTimes(1);
+    expect(disposeHandle).toHaveBeenCalledTimes(1);
   });
 
   it('wraps cwd with a POSIX cd before command execution', async () => {

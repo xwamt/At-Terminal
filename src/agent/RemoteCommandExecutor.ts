@@ -2,7 +2,7 @@ import { Client, type ClientChannel } from 'ssh2';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { quotePosixShellPath } from '../sftp/RemotePath';
-import { buildSshConnectConfig, type HostKeyVerifier } from '../ssh/SshConnectionConfig';
+import { buildSshConnectionHandle, type HostKeyVerifier } from '../ssh/SshConnectionConfig';
 
 export interface RemoteCommandRequest {
   command: string;
@@ -51,6 +51,7 @@ export class RemoteCommandExecutor {
     let stream: ClientChannel | undefined;
     let settled = false;
     let timedOut = false;
+    const handle = await buildSshConnectionHandle(server, this.configManager, this.hostKeyVerifier);
 
     const finish = (
       resolve: (value: RemoteCommandResult) => void,
@@ -64,6 +65,7 @@ export class RemoteCommandExecutor {
       }
       settled = true;
       client.end();
+      handle.dispose();
       resolve({
         serverId: server.id,
         serverLabel: server.label,
@@ -79,8 +81,6 @@ export class RemoteCommandExecutor {
         truncated: stdout.truncated || stderr.truncated
       });
     };
-
-    const config = await buildSshConnectConfig(server, this.configManager, this.hostKeyVerifier);
 
     return new Promise<RemoteCommandResult>((resolve, reject) => {
       const stdout = new OutputBuffer(maxOutputBytes);
@@ -98,6 +98,7 @@ export class RemoteCommandExecutor {
         settled = true;
         clearTimeout(timeout);
         client.end();
+        handle.dispose();
         reject(error);
       };
 
@@ -118,7 +119,7 @@ export class RemoteCommandExecutor {
         });
       });
       client.once('error', rejectOnce);
-      client.connect(config);
+      client.connect(handle.config);
     });
   }
 }

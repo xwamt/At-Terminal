@@ -2,10 +2,11 @@ import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ServerConfig } from '../../src/config/schema';
 import { testSshConnection } from '../../src/ssh/SshConnectionTester';
-import { buildSshConnectConfig } from '../../src/ssh/SshConnectionConfig';
+import { buildSshConnectionHandle } from '../../src/ssh/SshConnectionConfig';
 
 const connect = vi.fn();
 const end = vi.fn();
+const disposeHandle = vi.fn();
 const clients: FakeClient[] = [];
 
 class FakeClient extends EventEmitter {
@@ -22,7 +23,10 @@ vi.mock('ssh2', () => ({
 }));
 
 vi.mock('../../src/ssh/SshConnectionConfig', () => ({
-  buildSshConnectConfig: vi.fn(async () => ({ host: 'example.com', port: 22 }))
+  buildSshConnectionHandle: vi.fn(async () => ({
+    config: { host: 'example.com', port: 22 },
+    dispose: disposeHandle
+  }))
 }));
 
 function server(): ServerConfig {
@@ -49,8 +53,9 @@ beforeEach(() => {
   vi.useRealTimers();
   connect.mockReset();
   end.mockReset();
+  disposeHandle.mockReset();
   clients.length = 0;
-  vi.mocked(buildSshConnectConfig).mockClear();
+  vi.mocked(buildSshConnectionHandle).mockClear();
 });
 
 describe('testSshConnection', () => {
@@ -63,6 +68,7 @@ describe('testSshConnection', () => {
     await expect(promise).resolves.toBeUndefined();
     expect(connect).toHaveBeenCalledWith({ host: 'example.com', port: 22, readyTimeout: 5_000 });
     expect(end).toHaveBeenCalledTimes(1);
+    expect(disposeHandle).toHaveBeenCalledTimes(1);
   });
 
   it('rejects connection errors and closes the temporary client', async () => {
@@ -74,5 +80,6 @@ describe('testSshConnection', () => {
 
     await expect(promise).rejects.toThrow('Authentication failed');
     expect(end).toHaveBeenCalledTimes(1);
+    expect(disposeHandle).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,7 +1,7 @@
 import { Client, type ClientChannel, type ShellOptions } from 'ssh2';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
-import { buildSshConnectConfig, type HostKeyVerifier } from './SshConnectionConfig';
+import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionHandle } from './SshConnectionConfig';
 
 export interface SshSessionEvents {
   output(data: Buffer): void;
@@ -15,6 +15,7 @@ export class SshSession {
   private rows = 24;
   private cols = 80;
   private connected = false;
+  private connectionHandle: SshConnectionHandle | undefined;
 
   constructor(
     private readonly server: ServerConfig,
@@ -25,25 +26,33 @@ export class SshSession {
 
   async connect(): Promise<void> {
     this.events.status(`Connecting to ${this.server.host}:${this.server.port}...`);
-    const config = await this.buildConnectConfig();
+    const handle = await this.buildConnectionHandle();
+    this.connectionHandle = handle;
     const client = new Client();
     this.client = client;
 
-    await new Promise<void>((resolve, reject) => {
-      client.once('ready', resolve);
-      client.once('error', reject);
-      client.connect(config);
-    });
-
-    this.shell = await new Promise<ClientChannel>((resolve, reject) => {
-      client.shell(this.getShellOptions(), { env: this.getShellEnvironment() }, (error, stream) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(stream);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        client.once('ready', resolve);
+        client.once('error', reject);
+        client.connect(handle.config);
       });
-    });
+
+      this.shell = await new Promise<ClientChannel>((resolve, reject) => {
+        client.shell(this.getShellOptions(), { env: this.getShellEnvironment() }, (error, stream) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(stream);
+        });
+      });
+    } catch (error) {
+      client.end();
+      handle.dispose();
+      this.connectionHandle = undefined;
+      throw error;
+    }
 
     this.shell.on('data', (data: Buffer) => {
       this.events.output(data);
@@ -97,12 +106,14 @@ export class SshSession {
   dispose(): void {
     this.shell?.end();
     this.client?.end();
+    this.connectionHandle?.dispose();
     this.shell = undefined;
     this.client = undefined;
+    this.connectionHandle = undefined;
     this.connected = false;
   }
 
-  private async buildConnectConfig() {
-    return buildSshConnectConfig(this.server, this.configManager, this.hostKeyVerifier);
+  private async buildConnectionHandle(): Promise<SshConnectionHandle> {
+    return buildSshConnectionHandle(this.server, this.configManager, this.hostKeyVerifier);
   }
 }

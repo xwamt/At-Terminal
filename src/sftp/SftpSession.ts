@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Client, type ClientChannel, type ConnectConfig, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
+import { buildSshConnectionHandle, type SshConnectionHandle } from '../ssh/SshConnectionConfig';
 import { quotePosixShellPath, safePreviewName } from './RemotePath';
 import type { TransferProgress } from './TransferService';
 import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './SftpTypes';
@@ -35,6 +36,7 @@ export async function buildSftpConnectConfig(server: ServerConfig, passwords: Pa
 export class SftpSession {
   private client: Client | undefined;
   private sftp: SFTPWrapper | undefined;
+  private connectionHandle: SshConnectionHandle | undefined;
 
   constructor(
     private readonly server: ServerConfig,
@@ -44,23 +46,31 @@ export class SftpSession {
   async connect(): Promise<void> {
     const client = new Client();
     this.client = client;
-    const config = await buildSftpConnectConfig(this.server, this.passwords);
+    const handle = await buildSshConnectionHandle(this.server, this.passwords);
+    this.connectionHandle = handle;
 
-    await new Promise<void>((resolve, reject) => {
-      client.once('ready', resolve);
-      client.once('error', reject);
-      client.connect(config);
-    });
-
-    this.sftp = await new Promise<SFTPWrapper>((resolve, reject) => {
-      client.sftp((error, sftp) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(sftp);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        client.once('ready', resolve);
+        client.once('error', reject);
+        client.connect(handle.config);
       });
-    });
+
+      this.sftp = await new Promise<SFTPWrapper>((resolve, reject) => {
+        client.sftp((error, sftp) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(sftp);
+        });
+      });
+    } catch (error) {
+      client.end();
+      handle.dispose();
+      this.connectionHandle = undefined;
+      throw error;
+    }
   }
 
   isConnected(): boolean {
@@ -290,7 +300,9 @@ export class SftpSession {
   dispose(): void {
     this.sftp = undefined;
     this.client?.end();
+    this.connectionHandle?.dispose();
     this.client = undefined;
+    this.connectionHandle = undefined;
   }
 
   private requireSftp(): SFTPWrapper {

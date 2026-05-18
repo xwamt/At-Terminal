@@ -1,16 +1,16 @@
 import { Client } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
-import { buildSshConnectConfig, type HostKeyVerifier, type PasswordProvider } from './SshConnectionConfig';
+import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionProvider } from './SshConnectionConfig';
 
 const DEFAULT_TEST_TIMEOUT_MS = 10_000;
 
 export async function testSshConnection(
   server: ServerConfig,
-  passwordProvider: PasswordProvider,
+  passwordProvider: SshConnectionProvider,
   hostKeyVerifier?: HostKeyVerifier,
   timeoutMs = DEFAULT_TEST_TIMEOUT_MS
 ): Promise<void> {
-  const config = await buildSshConnectConfig(server, passwordProvider, hostKeyVerifier);
+  const handle = await buildSshConnectionHandle(server, passwordProvider, hostKeyVerifier);
   const client = new Client();
 
   await new Promise<void>((resolve, reject) => {
@@ -24,6 +24,7 @@ export async function testSshConnection(
       client.removeAllListeners('ready');
       client.removeAllListeners('error');
       client.end();
+      handle.dispose();
     };
 
     const resolveOnce = (): void => {
@@ -46,6 +47,6 @@ export async function testSshConnection(
 
     client.once('ready', resolveOnce);
     client.once('error', rejectOnce);
-    client.connect({ ...config, readyTimeout: timeoutMs });
+    client.connect({ ...handle.config, readyTimeout: timeoutMs });
   });
 }

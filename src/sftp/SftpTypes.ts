@@ -24,4 +24,5 @@ export interface SftpSnapshot {
 
 export interface PasswordSource {
   getPassword(serverId: string): Promise<string | undefined>;
+  getServer?(serverId: string): Promise<ServerConfig | undefined>;
 }
