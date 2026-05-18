@@ -90,7 +90,7 @@ describe('SftpSession jump host lifecycle', () => {
     };
     const session = new SftpSession(target, {
       getPassword: async () => 'secret',
-      getServer: async (id) => (id === 'jump-1' ? jump : undefined)
+      getServer: async (id: string) => (id === 'jump-1' ? jump : undefined)
     } as never);
 
     await session.connect();
