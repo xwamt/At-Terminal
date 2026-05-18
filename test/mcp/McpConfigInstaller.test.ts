@@ -96,7 +96,7 @@ describe('McpConfigInstaller', () => {
   it('repairs stale Kiro AT Terminal config with the current server path', async () => {
     const home = await mkdtemp(join(tmpdir(), 'at-terminal-kiro-config-'));
     const configPath = kiroMcpConfigPath(home);
-    const mcpServerPath = await createKiroMcpServerBundle(home, '2.10.0');
+    const mcpServerPath = await createKiroMcpServerBundle(home, '2.10.1');
     await mkdir(join(home, '.kiro', 'settings'), { recursive: true });
     await writeFile(
       configPath,
@@ -129,7 +129,7 @@ describe('McpConfigInstaller', () => {
   it('repairs Kiro MCP config files that start with a UTF-8 BOM', async () => {
     const home = await mkdtemp(join(tmpdir(), 'at-terminal-kiro-config-'));
     const configPath = kiroMcpConfigPath(home);
-    const mcpServerPath = await createKiroMcpServerBundle(home, '2.10.0');
+    const mcpServerPath = await createKiroMcpServerBundle(home, '2.10.1');
     await mkdir(join(home, '.kiro', 'settings'), { recursive: true });
     await writeFile(
       configPath,
@@ -159,7 +159,7 @@ describe('McpConfigInstaller', () => {
   it('leaves current Kiro AT Terminal config unchanged', async () => {
     const home = await mkdtemp(join(tmpdir(), 'at-terminal-kiro-config-'));
     const configPath = kiroMcpConfigPath(home);
-    const mcpServerPath = await createKiroMcpServerBundle(home, '2.10.0');
+    const mcpServerPath = await createKiroMcpServerBundle(home, '2.10.1');
     await mkdir(join(home, '.kiro', 'settings'), { recursive: true });
     await writeFile(
       configPath,
@@ -198,9 +198,9 @@ describe('McpConfigInstaller', () => {
 
   it('waits for the MCP server bundle before writing Kiro config during extension install', async () => {
     const home = await mkdtemp(join(tmpdir(), 'at-terminal-kiro-config-'));
-    const mcpServerPath = join(home, '.kiro', 'extensions', 'local.at-terminal-mcp-2.10.0', 'dist', 'mcp-server.js');
+    const mcpServerPath = join(home, '.kiro', 'extensions', 'local.at-terminal-mcp-2.10.1', 'dist', 'mcp-server.js');
     setTimeout(() => {
-      void mkdir(join(home, '.kiro', 'extensions', 'local.at-terminal-mcp-2.10.0', 'dist'), { recursive: true }).then(() =>
+      void mkdir(join(home, '.kiro', 'extensions', 'local.at-terminal-mcp-2.10.1', 'dist'), { recursive: true }).then(() =>
         writeFile(mcpServerPath, '// bundled server\n', 'utf8')
       );
     }, 25);
@@ -220,7 +220,7 @@ describe('McpConfigInstaller', () => {
 
   it('does not write MCP config when the bundled server entry file never appears', async () => {
     const home = await mkdtemp(join(tmpdir(), 'at-terminal-kiro-config-'));
-    const mcpServerPath = join(home, '.kiro', 'extensions', 'local.at-terminal-mcp-2.10.0', 'dist', 'mcp-server.js');
+    const mcpServerPath = join(home, '.kiro', 'extensions', 'local.at-terminal-mcp-2.10.1', 'dist', 'mcp-server.js');
 
     await expect(
       ensureKiroMcpConfig({
