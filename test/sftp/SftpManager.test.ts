@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { SftpManager } from '../../src/sftp/SftpManager';
 import type { TerminalContext } from '../../src/terminal/TerminalContext';
 
-function context(connected: boolean, terminalId = 'terminal-a'): TerminalContext {
+function context(connected: boolean, terminalId = 'terminal-a', serverId = 'srv'): TerminalContext {
   return {
     terminalId,
     connected,
     write: vi.fn(),
     server: {
-      id: 'srv',
+      id: serverId,
       label: 'Server',
       host: 'example.com',
       port: 22,
@@ -131,6 +131,7 @@ describe('SftpManager', () => {
 
   it('keeps a disconnected snapshot', async () => {
     const manager = new SftpManager({ createSession: vi.fn() });
+    manager.setTerminalContext(context(true));
     manager.setSnapshot('/home/deploy', [{ name: 'app', path: '/home/deploy/app', type: 'directory' }]);
     manager.setTerminalContext(context(false));
 
@@ -296,10 +297,9 @@ describe('SftpManager', () => {
     expect(session.listDirectory).toHaveBeenCalledWith('/home/deploy');
   });
 
-  it('does not reuse a stale SFTP connection after the active terminal changes', async () => {
-    const firstConnect = deferred<void>();
+  it('keeps an existing SFTP connection alive when another terminal becomes active', async () => {
     const firstSession = {
-      connect: vi.fn(() => firstConnect.promise),
+      connect: vi.fn(),
       realpath: vi.fn(async () => '/first'),
       listDirectory: vi.fn(async () => []),
       readFile: vi.fn(),
@@ -334,15 +334,66 @@ describe('SftpManager', () => {
     const manager = new SftpManager({ createSession });
 
     manager.setTerminalContext(context(true, 'terminal-a'));
-    const staleRoot = manager.ensureRoot();
-    await flushPromises();
-    manager.setTerminalContext(context(true, 'terminal-b'));
-    firstConnect.resolve();
+    await expect(manager.ensureRoot()).resolves.toBe('/first');
 
-    await expect(staleRoot).rejects.toThrow('superseded');
+    manager.setTerminalContext(context(true, 'terminal-b'));
+
     await expect(manager.ensureRoot()).resolves.toBe('/second');
-    expect(firstSession.dispose).toHaveBeenCalled();
+    expect(firstSession.dispose).not.toHaveBeenCalled();
     expect(secondSession.realpath).toHaveBeenCalledWith('.');
+
+    manager.setTerminalContext(context(true, 'terminal-a'));
+    await expect(manager.ensureRoot()).resolves.toBe('/first');
+    expect(createSession).toHaveBeenCalledTimes(2);
+    expect(firstSession.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes file operations to the connected SFTP session for the requested server', async () => {
+    const firstSession = {
+      connect: vi.fn(),
+      realpath: vi.fn(async () => '/first'),
+      listDirectory: vi.fn(async () => []),
+      readFile: vi.fn(async () => Buffer.from('first')),
+      writeFile: vi.fn(),
+      mkdir: vi.fn(),
+      rename: vi.fn(),
+      deleteFile: vi.fn(),
+      deleteDirectory: vi.fn(),
+      uploadFile: vi.fn(),
+      downloadFile: vi.fn(),
+      createFile: vi.fn(),
+      stat: vi.fn(async () => ({ size: 5, modifiedAt: 1 })),
+      dispose: vi.fn()
+    };
+    const secondSession = {
+      connect: vi.fn(),
+      realpath: vi.fn(async () => '/second'),
+      listDirectory: vi.fn(async () => []),
+      readFile: vi.fn(async () => Buffer.from('second')),
+      writeFile: vi.fn(),
+      mkdir: vi.fn(),
+      rename: vi.fn(),
+      deleteFile: vi.fn(),
+      deleteDirectory: vi.fn(),
+      uploadFile: vi.fn(),
+      downloadFile: vi.fn(),
+      createFile: vi.fn(),
+      stat: vi.fn(async () => ({ size: 6, modifiedAt: 2 })),
+      dispose: vi.fn()
+    };
+    const createSession = vi.fn().mockReturnValueOnce(firstSession).mockReturnValueOnce(secondSession);
+    const manager = new SftpManager({ createSession });
+    manager.setTerminalContext(context(true, 'terminal-a', 'server-a'));
+    await manager.ensureRoot();
+    manager.setTerminalContext(context(true, 'terminal-b', 'server-b'));
+    await manager.ensureRoot();
+
+    await expect(manager.stat('/srv/app.js', 'server-a')).resolves.toEqual({ size: 5, modifiedAt: 1 });
+    await expect(manager.readFile('/srv/app.js', 1024, 'server-a')).resolves.toEqual(Buffer.from('first'));
+
+    expect(firstSession.stat).toHaveBeenCalledWith('/srv/app.js');
+    expect(firstSession.readFile).toHaveBeenCalledWith('/srv/app.js', 1024);
+    expect(secondSession.stat).not.toHaveBeenCalledWith('/srv/app.js');
   });
 
   it('rejects in-flight SFTP loads when the active terminal disconnects before connect settles', async () => {

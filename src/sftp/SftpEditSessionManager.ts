@@ -14,10 +14,10 @@ export type SftpEditCloseChoice = 'keep' | 'discard';
 
 export interface SftpEditSftpClient {
   getActiveServerId(): string | undefined;
-  stat(remotePath: string): Promise<SftpFileStat>;
-  readFile?(remotePath: string, maxBytes: number): Promise<Buffer>;
+  stat(remotePath: string, serverId?: string): Promise<SftpFileStat>;
+  readFile?(remotePath: string, maxBytes: number, serverId?: string): Promise<Buffer>;
   downloadFile(remotePath: string, localPath: string): Promise<void>;
-  uploadFile(localPath: string, remotePath: string): Promise<void>;
+  uploadFile(localPath: string, remotePath: string, serverId?: string): Promise<void>;
 }
 
 export interface SftpEditUi {
@@ -282,7 +282,7 @@ export class SftpEditSessionManager {
   }
 
   private async uploadIfUnchanged(session: SftpEditSession): Promise<boolean> {
-    const currentRemoteStat = await this.options.sftp.stat(session.remotePath);
+    const currentRemoteStat = await this.options.sftp.stat(session.remotePath, session.serverId);
     const conflict = !remoteStatsMatch(currentRemoteStat, session.baseRemoteStat);
     if (conflict) {
       session.syncState = 'conflict';
@@ -293,8 +293,8 @@ export class SftpEditSessionManager {
       }
       session.syncState = 'uploading';
     }
-    await this.options.sftp.uploadFile(session.localUri.fsPath, session.remotePath);
-    const uploadedRemoteStat = await this.options.sftp.stat(session.remotePath);
+    await this.options.sftp.uploadFile(session.localUri.fsPath, session.remotePath, session.serverId);
+    const uploadedRemoteStat = await this.options.sftp.stat(session.remotePath, session.serverId);
     await this.verifyUploadedContent(session, uploadedRemoteStat);
     session.baseRemoteStat = uploadedRemoteStat;
     return true;
@@ -312,7 +312,7 @@ export class SftpEditSessionManager {
       return;
     }
 
-    const remoteContent = await this.options.sftp.readFile(session.remotePath, localContent.byteLength);
+    const remoteContent = await this.options.sftp.readFile(session.remotePath, localContent.byteLength, session.serverId);
     if (!remoteContent.equals(localContent)) {
       throw new Error(
         `Remote sync verification failed for ${session.remotePath}: remote content does not match local edits. Check remote file permissions or server-side write restrictions.`

@@ -85,9 +85,18 @@ AT Terminal: Install MCP Config
 
 它会：
 
-- 更新 Kiro 用户级配置 `~/.kiro/settings/mcp.json`。
+- 根据当前 IDE 更新对应 MCP 配置，例如 Kiro 的 `~/.kiro/settings/mcp.json` 或 Cursor 的 `~/.cursor/mcp.json`。
 - 如果当前打开了 workspace，则创建 Continue 配置 `.continue/mcpServers/at-terminal.yaml`。
-- 使用当前扩展真实安装路径，避免 Kiro 中误指向 `.vscode/extensions/...`。
+- 使用当前 IDE 中扩展的真实安装路径，避免 Kiro、Cursor 等 IDE 之间互相误指向。
+
+如果自动配置失败，各 IDE 的 MCP 配置只需要把 `args[0]` 指向当前 IDE 安装的 AT Terminal MCP 插件目录下的 `dist/mcp-server.js`。`command`、MCP server 名称和 tools 配置通常保持一致。
+
+VS Code 系列 IDE 查看插件目录的方法：
+
+1. 在对应 IDE 中打开 Command Palette。
+2. 搜索并执行 `Open Extensions Folder`。
+3. 在插件目录中找到 `local.at-terminal-mcp-<version>` 或 `at-terminal-mcp-<version>`。
+4. 确认该目录下存在 `dist/mcp-server.js`，然后把完整路径填入 `args`。
 
 ### Kiro 配置
 
@@ -100,11 +109,14 @@ Kiro 支持：
 
 ```json
 {
+  "name": "AT Terminal MCP",
+  "version": "0.0.1",
+  "schema": "v1",
   "mcpServers": {
     "AT Terminal": {
       "command": "node",
       "args": [
-        "C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js"
+        "<AT Terminal MCP 插件目录>/dist/mcp-server.js"
       ],
       "autoApprove": [
         "list_ssh_servers",
@@ -138,7 +150,7 @@ Use sftp_list_directory to list /tmp on the connected AT Terminal server.
 Use sftp_read_file to read /etc/os-release on the connected AT Terminal server.
 ```
 
-如果出现 `MODULE_NOT_FOUND`，检查 `args[0]` 是否指向 Kiro 的扩展安装目录，例如 `.kiro/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js`，不要误指向 VS Code 的 `.vscode/extensions`。
+如果出现 `MODULE_NOT_FOUND`，检查 `args[0]` 是否指向当前 IDE 的插件安装目录，例如 Kiro 应指向 Kiro 的扩展目录，Cursor 应指向 Cursor 的扩展目录，不要误指向其他 IDE 的 `.vscode/extensions`、`.cursor/extensions` 或 `.kiro/extensions`。
 
 ### Cursor 配置
 
@@ -151,11 +163,25 @@ Cursor 支持：
 
 ```json
 {
+  "name": "AT Terminal MCP",
+  "version": "0.0.1",
+  "schema": "v1",
   "mcpServers": {
     "AT Terminal": {
       "command": "node",
       "args": [
-        "C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js"
+        "<AT Terminal MCP 插件目录>/dist/mcp-server.js"
+      ],
+      "autoApprove": [
+        "list_ssh_servers",
+        "get_terminal_context",
+        "run_remote_command",
+        "sftp_list_directory",
+        "sftp_stat_path",
+        "sftp_read_file",
+        "sftp_write_file",
+        "sftp_create_file",
+        "sftp_create_directory"
       ]
     }
   }
@@ -166,11 +192,25 @@ Cursor 支持：
 
 ```json
 {
+  "name": "AT Terminal MCP",
+  "version": "0.0.1",
+  "schema": "v1",
   "mcpServers": {
     "AT Terminal": {
       "command": "node",
       "args": [
         "${userHome}/.cursor/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js"
+      ],
+      "autoApprove": [
+        "list_ssh_servers",
+        "get_terminal_context",
+        "run_remote_command",
+        "sftp_list_directory",
+        "sftp_stat_path",
+        "sftp_read_file",
+        "sftp_write_file",
+        "sftp_create_file",
+        "sftp_create_directory"
       ]
     }
   }
@@ -191,7 +231,7 @@ mcpServers:
   - name: AT Terminal
     command: node
     args:
-      - C:/Users/alan/.vscode/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js
+      - "<AT Terminal MCP 插件目录>/dist/mcp-server.js"
 ```
 
 仓库内示例文件：
@@ -332,9 +372,18 @@ AT Terminal: Install MCP Config
 
 It:
 
-- Updates Kiro user config at `~/.kiro/settings/mcp.json`.
+- Updates the current IDE MCP config, such as Kiro's `~/.kiro/settings/mcp.json` or Cursor's `~/.cursor/mcp.json`.
 - Creates Continue workspace config at `.continue/mcpServers/at-terminal.yaml` when a workspace is open.
-- Uses the current installed extension path, so Kiro does not accidentally point at `.vscode/extensions/...`.
+- Uses the installed extension path from the current IDE, so Kiro, Cursor, and other IDEs do not accidentally point at each other's extension directories.
+
+If automatic config fails, the MCP config for each IDE only needs `args[0]` to point at `dist/mcp-server.js` inside that IDE's installed AT Terminal MCP extension directory. The `command`, MCP server name, and tool settings are otherwise the same.
+
+How to find the extension directory in VS Code-compatible IDEs:
+
+1. Open the Command Palette in the target IDE.
+2. Search for and run `Open Extensions Folder`.
+3. Find `local.at-terminal-mcp-<version>` or `at-terminal-mcp-<version>`.
+4. Confirm that `dist/mcp-server.js` exists in that folder, then use its full path in `args`.
 
 ### Kiro
 
@@ -347,11 +396,14 @@ Example:
 
 ```json
 {
+  "name": "AT Terminal MCP",
+  "version": "0.0.1",
+  "schema": "v1",
   "mcpServers": {
     "AT Terminal": {
       "command": "node",
       "args": [
-        "C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js"
+        "<AT Terminal MCP extension directory>/dist/mcp-server.js"
       ],
       "autoApprove": [
         "list_ssh_servers",
@@ -378,11 +430,25 @@ Example:
 
 ```json
 {
+  "name": "AT Terminal MCP",
+  "version": "0.0.1",
+  "schema": "v1",
   "mcpServers": {
     "AT Terminal": {
       "command": "node",
       "args": [
-        "C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js"
+        "<AT Terminal MCP extension directory>/dist/mcp-server.js"
+      ],
+      "autoApprove": [
+        "list_ssh_servers",
+        "get_terminal_context",
+        "run_remote_command",
+        "sftp_list_directory",
+        "sftp_stat_path",
+        "sftp_read_file",
+        "sftp_write_file",
+        "sftp_create_file",
+        "sftp_create_directory"
       ]
     }
   }
@@ -393,11 +459,25 @@ Project-local example with variables:
 
 ```json
 {
+  "name": "AT Terminal MCP",
+  "version": "0.0.1",
+  "schema": "v1",
   "mcpServers": {
     "AT Terminal": {
       "command": "node",
       "args": [
         "${userHome}/.cursor/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js"
+      ],
+      "autoApprove": [
+        "list_ssh_servers",
+        "get_terminal_context",
+        "run_remote_command",
+        "sftp_list_directory",
+        "sftp_stat_path",
+        "sftp_read_file",
+        "sftp_write_file",
+        "sftp_create_file",
+        "sftp_create_directory"
       ]
     }
   }
@@ -418,7 +498,7 @@ mcpServers:
   - name: AT Terminal
     command: node
     args:
-      - C:/Users/alan/.vscode/extensions/local.at-terminal-mcp-2.10.1/dist/mcp-server.js
+      - "<AT Terminal MCP extension directory>/dist/mcp-server.js"
 ```
 
 ### GitHub Copilot Chat

@@ -5,9 +5,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildContinueMcpConfig,
   installContinueMcpConfig,
+  installIdeMcpConfig,
   installKiroMcpConfig,
   kiroMcpConfigPath,
-  ensureKiroMcpConfig
+  ensureKiroMcpConfig,
+  resolveIdeMcpConfigTarget
 } from '../../src/mcp/McpConfigInstaller';
 
 describe('McpConfigInstaller', () => {
@@ -91,6 +93,68 @@ describe('McpConfigInstaller', () => {
         'sftp_create_directory'
       ]
     });
+  });
+
+  it('resolves Cursor from the current extension path and writes Cursor MCP config', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'at-terminal-cursor-config-'));
+    const cursorConfigPath = join(home, '.cursor', 'mcp.json');
+    const mcpServerPath = await createCursorMcpServerBundle(home, '2.10.1');
+    await mkdir(join(home, '.cursor'), { recursive: true });
+    await writeFile(
+      cursorConfigPath,
+      JSON.stringify({
+        mcpServers: {
+          fetch: {
+            command: 'uvx',
+            args: ['mcp-server-fetch'],
+            env: {},
+            disabled: true,
+            autoApprove: []
+          }
+        }
+      }),
+      'utf8'
+    );
+    const target = resolveIdeMcpConfigTarget({
+      appName: 'Cursor',
+      extensionPath: mcpServerPath
+    });
+
+    expect(target?.id).toBe('cursor');
+
+    await installIdeMcpConfig({
+      target,
+      home,
+      mcpServerPath
+    });
+
+    const parsed = JSON.parse(await readFile(cursorConfigPath, 'utf8'));
+    expect(parsed.name).toBe('AT Terminal MCP');
+    expect(parsed.version).toBe('0.0.1');
+    expect(parsed.schema).toBe('v1');
+    expect(parsed.mcpServers.fetch).toEqual({
+      command: 'uvx',
+      args: ['mcp-server-fetch'],
+      env: {},
+      disabled: true,
+      autoApprove: []
+    });
+    expect(parsed.mcpServers['AT Terminal']).toEqual({
+      command: 'node',
+      args: [normalizePath(mcpServerPath)],
+      autoApprove: [
+        'list_ssh_servers',
+        'get_terminal_context',
+        'run_remote_command',
+        'sftp_list_directory',
+        'sftp_stat_path',
+        'sftp_read_file',
+        'sftp_write_file',
+        'sftp_create_file',
+        'sftp_create_directory'
+      ]
+    });
+    await expect(readFile(kiroMcpConfigPath(home), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('repairs stale Kiro AT Terminal config with the current server path', async () => {
@@ -242,6 +306,11 @@ async function createMcpServerBundle(root: string): Promise<string> {
 
 async function createKiroMcpServerBundle(home: string, version: string): Promise<string> {
   const extensionRoot = join(home, '.kiro', 'extensions', `local.at-terminal-mcp-${version}`);
+  return createMcpServerBundle(extensionRoot);
+}
+
+async function createCursorMcpServerBundle(home: string, version: string): Promise<string> {
+  const extensionRoot = join(home, '.cursor', 'extensions', `local.at-terminal-mcp-${version}`);
   return createMcpServerBundle(extensionRoot);
 }
 

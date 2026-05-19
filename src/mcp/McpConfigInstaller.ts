@@ -16,6 +16,24 @@ export interface InstallKiroMcpConfigOptions {
   pollIntervalMs?: number;
 }
 
+export type IdeMcpConfigTargetId = 'kiro' | 'cursor';
+
+export interface IdeMcpConfigTarget {
+  id: IdeMcpConfigTargetId;
+  displayName: string;
+}
+
+export interface ResolveIdeMcpConfigTargetOptions {
+  appName?: string;
+  appRoot?: string;
+  uriScheme?: string;
+  extensionPath?: string;
+}
+
+export interface InstallIdeMcpConfigOptions extends InstallKiroMcpConfigOptions {
+  target: IdeMcpConfigTarget | undefined;
+}
+
 export const AT_TERMINAL_MCP_TOOL_NAMES = [
   'list_ssh_servers',
   'get_terminal_context',
@@ -57,9 +75,29 @@ export function kiroMcpConfigPath(home = homedir()): string {
   return join(home, '.kiro', 'settings', 'mcp.json');
 }
 
-export async function installKiroMcpConfig(options: InstallKiroMcpConfigOptions): Promise<string> {
+export function cursorMcpConfigPath(home = homedir()): string {
+  return join(home, '.cursor', 'mcp.json');
+}
+
+export function resolveIdeMcpConfigTarget(options: ResolveIdeMcpConfigTargetOptions): IdeMcpConfigTarget | undefined {
+  const signals = [options.extensionPath, options.appName, options.appRoot, options.uriScheme]
+    .filter((value): value is string => typeof value === 'string')
+    .map((value) => normalizePath(value).toLowerCase());
+  if (signals.some((value) => value.includes('/.kiro/') || value.includes('\\.kiro\\') || value.includes('kiro'))) {
+    return { id: 'kiro', displayName: 'Kiro' };
+  }
+  if (signals.some((value) => value.includes('/.cursor/') || value.includes('\\.cursor\\') || value.includes('cursor'))) {
+    return { id: 'cursor', displayName: 'Cursor' };
+  }
+  return undefined;
+}
+
+export async function installIdeMcpConfig(options: InstallIdeMcpConfigOptions): Promise<string> {
+  if (!options.target) {
+    throw new Error('Unsupported VS Code-compatible IDE for automatic MCP config.');
+  }
   await waitForMcpServerBundle(options);
-  const target = kiroMcpConfigPath(options.home);
+  const target = ideMcpConfigPath(options.target.id, options.home);
   const config = await readJsonObject(target);
   const mcpServers = readMcpServers(config);
   config.name = typeof config.name === 'string' ? config.name : 'AT Terminal MCP';
@@ -67,26 +105,33 @@ export async function installKiroMcpConfig(options: InstallKiroMcpConfigOptions)
   config.schema = typeof config.schema === 'string' ? config.schema : 'v1';
   config.mcpServers = {
     ...mcpServers,
-    'AT Terminal': {
-      command: 'node',
-      args: [normalizePath(options.mcpServerPath)],
-      autoApprove: AT_TERMINAL_MCP_TOOL_NAMES
-    }
+    'AT Terminal': buildIdeMcpServerConfig(options.mcpServerPath)
   };
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
   return target;
 }
 
-export async function ensureKiroMcpConfig(options: InstallKiroMcpConfigOptions): Promise<string | undefined> {
-  await waitForMcpServerBundle(options);
-  const target = kiroMcpConfigPath(options.home);
-  const config = await readJsonObject(target);
-  const server = readMcpServers(config)['AT Terminal'];
-  if (hasCurrentKiroMcpServer(server, options.mcpServerPath)) {
+export async function ensureIdeMcpConfig(options: InstallIdeMcpConfigOptions): Promise<string | undefined> {
+  if (!options.target) {
     return undefined;
   }
-  return installKiroMcpConfig(options);
+  await waitForMcpServerBundle(options);
+  const target = ideMcpConfigPath(options.target.id, options.home);
+  const config = await readJsonObject(target);
+  const server = readMcpServers(config)['AT Terminal'];
+  if (hasCurrentIdeMcpServer(options.target.id, server, options.mcpServerPath)) {
+    return undefined;
+  }
+  return installIdeMcpConfig(options);
+}
+
+export async function installKiroMcpConfig(options: InstallKiroMcpConfigOptions): Promise<string> {
+  return installIdeMcpConfig({ ...options, target: { id: 'kiro', displayName: 'Kiro' } });
+}
+
+export async function ensureKiroMcpConfig(options: InstallKiroMcpConfigOptions): Promise<string | undefined> {
+  return ensureIdeMcpConfig({ ...options, target: { id: 'kiro', displayName: 'Kiro' } });
 }
 
 async function readJsonObject(path: string): Promise<Record<string, unknown>> {
@@ -115,7 +160,19 @@ function readMcpServers(config: Record<string, unknown>): Record<string, unknown
   return isRecord(config.mcpServers) ? config.mcpServers : {};
 }
 
-function hasCurrentKiroMcpServer(value: unknown, mcpServerPath: string): boolean {
+function ideMcpConfigPath(target: IdeMcpConfigTargetId, home = homedir()): string {
+  return target === 'kiro' ? kiroMcpConfigPath(home) : cursorMcpConfigPath(home);
+}
+
+function buildIdeMcpServerConfig(mcpServerPath: string): Record<string, unknown> {
+  return {
+    command: 'node',
+    args: [normalizePath(mcpServerPath)],
+    autoApprove: AT_TERMINAL_MCP_TOOL_NAMES
+  };
+}
+
+function hasCurrentIdeMcpServer(target: IdeMcpConfigTargetId, value: unknown, mcpServerPath: string): boolean {
   if (!isRecord(value)) {
     return false;
   }

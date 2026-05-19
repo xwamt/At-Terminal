@@ -220,9 +220,49 @@ describe('SftpEditSessionManager save synchronization', () => {
 
       expect(confirmAutoSync).toHaveBeenCalledTimes(1);
       expect(sftp.uploadFile).toHaveBeenCalledTimes(2);
-      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js');
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
       expect(showStatus).toHaveBeenCalledWith('uploading', 'Uploading remote file...');
       expect(showStatus).toHaveBeenCalledWith('idle', 'Remote file synced');
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('syncs saves through the server that opened the edit session even after active server changes', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-save-original-server-')));
+    let activeServerId = 'server-a';
+    const sftp = {
+      getActiveServerId: vi.fn(() => activeServerId),
+      stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn()
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      activeServerId = 'server-b';
+
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+      await flushPromises();
+
+      expect(sftp.stat).toHaveBeenCalledWith('/srv/app/index.js', 'server-a');
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'server-a');
     } finally {
       vi.useRealTimers();
       manager.dispose();
@@ -302,7 +342,7 @@ describe('SftpEditSessionManager conflicts and failures', () => {
       await vi.advanceTimersByTimeAsync(10);
       await flushPromises();
 
-      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js');
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
       expect(session.baseRemoteStat).toEqual({ size: 9, modifiedAt: 12 });
     } finally {
       vi.useRealTimers();
@@ -427,8 +467,8 @@ describe('SftpEditSessionManager conflicts and failures', () => {
       await vi.advanceTimersByTimeAsync(10);
       await flushPromises();
 
-      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js');
-      expect(sftp.readFile).toHaveBeenCalledWith('/srv/app/index.js', 7);
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
+      expect(sftp.readFile).toHaveBeenCalledWith('/srv/app/index.js', 7, 'srv');
       expect(session.syncState).toBe('failed');
       expect(session.lastError).toContain('remote content does not match local edits');
       expect(showStatus).toHaveBeenCalledWith('failed', expect.stringContaining('remote content does not match'));

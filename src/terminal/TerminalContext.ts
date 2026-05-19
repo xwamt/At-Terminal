@@ -29,7 +29,11 @@ export interface TerminalContextSnapshot {
 
 export class TerminalContextRegistry {
   private readonly onDidChangeActiveContextEmitter = new vscode.EventEmitter<TerminalContext | undefined>();
+  private readonly onDidChangeContextEmitter = new vscode.EventEmitter<TerminalContext>();
+  private readonly onDidRemoveContextEmitter = new vscode.EventEmitter<string>();
   readonly onDidChangeActiveContext = this.onDidChangeActiveContextEmitter.event;
+  readonly onDidChangeContext = this.onDidChangeContextEmitter.event;
+  readonly onDidRemoveContext = this.onDidRemoveContextEmitter.event;
 
   private active: TerminalContext | undefined;
   private readonly contexts = new Map<string, TerminalContext>();
@@ -95,9 +99,11 @@ export class TerminalContextRegistry {
       this.active.server.id === context.server.id
     ) {
       this.active = context;
+      this.onDidChangeContextEmitter.fire(context);
       return;
     }
     this.active = context;
+    this.onDidChangeContextEmitter.fire(context);
     this.onDidChangeActiveContextEmitter.fire(context);
   }
 
@@ -110,7 +116,10 @@ export class TerminalContextRegistry {
   }
 
   clearIfActive(terminalId: string): void {
-    this.contexts.delete(terminalId);
+    const deleted = this.contexts.delete(terminalId);
+    if (deleted) {
+      this.onDidRemoveContextEmitter.fire(terminalId);
+    }
     if (this.lastConnectedTerminalId === terminalId) {
       this.lastConnectedTerminalId = this.findMostRecentConnected()?.terminalId;
     }
@@ -122,17 +131,23 @@ export class TerminalContextRegistry {
   }
 
   private updateConnectionState(terminalId: string, connected: boolean): void {
-    if (this.active?.terminalId !== terminalId) {
+    const existing = this.contexts.get(terminalId);
+    if (!existing) {
       return;
     }
-    this.active = { ...this.active, connected };
-    this.contexts.set(terminalId, this.active);
+    const updated = { ...existing, connected };
+    this.contexts.set(terminalId, updated);
     if (connected) {
       this.lastConnectedTerminalId = terminalId;
     } else if (this.lastConnectedTerminalId === terminalId) {
       this.lastConnectedTerminalId = this.findMostRecentConnected()?.terminalId;
     }
-    this.onDidChangeActiveContextEmitter.fire(this.active);
+    this.onDidChangeContextEmitter.fire(updated);
+    if (this.active?.terminalId !== terminalId) {
+      return;
+    }
+    this.active = updated;
+    this.onDidChangeActiveContextEmitter.fire(updated);
   }
 
   private findMostRecentConnected(): TerminalContext | undefined {

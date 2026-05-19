@@ -15,7 +15,7 @@ Before using tools, ensure the user has installed the MCP build, not the base bu
 
 Keep the IDE window with AT Terminal MCP running and activated. The MCP client starts `node dist/mcp-server.js`, but that sidecar must connect to the local bridge inside the extension host.
 
-For Kiro and Continue, prefer the command palette action `AT Terminal: Install MCP Config`. Manual configs must point to the installed extension's absolute `dist/mcp-server.js` path. If `MODULE_NOT_FOUND` appears, the path usually points at the wrong IDE extension directory.
+For Kiro, Cursor, and Continue, prefer the command palette action `AT Terminal: Install MCP Config`. Manual configs must point to the installed extension's absolute `dist/mcp-server.js` path for the IDE hosting the running AT Terminal MCP window. If `MODULE_NOT_FOUND` appears, the path usually points at the wrong IDE extension directory.
 
 ## MCP Configuration
 
@@ -38,10 +38,24 @@ Kiro/Cursor JSON:
 
 ```json
 {
+  "name": "AT Terminal MCP",
+  "version": "0.0.1",
+  "schema": "v1",
   "mcpServers": {
     "AT Terminal": {
       "command": "node",
-      "args": ["C:/ABSOLUTE/PATH/TO/local.at-terminal-mcp-2.10.0/dist/mcp-server.js"]
+      "args": ["C:/ABSOLUTE/PATH/TO/local.at-terminal-mcp-2.10.0/dist/mcp-server.js"],
+      "autoApprove": [
+        "list_ssh_servers",
+        "get_terminal_context",
+        "run_remote_command",
+        "sftp_list_directory",
+        "sftp_stat_path",
+        "sftp_read_file",
+        "sftp_write_file",
+        "sftp_create_file",
+        "sftp_create_directory"
+      ]
     }
   }
 }

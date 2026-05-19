@@ -8,7 +8,12 @@ import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import type { ServerConfig } from './config/schema';
 import { BridgeServer } from './mcp/BridgeServer';
-import { ensureKiroMcpConfig, installContinueMcpConfig, installKiroMcpConfig } from './mcp/McpConfigInstaller';
+import {
+  ensureIdeMcpConfig,
+  installContinueMcpConfig,
+  installIdeMcpConfig,
+  resolveIdeMcpConfigTarget
+} from './mcp/McpConfigInstaller';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
@@ -70,6 +75,14 @@ export function activate(context: vscode.ExtensionContext): void {
     sftpManager.setTerminalContext(activeContext);
     sftpTreeProvider.refresh();
   });
+  terminalContext.onDidChangeContext((changedContext) => {
+    if (terminalContext.getActive()?.terminalId !== changedContext.terminalId) {
+      sftpManager.syncTerminalContext(changedContext);
+    }
+  });
+  terminalContext.onDidRemoveContext((terminalId) => {
+    sftpManager.removeTerminalContext(terminalId);
+  });
 
   const hostKeyVerifier = {
     async verify(host: string, port: number, fingerprint: string): Promise<boolean> {
@@ -103,6 +116,12 @@ export function activate(context: vscode.ExtensionContext): void {
   let installMcpConfigCommand: vscode.Disposable | undefined;
   if (MCP_ENABLED) {
     const mcpServerPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'mcp-server.js').fsPath;
+    const ideMcpConfigTarget = resolveIdeMcpConfigTarget({
+      appName: vscode.env.appName,
+      appRoot: vscode.env.appRoot,
+      uriScheme: vscode.env.uriScheme,
+      extensionPath: context.extensionUri.fsPath
+    });
     const sftpWriteAuthorizer = new SftpWriteAuthorizer(async () => true);
     sftpAgentService = new SftpAgentService({
       terminalContext,
@@ -120,17 +139,20 @@ export function activate(context: vscode.ExtensionContext): void {
     void bridgeServer.start().catch((error) => {
       void showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');
     });
-    void ensureKiroMcpConfig({ mcpServerPath }).catch((error) => {
+    void ensureIdeMcpConfig({ target: ideMcpConfigTarget, mcpServerPath }).catch((error) => {
       void showTimedNotification(`AT Terminal MCP config could not be updated: ${formatError(error)}`, 'warning');
     });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
-      const kiroTarget = await installKiroMcpConfig({ mcpServerPath });
-      const targets = [kiroTarget];
+      const targets = ideMcpConfigTarget ? [await installIdeMcpConfig({ target: ideMcpConfigTarget, mcpServerPath })] : [];
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (workspaceFolder) {
         targets.push(await installContinueMcpConfig({ workspaceFolder, mcpServerPath }));
       }
-      await showTimedNotification(`AT Terminal MCP config installed: ${targets.join('; ')}`);
+      if (targets.length > 0) {
+        await showTimedNotification(`AT Terminal MCP config installed: ${targets.join('; ')}`);
+        return;
+      }
+      await showTimedNotification('No supported IDE MCP config target was detected. Open a workspace to install Continue config.', 'warning');
     });
   }
 

@@ -185,4 +185,45 @@ describe('TerminalContextRegistry', () => {
     expect(registry.getConnectedTerminalByServerId('a')?.terminalId).toBe('terminal-a');
     expect(registry.getConnectedTerminalByServerId('b')).toBeUndefined();
   });
+
+  it('updates and publishes connection changes for non-active terminals', () => {
+    const registry = new TerminalContextRegistry();
+    const listener = vi.fn();
+    registry.onDidChangeContext(listener);
+    registry.setActive({
+      terminalId: 'terminal-a',
+      server: server('a'),
+      connected: true,
+      write: vi.fn()
+    });
+    registry.setActive({
+      terminalId: 'terminal-b',
+      server: server('b'),
+      connected: true,
+      write: vi.fn()
+    });
+
+    registry.markDisconnected('terminal-a');
+
+    expect(registry.getConnectedTerminalById('terminal-a')).toBeUndefined();
+    expect(registry.getConnectedTerminalByServerId('a')).toBeUndefined();
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ terminalId: 'terminal-a', connected: false }));
+    expect(registry.getActive()?.terminalId).toBe('terminal-b');
+  });
+
+  it('publishes removed terminal ids when a terminal context is cleared', () => {
+    const registry = new TerminalContextRegistry();
+    const removed = vi.fn();
+    registry.onDidRemoveContext(removed);
+    registry.setActive({
+      terminalId: 'terminal-a',
+      server: server('a'),
+      connected: true,
+      write: vi.fn()
+    });
+
+    registry.clearIfActive('terminal-a');
+
+    expect(removed).toHaveBeenCalledWith('terminal-a');
+  });
 });
