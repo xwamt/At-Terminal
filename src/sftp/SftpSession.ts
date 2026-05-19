@@ -7,6 +7,9 @@ import { quotePosixShellPath, safePreviewName } from './RemotePath';
 import type { TransferProgress } from './TransferService';
 import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './SftpTypes';
 
+const SFTP_WRITE_STEP_TIMEOUT_MS = 55_000;
+const REMOTE_TEMP_CLEANUP_TIMEOUT_MS = 2_000;
+
 export async function buildSftpConnectConfig(server: ServerConfig, passwords: PasswordSource): Promise<ConnectConfig> {
   const base: ConnectConfig = {
     host: server.host,
@@ -211,7 +214,7 @@ export class SftpSession {
       await this.fastPut(sftp, localPath, tempPath, progress);
       await this.execSudoOverwrite(tempPath, remotePath);
     } catch (sudoError) {
-      await removeRemoteTempFile(sftp, tempPath);
+      await tryRemoveRemoteTempFile(sftp, tempPath);
       throw new Error(
         `SFTP upload to ${remotePath} failed with permission denied, and sudo fallback failed: ${errorMessage(sudoError)}. Original error: ${errorMessage(permissionError)}`
       );
@@ -222,15 +225,19 @@ export class SftpSession {
     const client = this.requireClient();
     const script = `set -e; cat ${quotePosixShellPath(tempPath)} > ${quotePosixShellPath(remotePath)}; rm -f ${quotePosixShellPath(tempPath)}`;
     const command = `sudo -n sh -c ${quotePosixShellPath(script)}`;
-    await new Promise<string>((resolve, reject) => {
-      client.exec(command, (error, stream) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        collectExecResult(stream, resolve, reject);
-      });
-    });
+    await withTimeout(
+      new Promise<string>((resolve, reject) => {
+        client.exec(command, (error, stream) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          collectExecResult(stream, resolve, reject);
+        });
+      }),
+      SFTP_WRITE_STEP_TIMEOUT_MS,
+      `SFTP sudo fallback timed out after ${SFTP_WRITE_STEP_TIMEOUT_MS}ms while writing ${remotePath}.`
+    );
   }
 
   async downloadFile(remotePath: string, localPath: string, progress?: TransferProgress): Promise<void> {
@@ -289,7 +296,7 @@ export class SftpSession {
         await writeBuffer(sftp, tempPath, content);
         await this.execSudoOverwrite(tempPath, path);
       } catch (sudoError) {
-        await removeRemoteTempFile(sftp, tempPath);
+        await tryRemoveRemoteTempFile(sftp, tempPath);
         throw new Error(
           `SFTP write to ${path} failed with permission denied, and sudo fallback failed: ${errorMessage(sudoError)}. Original error: ${errorMessage(error)}`
         );
@@ -363,26 +370,74 @@ async function removeRemoteTempFile(sftp: SFTPWrapper, tempPath: string): Promis
   });
 }
 
+async function tryRemoveRemoteTempFile(sftp: SFTPWrapper, tempPath: string): Promise<void> {
+  await withTimeout(
+    removeRemoteTempFile(sftp, tempPath),
+    REMOTE_TEMP_CLEANUP_TIMEOUT_MS,
+    `Timed out removing remote temp file ${tempPath}.`
+  ).catch(() => undefined);
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 async function writeBuffer(sftp: SFTPWrapper, path: string, content: Buffer): Promise<void> {
-  const handle = await new Promise<Buffer>((resolve, reject) => {
-    sftp.open(path, 'w', (error, fileHandle) => (error ? reject(error) : resolve(fileHandle)));
-  });
+  const handle = await withTimeout(
+    new Promise<Buffer>((resolve, reject) => {
+      sftp.open(path, 'w', (error, fileHandle) => (error ? reject(error) : resolve(fileHandle)));
+    }),
+    SFTP_WRITE_STEP_TIMEOUT_MS,
+    `SFTP open timed out after ${SFTP_WRITE_STEP_TIMEOUT_MS}ms while writing ${path}.`
+  );
+  let failed = false;
   try {
     let offset = 0;
     while (offset < content.byteLength) {
       const length = Math.min(32_768, content.byteLength - offset);
-      await new Promise<void>((resolve, reject) => {
-        sftp.write(handle, content, offset, length, offset, (error?: Error | null) =>
-          error ? reject(error) : resolve()
-        );
-      });
+      await withTimeout(
+        new Promise<void>((resolve, reject) => {
+          sftp.write(handle, content, offset, length, offset, (error?: Error | null) =>
+            error ? reject(error) : resolve()
+          );
+        }),
+        SFTP_WRITE_STEP_TIMEOUT_MS,
+        `SFTP write timed out after ${SFTP_WRITE_STEP_TIMEOUT_MS}ms while writing ${path} at offset ${offset}.`
+      );
       offset += length;
     }
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      sftp.close(handle, (error) => (error ? reject(error) : resolve()));
-    });
+    if (failed) {
+      void closeRemoteHandle(sftp, handle).catch(() => undefined);
+    } else {
+      await withTimeout(
+        closeRemoteHandle(sftp, handle),
+        SFTP_WRITE_STEP_TIMEOUT_MS,
+        `SFTP close timed out after ${SFTP_WRITE_STEP_TIMEOUT_MS}ms while writing ${path}.`
+      );
+    }
   }
+}
+
+async function closeRemoteHandle(sftp: SFTPWrapper, handle: Buffer): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    sftp.close(handle, (error) => (error ? reject(error) : resolve()));
+  });
 }
 
 async function createEmptyFile(sftp: SFTPWrapper, path: string): Promise<void> {

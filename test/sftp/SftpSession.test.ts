@@ -164,6 +164,64 @@ describe('SftpSession uploadFile sudo fallback', () => {
 });
 
 describe('SftpSession writeFile sudo fallback', () => {
+  it('reports when the direct write open never completes', async () => {
+    vi.useFakeTimers();
+    const open = vi.fn();
+    const write = vi.fn();
+    const close = vi.fn();
+    const unlink = vi.fn((_remotePath, callback) => callback());
+    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
+
+    try {
+      const writePromise = session
+        .writeFile('/root/README-base.md', Buffer.from('hello', 'utf8'))
+        .then(
+          () => 'resolved',
+          (error: Error) => error.message
+        );
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(55_000);
+
+      await expect(Promise.race([writePromise, Promise.resolve('pending')])).resolves.toContain(
+        'SFTP open timed out after 55000ms while writing /root/README-base.md'
+      );
+      expect(write).not.toHaveBeenCalled();
+      expect(close).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('preserves the write timeout when cleanup close also never completes', async () => {
+    vi.useFakeTimers();
+    const handle = Buffer.from('handle');
+    const open = vi.fn((_remotePath, _flags, callback) => callback(undefined, handle));
+    const write = vi.fn();
+    const close = vi.fn();
+    const unlink = vi.fn((_remotePath, callback) => callback());
+    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
+
+    try {
+      const writePromise = session
+        .writeFile('/root/README-base.md', Buffer.from('hello', 'utf8'))
+        .then(
+          () => 'resolved',
+          (error: Error) => error.message
+        );
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(55_000);
+
+      await expect(Promise.race([writePromise, Promise.resolve('pending')])).resolves.toContain(
+        'SFTP write timed out after 55000ms while writing /root/README-base.md at offset 0'
+      );
+      expect(close).toHaveBeenCalledWith(handle, expect.any(Function));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('writes to /tmp and uses sudo when direct write is permission denied', async () => {
     const permissionDenied = new Error('Permission denied') as Error & { code: number };
     permissionDenied.code = 3;
@@ -230,6 +288,50 @@ describe('SftpSession writeFile sudo fallback', () => {
       'sudo: a password is required'
     );
     expect(unlink).toHaveBeenCalledWith(expect.stringMatching(/^\/tmp\/at-terminal-write-.+-README-base\.md$/), expect.any(Function));
+  });
+
+  it('reports when the elevated write never completes', async () => {
+    vi.useFakeTimers();
+    const permissionDenied = new Error('Permission denied') as Error & { code: number };
+    permissionDenied.code = 3;
+    const tempHandle = Buffer.from('temp-handle');
+    const open = vi
+      .fn()
+      .mockImplementationOnce((_remotePath, _flags, callback) => callback(permissionDenied))
+      .mockImplementationOnce((_remotePath, _flags, callback) => callback(undefined, tempHandle));
+    const write = vi.fn((_handle, _buffer, _offset, length, _position, callback) => callback(undefined, length));
+    const close = vi.fn((_handle, callback) => callback());
+    const unlink = vi.fn((_remotePath, callback) => callback());
+    const client = {
+      exec: vi.fn((_command: string, callback) => {
+        callback(undefined, new FakeExecStream());
+      })
+    };
+    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
+    (session as unknown as { sftp: unknown; client: unknown }).client = client;
+
+    try {
+      const writePromise = session
+        .writeFile('/root/README-base.md', Buffer.from('hello', 'utf8'))
+        .then(
+          () => 'resolved',
+          (error: Error) => error.message
+        );
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(55_000);
+
+      await expect(Promise.race([writePromise, Promise.resolve('pending')])).resolves.toContain(
+        'SFTP sudo fallback timed out after 55000ms while writing /root/README-base.md'
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringMatching(/^\/tmp\/at-terminal-write-.+-README-base\.md$/),
+        expect.any(Function)
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
