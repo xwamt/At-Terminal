@@ -32,7 +32,8 @@ export class AgentToolService {
         host: server.host,
         port: server.port,
         username: server.username,
-        authType: server.authType
+        authType: server.authType,
+        agentCommandAutoApprove: server.agentCommandAutoApprove === true
       }))
     };
   }
@@ -48,13 +49,16 @@ export class AgentToolService {
     }
     const server = await this.resolveServer(input.serverId);
     const warning = isObviouslyDestructive(command) ? '\n\nWarning: this command appears destructive.' : '';
-    const answer = await vscode.window.showWarningMessage(
-      `Run remote command on ${server.label} (${server.host})?\n\n${command}${warning}`,
-      { modal: true },
-      'Run Command'
-    );
-    if (answer !== 'Run Command') {
-      throw new Error('Remote command was cancelled.');
+    const needsConfirmation = server.agentCommandAutoApprove !== true || Boolean(warning);
+    if (needsConfirmation) {
+      const answer = await vscode.window.showWarningMessage(
+        `Run remote command on ${server.label} (${server.host})?\n\n${command}${warning}`,
+        { modal: true },
+        'Run Command'
+      );
+      if (answer !== 'Run Command') {
+        throw new Error('Remote command was cancelled.');
+      }
     }
     return await this.dependencies.executor.execute(server, {
       command,

@@ -23,6 +23,7 @@ function server(id = 'server-1'): ServerConfig {
     port: 22,
     username: 'deploy',
     authType: 'password',
+    agentCommandAutoApprove: false,
     keepAliveInterval: 30,
     encoding: 'utf-8',
     createdAt: 1,
@@ -88,7 +89,29 @@ describe('registerAgentTools', () => {
           host: 'server-1.example.com',
           port: 22,
           username: 'deploy',
-          authType: 'password'
+          authType: 'password',
+          agentCommandAutoApprove: false
+        }
+      ]
+    });
+  });
+
+  it('lists agent command trust state without exposing credentials', async () => {
+    registerTestAgentTools({
+      configManager: { listServers: async () => [{ ...server(), agentCommandAutoApprove: true }] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute: vi.fn() } as never
+    });
+
+    const result = await registeredTool('list_ssh_servers').invoke({
+      input: {}
+    });
+
+    expect(JSON.parse(text(result))).toMatchObject({
+      servers: [
+        {
+          id: 'server-1',
+          agentCommandAutoApprove: true
         }
       ]
     });

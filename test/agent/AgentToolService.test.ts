@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as vscode from 'vscode';
 import { AgentToolService } from '../../src/agent/AgentToolService';
 import type { RemoteCommandExecutor } from '../../src/agent/RemoteCommandExecutor';
 import type { ServerConfig } from '../../src/config/schema';
@@ -18,6 +19,10 @@ function server(id = 'server-1'): ServerConfig {
     updatedAt: 1
   };
 }
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('AgentToolService', () => {
   it('returns terminal context snapshots without credentials', async () => {
@@ -107,5 +112,84 @@ describe('AgentToolService', () => {
 
     expect(sftp.readFile).toHaveBeenCalledWith({ path: '/x' });
     expect(sftp.writeFile).toHaveBeenCalledWith({ path: '/x', content: 'next', overwrite: true });
+  });
+
+  it('skips command confirmation for trusted non-destructive remote commands', async () => {
+    const trusted = { ...server(), agentCommandAutoApprove: true };
+    const execute = vi.fn(async () => ({
+      serverId: 'server-1',
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command: 'uptime',
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+      durationMs: 1,
+      timedOut: false,
+      truncated: false
+    }));
+    const showWarningMessage = vi.spyOn(vscode.window, 'showWarningMessage');
+    const service = new AgentToolService({
+      configManager: { getServer: async () => trusted, listServers: async () => [trusted] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    await service.runRemoteCommand({ serverId: 'server-1', command: 'uptime' });
+
+    expect(showWarningMessage).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(trusted, {
+      command: 'uptime',
+      cwd: undefined,
+      timeoutMs: undefined,
+      maxOutputBytes: undefined
+    });
+  });
+
+  it('still confirms destructive commands for trusted servers', async () => {
+    const trusted = { ...server(), agentCommandAutoApprove: true };
+    vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue('Run Command' as never);
+    const execute = vi.fn(async () => ({
+      serverId: 'server-1',
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command: 'rm -rf /tmp/app',
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      durationMs: 1,
+      timedOut: false,
+      truncated: false
+    }));
+    const service = new AgentToolService({
+      configManager: { getServer: async () => trusted, listServers: async () => [trusted] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    await service.runRemoteCommand({ serverId: 'server-1', command: 'rm -rf /tmp/app' });
+
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+      'Run remote command on Production (server-1.example.com)?\n\nrm -rf /tmp/app\n\nWarning: this command appears destructive.',
+      { modal: true },
+      'Run Command'
+    );
+    expect(execute).toHaveBeenCalled();
+  });
+
+  it('cancels destructive commands for trusted servers when the user declines', async () => {
+    const trusted = { ...server(), agentCommandAutoApprove: true };
+    vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined);
+    const execute = vi.fn();
+    const service = new AgentToolService({
+      configManager: { getServer: async () => trusted, listServers: async () => [trusted] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    await expect(service.runRemoteCommand({ serverId: 'server-1', command: 'rm -rf /tmp/app' })).rejects.toThrow(
+      'Remote command was cancelled.'
+    );
+    expect(execute).not.toHaveBeenCalled();
   });
 });
