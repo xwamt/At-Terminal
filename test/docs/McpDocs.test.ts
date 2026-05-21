@@ -12,6 +12,8 @@ describe('MCP documentation', () => {
     expect(readme).toContain('dist/mcp-server.js');
     expect(readme).toContain('get_terminal_context');
     expect(readme).toContain('sftp_read_file');
+    expect(readme).toContain('Trust agent remote commands');
+    expect(readme).toContain('does not bypass SFTP write authorization or SSH host key trust');
     expect(readme).toContain('AT Terminal: Install MCP Config');
     expect(readme).toContain('~/.kiro/settings/mcp.json');
     expect(readme).toContain('### Base Vs MCP Build');

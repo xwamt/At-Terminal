@@ -21,6 +21,7 @@ const summaryTarget = document.querySelector<HTMLElement>('[data-summary="target
 const summaryAuth = document.querySelector<HTMLElement>('[data-summary="auth"]');
 const summaryGroup = document.querySelector<HTMLElement>('[data-summary="group"]');
 const summaryRoute = document.querySelector<HTMLElement>('[data-summary="route"]');
+const summaryAgentCommands = document.querySelector<HTMLElement>('[data-summary="agentCommands"]');
 
 function field(name: string): HTMLInputElement | null {
   return form?.elements.namedItem(name) instanceof HTMLInputElement
@@ -70,6 +71,11 @@ function selectedAuth(): string {
   return authType?.value === 'privateKey' ? 'privateKey' : 'password';
 }
 
+function agentCommandAutoApproveEnabled(): boolean {
+  const input = document.querySelector<HTMLInputElement>('input[name="agentCommandAutoApprove"]');
+  return input?.checked === true;
+}
+
 function selectAuth(value: string): void {
   const next = value === 'privateKey' ? 'privateKey' : 'password';
   if (authType) {
@@ -114,6 +120,11 @@ function updateSummary(): void {
   if (summaryRoute) {
     summaryRoute.textContent =
       jumpHost?.value && jumpHostLabel ? `Route: via ${jumpHostLabel.split(' - ')[0]}` : 'Route: Direct connection';
+  }
+  if (summaryAgentCommands) {
+    summaryAgentCommands.textContent = agentCommandAutoApproveEnabled()
+      ? 'Agent commands: trusted for non-destructive commands'
+      : 'Agent commands: manual approval';
   }
 }
 

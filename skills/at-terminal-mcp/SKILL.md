@@ -102,6 +102,8 @@ Always include a POSIX shell comment at the top of every `run_remote_command.com
 du -sh /srv/app
 ```
 
+For `run_remote_command`, wait for the AT Terminal confirmation dialog unless the selected server is configured with `Trust agent remote commands`. Destructive-looking commands still require confirmation. SFTP write tools still require AT Terminal write authorization.
+
 For dangerous commands, wait for the user to approve the AT Terminal or VS Code confirmation dialog before continuing, and do not interpret lack of approval as success. Dangerous commands include deletion, overwrite, permission or ownership changes, service restarts, package installs/upgrades/removals, migrations, firewall/network changes, account changes, process kills, `sudo`, `rm`, `mv` over existing paths, `chmod`, `chown`, `systemctl`, `docker compose down`, and any command that can interrupt production traffic or destroy data.
 
 Prefer read-only inspection before dangerous actions. When a dangerous action is necessary, make the `# Purpose:` comment specific enough that the popup explains the effect, target path/service, and reason.

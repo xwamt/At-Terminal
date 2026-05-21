@@ -99,4 +99,33 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('<option value="jump-1" selected>');
     expect(html).toContain('Route: via Bastion CN');
   });
+
+  it('renders the agent command trust switch off by default', () => {
+    const html = renderServerForm();
+
+    expect(html).toContain('name="agentCommandAutoApprove"');
+    expect(html).toContain('Trust agent remote commands');
+    expect(html).toContain('Run non-destructive MCP remote commands without asking each time.');
+    expect(html).toContain('Agent commands: manual approval');
+    expect(html).not.toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
+  });
+
+  it('renders the agent command trust switch checked for trusted servers', () => {
+    const html = renderServerForm({
+      id: 'server-1',
+      label: 'Production',
+      host: 'example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      agentCommandAutoApprove: true,
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(html).toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
+    expect(html).toContain('Agent commands: trusted for non-destructive commands');
+  });
 });

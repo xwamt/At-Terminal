@@ -92,6 +92,78 @@ describe('server config schema', () => {
     ).toThrow();
   });
 
+  it('accepts agent command auto approval when enabled', () => {
+    const parsed = parseServerConfig({
+      id: 'server-7',
+      label: 'Trusted Commands',
+      host: 'trusted.example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      agentCommandAutoApprove: true,
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.agentCommandAutoApprove).toBe(true);
+  });
+
+  it('accepts agent command auto approval when disabled', () => {
+    const parsed = parseServerConfig({
+      id: 'server-8',
+      label: 'Manual Commands',
+      host: 'manual.example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      agentCommandAutoApprove: false,
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.agentCommandAutoApprove).toBe(false);
+  });
+
+  it('keeps agent command auto approval optional for existing configs', () => {
+    const parsed = parseServerConfig({
+      id: 'server-9',
+      label: 'Existing',
+      host: 'existing.example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.agentCommandAutoApprove).toBeUndefined();
+  });
+
+  it('still rejects unrelated unknown fields', () => {
+    expect(() =>
+      parseServerConfig({
+        id: 'server-10',
+        label: 'Unknown Field',
+        host: 'unknown.example.com',
+        port: 22,
+        username: 'deploy',
+        authType: 'password',
+        agentCommandAutoApprove: true,
+        agentTrustEverything: true,
+        keepAliveInterval: 30,
+        encoding: 'utf-8',
+        createdAt: 1,
+        updatedAt: 2
+      })
+    ).toThrow();
+  });
+
   it('requires privateKeyPath for private key auth', () => {
     expect(() =>
       parseServerConfig({

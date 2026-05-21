@@ -19,6 +19,8 @@ describe('AT Terminal MCP skill', () => {
     expect(skill).toContain('.kiro/settings/mcp.json');
     expect(skill).toContain('.cursor/mcp.json');
     expect(skill).toContain('.continue/mcpServers/at-terminal.yaml');
+    expect(skill).toContain('Trust agent remote commands');
+    expect(skill).toContain('Destructive-looking commands still require confirmation');
     expect(skill).toContain('wait for the user to approve the AT Terminal or VS Code confirmation dialog');
     expect(skill).toContain('# Purpose:');
   });

@@ -157,6 +157,34 @@ select:focus {
   grid-column: 1 / -1;
 }
 
+.trust-toggle-row {
+  align-items: center;
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.trust-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.trust-toggle-title {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.trust-toggle-row input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: auto;
+}
+
 .form-panel-summary {
   grid-column: 1 / -1;
 }
