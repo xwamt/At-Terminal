@@ -178,6 +178,33 @@ describe('ServerFormPanel message handling', () => {
     expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ jumpHostId: 'jump-1' }), 'secret');
   });
 
+  it('persists agent command auto approval from the form payload', async () => {
+    const saveServer = vi.fn();
+
+    await handleServerFormMessage(
+      {
+        type: 'submit',
+        payload: {
+          label: 'Production',
+          group: 'prod',
+          host: 'example.com',
+          port: 22,
+          username: 'deploy',
+          authType: 'password',
+          password: 'secret',
+          agentCommandAutoApprove: 'on',
+          keepAliveInterval: 30
+        }
+      },
+      undefined,
+      { saveServer } as never,
+      vi.fn(),
+      { dispose: vi.fn(), webview: { postMessage: vi.fn() } } as never
+    );
+
+    expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ agentCommandAutoApprove: true }), 'secret');
+  });
+
   it('tests the current form connection without saving or closing the panel', async () => {
     const postMessage = vi.fn();
     const saveServer = vi.fn();

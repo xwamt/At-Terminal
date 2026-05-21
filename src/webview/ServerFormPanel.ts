@@ -192,6 +192,7 @@ function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | unde
     authType: String(payload.authType),
     privateKeyPath: optionalString(payload.privateKeyPath),
     jumpHostId: optionalString(payload.jumpHostId),
+    agentCommandAutoApprove: payload.agentCommandAutoApprove === 'on' || payload.agentCommandAutoApprove === true,
     keepAliveInterval: Number(payload.keepAliveInterval ?? 30),
     encoding: 'utf-8',
     createdAt: existing?.createdAt ?? now,
@@ -212,6 +213,9 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const passwordHelp = server ? 'Leave blank to keep the saved password.' : 'Stored securely in VS Code SecretStorage.';
   const jumpHostOptions = servers.filter((candidate) => candidate.id !== server?.id);
   const selectedJumpHost = jumpHostOptions.find((candidate) => candidate.id === server?.jumpHostId);
+  const agentCommandTrustSummary = server?.agentCommandAutoApprove
+    ? 'Agent commands: trusted for non-destructive commands'
+    : 'Agent commands: manual approval';
 
   return `<main class="server-form-shell">
   <header class="form-header">
@@ -245,6 +249,13 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
                 })
                 .join('')}
             </select>
+          </label>
+          <label class="field-stack field-wide trust-toggle-row">
+            <span class="trust-toggle-copy">
+              <span class="trust-toggle-title">Trust agent remote commands</span>
+              <span class="field-help">Run non-destructive MCP remote commands without asking each time.</span>
+            </span>
+            <input name="agentCommandAutoApprove" type="checkbox"${server?.agentCommandAutoApprove ? ' checked' : ''}>
           </label>
         </div>
       </section>
@@ -295,6 +306,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
           <div class="summary-line" data-summary="route">Route: ${
             selectedJumpHost ? `via ${escapeHtml(selectedJumpHost.label)}` : 'Direct connection'
           }</div>
+          <div class="summary-line" data-summary="agentCommands">${agentCommandTrustSummary}</div>
         </div>
       </section>
     </div>
