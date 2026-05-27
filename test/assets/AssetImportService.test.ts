@@ -27,7 +27,7 @@ function payload(servers: ServerConfig[]): AssetPackagePayload {
     format: ASSET_PACKAGE_FORMAT,
     version: ASSET_PACKAGE_VERSION,
     createdAt: 1,
-    source: { extensionName: 'at-terminal', extensionVersion: '2.10.1' },
+    source: { extensionName: 'at-terminal', extensionVersion: '2.10.2' },
     options: { includesPasswords: true, includesPrivateKeys: true, includesHostTrust: false },
     servers,
     passwords: { 'server-1': 'secret' },

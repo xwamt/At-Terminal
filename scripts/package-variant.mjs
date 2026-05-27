@@ -21,10 +21,16 @@ if (variant === 'base') {
   await rm(join(stage, 'dist', 'mcp-server.js.map'), { force: true });
 }
 await cp(join(root, 'media'), join(stage, 'media'), { recursive: true });
+await cp(join(root, 'docs', 'features.md'), join(stage, 'docs', 'features.md'));
+await cp(join(root, 'docs', 'features.zh-CN.md'), join(stage, 'docs', 'features.zh-CN.md'));
+await cp(join(root, 'docs', 'usage.md'), join(stage, 'docs', 'usage.md'));
+await cp(join(root, 'docs', 'usage.zh-CN.md'), join(stage, 'docs', 'usage.zh-CN.md'));
+await cp(join(root, 'docs', 'README.zh-CN.md'), join(stage, 'docs', 'README.zh-CN.md'));
 await cp(join(root, 'docs', 'images'), join(stage, 'docs', 'images'), {
   recursive: true,
   filter: (source) => !source.toLowerCase().endsWith('.gif')
 });
+await cp(join(root, 'docs', 'mcp'), join(stage, 'docs', 'mcp'), { recursive: true });
 await cp(join(root, 'webview'), join(stage, 'webview'), { recursive: true });
 await cp(join(root, '.vscodeignore'), join(stage, '.vscodeignore'));
 await writeFile(join(stage, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');

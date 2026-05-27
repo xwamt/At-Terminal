@@ -8,8 +8,11 @@
 coverage/**
 docs/**
 !docs/
+!docs/*.md
 !docs/images/
 !docs/images/*.png
+!docs/mcp/
+!docs/mcp/*.yaml
 src/**
 test/**
 test-fixtures/**

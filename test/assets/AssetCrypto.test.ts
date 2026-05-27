@@ -7,7 +7,7 @@ function payload(): AssetPackagePayload {
     format: ASSET_PACKAGE_FORMAT,
     version: ASSET_PACKAGE_VERSION,
     createdAt: 1,
-    source: { extensionName: 'at-terminal', extensionVersion: '2.10.1' },
+    source: { extensionName: 'at-terminal', extensionVersion: '2.10.2' },
     options: { includesPasswords: true, includesPrivateKeys: false, includesHostTrust: false },
     servers: [],
     passwords: { 'server-1': 'secret' },

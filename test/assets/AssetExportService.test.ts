@@ -45,7 +45,7 @@ describe('AssetExportService', () => {
       includePasswords: true,
       includePrivateKeys: true,
       extensionName: 'at-terminal',
-      extensionVersion: '2.10.1',
+      extensionVersion: '2.10.2',
       getPassword: async (id) => (id === 'password-1' ? 'secret' : undefined),
       now: () => 123
     });
@@ -67,7 +67,7 @@ describe('AssetExportService', () => {
       includePasswords: true,
       includePrivateKeys: true,
       extensionName: 'at-terminal',
-      extensionVersion: '2.10.1',
+      extensionVersion: '2.10.2',
       getPassword: async () => undefined,
       now: () => 123
     });

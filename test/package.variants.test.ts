@@ -55,11 +55,17 @@ describe('package variants', () => {
 
   it('keeps README images local in packaged VSIX files', () => {
     expect(packageScript).toContain("join(root, 'docs', 'images')");
+    expect(packageScript).toContain("join(root, 'docs', 'features.md')");
+    expect(packageScript).toContain("join(root, 'docs', 'features.zh-CN.md')");
+    expect(packageScript).toContain("join(root, 'docs', 'usage.zh-CN.md')");
+    expect(packageScript).toContain("join(root, 'docs', 'mcp')");
     expect(packageScript).toContain(".endsWith('.gif')");
     expect(packageScript).toContain('--no-rewrite-relative-links');
     expect(packageScript).not.toContain('--baseImagesUrl');
     expect(packageScript).not.toContain('https://example.com/at-terminal');
+    expect(vscodeIgnore).toContain('!docs/*.md');
     expect(vscodeIgnore).toContain('!docs/images/*.png');
+    expect(vscodeIgnore).toContain('!docs/mcp/*.yaml');
     expect(readme).not.toContain('.gif');
     expect(baseReadme).not.toContain('.gif');
   });
