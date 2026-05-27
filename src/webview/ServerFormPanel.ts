@@ -219,6 +219,8 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const passwordHelp = server ? 'Leave blank to keep the saved password.' : 'Stored securely in VS Code SecretStorage.';
   const jumpHostOptions = servers.filter((candidate) => candidate.id !== server?.id);
   const selectedJumpHost = jumpHostOptions.find((candidate) => candidate.id === server?.jumpHostId);
+  const selectedJumpHostGroup = selectedJumpHost ? displayGroupName(selectedJumpHost.group) : '';
+  const jumpHostGroups = groupNames(jumpHostOptions);
   const agentCommandTrustSummary = server?.agentCommandAutoApprove
     ? 'Agent commands: trusted for non-destructive commands'
     : 'Agent commands: manual approval';
@@ -252,13 +254,27 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
           <label class="field-stack">Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
           <label class="field-stack">Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">Keepalive <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
-          <label class="field-stack field-wide">Jump Host
-            <select name="jumpHostId">
+          <label class="field-stack">Jump Host Group
+            <select name="jumpHostGroup">
               <option value="">Direct connection</option>
+              ${jumpHostGroups
+                .map((group) => {
+                  const selected = group === selectedJumpHostGroup ? ' selected' : '';
+                  return `<option value="${escapeAttr(group)}"${selected}>${escapeHtml(group)}</option>`;
+                })
+                .join('')}
+            </select>
+          </label>
+          <label class="field-stack">Jump Host Server
+            <select name="jumpHostId"${selectedJumpHost ? '' : ' disabled'}>
+              <option value="">Select a server</option>
               ${jumpHostOptions
                 .map((candidate) => {
+                  const group = displayGroupName(candidate.group);
                   const selected = candidate.id === server?.jumpHostId ? ' selected' : '';
-                  return `<option value="${escapeAttr(candidate.id)}"${selected}>${escapeHtml(formatJumpHostOption(candidate))}</option>`;
+                  return `<option value="${escapeAttr(candidate.id)}" data-group="${escapeAttr(group)}"${selected}>${escapeHtml(
+                    formatJumpHostOption(candidate)
+                  )}</option>`;
                 })
                 .join('')}
             </select>

@@ -82,12 +82,18 @@ describe('ServerFormPanel markup', () => {
     expect(css).toContain('.primary-action.is-loading');
   });
 
-  it('renders jump host options in the connection panel', () => {
-    const html = renderServerForm(undefined, [jumpHost]);
+  it('renders grouped jump host controls in the connection panel', () => {
+    const html = renderServerForm(undefined, [jumpHost, appServer]);
 
+    expect(html).toContain('name="jumpHostGroup"');
     expect(html).toContain('name="jumpHostId"');
     expect(html).toContain('Direct connection');
+    expect(html).toContain('<option value="Default">Default</option>');
+    expect(html).toContain('<option value="prod">prod</option>');
+    expect(html).toContain('data-group="Default"');
     expect(html).toContain('Bastion CN - ops@bastion.example.com:22');
+    expect(html).toContain('data-group="prod"');
+    expect(html).toContain('App CN - deploy@app.example.com:22');
     expect(html).toContain('data-summary="route"');
   });
 
@@ -132,7 +138,8 @@ describe('ServerFormPanel markup', () => {
       [jumpHost]
     );
 
-    expect(html).toContain('<option value="jump-1" selected>');
+    expect(html).toContain('<option value="Default" selected>Default</option>');
+    expect(html).toContain('<option value="jump-1" data-group="Default" selected>');
     expect(html).toContain('Route: via Bastion CN');
   });
 
