@@ -529,6 +529,12 @@ The MCP build still includes:
 - Terminal font, scrollback, semantic highlighting, and keep-alive settings.
 - `rz`/`sz` sequence detection.
 
+### Asset Import and Export
+
+Run `AT Terminal: Export Assets` to create an encrypted `.at-terminal-assets` package containing SSH server configuration. Passwords and private key files are optional export choices and are included only when selected. Run `AT Terminal: Import Assets` in another supported IDE or device to decrypt the package and import the selected assets.
+
+Imported private keys are stored in the extension's global storage area and server configs are updated to use those new local paths. SSH host trust records are not migrated, so the first connection after import still asks for host trust confirmation.
+
 ### Base Vs MCP Build
 
 | Capability | Base `AT Terminal` | `AT Terminal MCP` |
