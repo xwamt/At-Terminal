@@ -338,7 +338,8 @@
     "commands": [
       {
         "command": "sshManager.addServer",
-        "title": "SSH: Add Server"
+        "title": "SSH: Add Server",
+        "icon": "$(add)"
       },
       {
         "command": "sshManager.editServer",
@@ -366,7 +367,8 @@
       },
       {
         "command": "sshManager.refresh",
-        "title": "SSH: Refresh"
+        "title": "SSH: Refresh",
+        "icon": "$(refresh)"
       },
       {
         "command": "sshManager.sftp.refresh",
@@ -426,11 +428,13 @@
       },
       {
         "command": "sshManager.exportAssets",
-        "title": "AT Terminal: Export Assets"
+        "title": "AT Terminal: Export Assets",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "sshManager.importAssets",
-        "title": "AT Terminal: Import Assets"
+        "title": "AT Terminal: Import Assets",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {

@@ -29,4 +29,17 @@ describe('asset import/export package contributions', () => {
       );
     }
   });
+
+  it('uses icons for Servers view title actions in all variants', () => {
+    for (const manifest of manifests) {
+      expect(manifest.contributes.commands).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ command: 'sshManager.addServer', icon: '$(add)' }),
+          expect.objectContaining({ command: 'sshManager.refresh', icon: '$(refresh)' }),
+          expect.objectContaining({ command: 'sshManager.exportAssets', icon: '$(cloud-upload)' }),
+          expect.objectContaining({ command: 'sshManager.importAssets', icon: '$(cloud-download)' })
+        ])
+      );
+    }
+  });
 });
