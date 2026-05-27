@@ -27,7 +27,7 @@ import { TerminalContextRegistry } from './terminal/TerminalContext';
 import { ServerTreeProvider } from './tree/ServerTreeProvider';
 import { SftpTreeProvider } from './tree/SftpTreeProvider';
 import { SftpDirectoryTreeItem, SftpFileTreeItem } from './tree/SftpTreeItems';
-import { ServerTreeItem } from './tree/TreeItems';
+import { GroupTreeItem, ServerTreeItem } from './tree/TreeItems';
 import { formatError } from './utils/errors';
 import { showTimedNotification } from './utils/notifications';
 import { ServerFormPanel } from './webview/ServerFormPanel';
@@ -182,8 +182,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.tabGroups.onDidChangeTabs((event) => {
       void sftpPreviewStore.deletePreviewFilesForClosedTabs(event.closed);
     }),
-    vscode.commands.registerCommand('sshManager.addServer', () => {
-      void ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), undefined, hostKeyVerifier);
+    vscode.commands.registerCommand('sshManager.addServer', (item?: GroupTreeItem) => {
+      const initialGroup = item instanceof GroupTreeItem ? item.groupName : undefined;
+      void ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), undefined, hostKeyVerifier, initialGroup);
     }),
     vscode.commands.registerCommand('sshManager.editServer', async (item?: ServerTreeItem) => {
       if (!item) {

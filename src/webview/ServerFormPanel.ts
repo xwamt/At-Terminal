@@ -32,7 +32,8 @@ export class ServerFormPanel {
     configManager: ConfigManager,
     onSaved: () => void,
     existing?: ServerConfig,
-    hostKeyVerifier?: HostKeyVerifier
+    hostKeyVerifier?: HostKeyVerifier,
+    initialGroup?: string
   ): Promise<void> {
     const panel = vscode.window.createWebviewPanel(
       'sshServerForm',
@@ -51,7 +52,7 @@ export class ServerFormPanel {
         script: vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview', 'server-form.js'),
         style: vscode.Uri.joinPath(context.extensionUri, 'webview', 'server-form', 'index.css')
       },
-      renderServerForm(existing, servers)
+      renderServerForm(existing, servers, initialGroup)
     );
 
     panel.webview.onDidReceiveMessage(async (message: ServerFormMessage) => {
@@ -185,7 +186,7 @@ function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | unde
   return parseServerConfig({
     id: existing?.id ?? randomUUID(),
     label: String(payload.label ?? '').trim(),
-    group: optionalString(payload.group),
+    group: optionalGroup(payload.group),
     host: String(payload.host ?? '').trim(),
     port: Number(payload.port ?? 22),
     username: String(payload.username ?? '').trim(),
@@ -205,7 +206,12 @@ function optionalString(value: unknown): string | undefined {
   return text.length > 0 ? text : undefined;
 }
 
-export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] = []): string {
+function optionalGroup(value: unknown): string | undefined {
+  const group = optionalString(value);
+  return group === 'Default' ? undefined : group;
+}
+
+export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] = [], initialGroup?: string): string {
   const authType = server?.authType ?? 'password';
   const isPassword = authType === 'password';
   const isPrivateKey = authType === 'privateKey';

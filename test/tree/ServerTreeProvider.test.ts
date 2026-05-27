@@ -20,6 +20,13 @@ function server(id: string, label: string, group?: string): ServerConfig {
 }
 
 describe('ServerTreeProvider', () => {
+  it('marks group nodes with the group context value used by package menus', () => {
+    const item = new GroupTreeItem('prod');
+
+    expect(item.groupName).toBe('prod');
+    expect(item.contextValue).toBe('group');
+  });
+
   it('groups servers and puts ungrouped servers in Default', async () => {
     const provider = new ServerTreeProvider({
       listServers: async () => [server('a', 'A', 'prod'), server('b', 'B'), server('c', 'C', 'prod')]

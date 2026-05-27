@@ -151,6 +151,58 @@ describe('ServerFormPanel message handling', () => {
     expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ id: 'server-1' }), undefined);
   });
 
+  it('saves Default group submissions as an empty group', async () => {
+    const saveServer = vi.fn();
+
+    await handleServerFormMessage(
+      {
+        type: 'submit',
+        payload: {
+          label: 'Ungrouped',
+          group: 'Default',
+          host: 'example.com',
+          port: 22,
+          username: 'deploy',
+          authType: 'password',
+          password: 'secret',
+          keepAliveInterval: 30
+        }
+      },
+      undefined,
+      { saveServer } as never,
+      vi.fn(),
+      { dispose: vi.fn(), webview: { postMessage: vi.fn() } } as never
+    );
+
+    expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ group: undefined }), 'secret');
+  });
+
+  it('trims typed group submissions before saving', async () => {
+    const saveServer = vi.fn();
+
+    await handleServerFormMessage(
+      {
+        type: 'submit',
+        payload: {
+          label: 'Production',
+          group: ' prod ',
+          host: 'example.com',
+          port: 22,
+          username: 'deploy',
+          authType: 'password',
+          password: 'secret',
+          keepAliveInterval: 30
+        }
+      },
+      undefined,
+      { saveServer } as never,
+      vi.fn(),
+      { dispose: vi.fn(), webview: { postMessage: vi.fn() } } as never
+    );
+
+    expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ group: 'prod' }), 'secret');
+  });
+
   it('persists a selected jump host id from the form payload', async () => {
     const saveServer = vi.fn();
 
