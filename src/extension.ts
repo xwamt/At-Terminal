@@ -4,6 +4,7 @@ import { registerAgentTools } from './agent/AgentTools';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
 import { SftpAgentService } from './agent/SftpAgentService';
 import { SftpWriteAuthorizer } from './agent/SftpWriteAuthorizer';
+import { assetPrivateKeyDirectory, exportAssetsCommand, importAssetsCommand } from './assets/AssetCommands';
 import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import type { ServerConfig } from './config/schema';
@@ -181,6 +182,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.window.tabGroups.onDidChangeTabs((event) => {
       void sftpPreviewStore.deletePreviewFilesForClosedTabs(event.closed);
+    }),
+    vscode.commands.registerCommand('sshManager.exportAssets', async () => {
+      await exportAssetsCommand({
+        configManager,
+        extensionName: context.extension.packageJSON.name,
+        extensionVersion: context.extension.packageJSON.version
+      });
+    }),
+    vscode.commands.registerCommand('sshManager.importAssets', async () => {
+      await importAssetsCommand({
+        configManager,
+        privateKeyDirectory: assetPrivateKeyDirectory(context),
+        refreshServers: () => treeProvider.refresh()
+      });
     }),
     vscode.commands.registerCommand('sshManager.addServer', (item?: GroupTreeItem) => {
       const initialGroup = item instanceof GroupTreeItem ? item.groupName : undefined;

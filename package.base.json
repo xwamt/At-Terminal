@@ -123,6 +123,14 @@
       {
         "command": "sshManager.sftp.goUp",
         "title": "SFTP: Go Up"
+      },
+      {
+        "command": "sshManager.exportAssets",
+        "title": "AT Terminal: Export Assets"
+      },
+      {
+        "command": "sshManager.importAssets",
+        "title": "AT Terminal: Import Assets"
       }
     ],
     "menus": {
@@ -151,6 +159,16 @@
           "command": "sshManager.sftp.goToPath",
           "when": "view == sshManager.sftpFiles",
           "group": "navigation@2"
+        },
+        {
+          "command": "sshManager.exportAssets",
+          "when": "view == sshManager.servers",
+          "group": "navigation@3"
+        },
+        {
+          "command": "sshManager.importAssets",
+          "when": "view == sshManager.servers",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
