@@ -98,26 +98,27 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('data-summary="route"');
   });
 
-  it('renders editable group suggestions from existing server groups', () => {
+  it('renders server group choices as an anchored select control', () => {
     const html = renderServerForm(undefined, [jumpHost, appServer]);
 
     expect(html).toContain('name="group"');
-    expect(html).toContain('list="serverGroupSuggestions"');
-    expect(html).toContain('<datalist id="serverGroupSuggestions">');
-    expect(html).toContain('<option value="Default"></option>');
-    expect(html).toContain('<option value="prod"></option>');
+    expect(html).toContain('<select name="group">');
+    expect(html).toContain('<option value="Default">Default</option>');
+    expect(html).toContain('<option value="prod">prod</option>');
+    expect(html).not.toContain('list="serverGroupSuggestions"');
+    expect(html).not.toContain('<datalist id="serverGroupSuggestions">');
   });
 
   it('prefills the group when adding from a selected group node', () => {
     const html = renderServerForm(undefined, [jumpHost], 'prod');
 
-    expect(html).toContain('name="group" value="prod"');
+    expect(html).toContain('<option value="prod" selected>prod</option>');
   });
 
   it('displays Default for a group-scoped add from the Default group', () => {
     const html = renderServerForm(undefined, [jumpHost], 'Default');
 
-    expect(html).toContain('name="group" value="Default"');
+    expect(html).toContain('<option value="Default" selected>Default</option>');
   });
 
   it('excludes the edited server from jump host options', () => {
