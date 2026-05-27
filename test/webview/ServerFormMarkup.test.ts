@@ -109,6 +109,13 @@ describe('ServerFormPanel markup', () => {
     expect(html).not.toContain('<datalist id="serverGroupSuggestions">');
   });
 
+  it('keeps the live group summary wired to the select control', () => {
+    const script = readFileSync(join(process.cwd(), 'webview/server-form/index.ts'), 'utf8');
+
+    expect(script).toContain('function field(name: string): HTMLInputElement | HTMLSelectElement | null');
+    expect(script).toContain('element instanceof HTMLSelectElement');
+  });
+
   it('prefills the group when adding from a selected group node', () => {
     const html = renderServerForm(undefined, [jumpHost], 'prod');
 

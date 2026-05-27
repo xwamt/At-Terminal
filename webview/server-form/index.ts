@@ -25,10 +25,9 @@ const summaryGroup = document.querySelector<HTMLElement>('[data-summary="group"]
 const summaryRoute = document.querySelector<HTMLElement>('[data-summary="route"]');
 const summaryAgentCommands = document.querySelector<HTMLElement>('[data-summary="agentCommands"]');
 
-function field(name: string): HTMLInputElement | null {
-  return form?.elements.namedItem(name) instanceof HTMLInputElement
-    ? (form.elements.namedItem(name) as HTMLInputElement)
-    : null;
+function field(name: string): HTMLInputElement | HTMLSelectElement | null {
+  const element = form?.elements.namedItem(name);
+  return element instanceof HTMLInputElement || element instanceof HTMLSelectElement ? element : null;
 }
 
 function setError(message: string): void {
