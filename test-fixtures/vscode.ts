@@ -110,8 +110,36 @@ export class StatusBarItem {
 const didSaveTextDocument = new EventEmitter<TextDocument>();
 const didCloseTextDocument = new EventEmitter<TextDocument>();
 const didChangeTabs = new EventEmitter<{ closed: unknown[] }>();
+const dialogState = {
+  openDialogResults: [] as Uri[][],
+  saveDialogResults: [] as Uri[],
+  inputBoxResults: [] as Array<string | undefined>,
+  quickPickResults: [] as unknown[]
+};
 
 export const window = {
+  __resetDialogs: () => {
+    dialogState.openDialogResults = [];
+    dialogState.saveDialogResults = [];
+    dialogState.inputBoxResults = [];
+    dialogState.quickPickResults = [];
+  },
+  __setOpenDialogResult: (path: string) => {
+    dialogState.openDialogResults.push([Uri.file(path)]);
+  },
+  __setSaveDialogResult: (path: string) => {
+    dialogState.saveDialogResults.push(Uri.file(path));
+  },
+  __setInputBoxResults: (values: Array<string | undefined>) => {
+    dialogState.inputBoxResults.push(...values);
+  },
+  __setQuickPickResults: (values: unknown[]) => {
+    dialogState.quickPickResults.push(...values);
+  },
+  showOpenDialog: async () => dialogState.openDialogResults.shift(),
+  showSaveDialog: async () => dialogState.saveDialogResults.shift(),
+  showInputBox: async () => dialogState.inputBoxResults.shift(),
+  showQuickPick: async () => dialogState.quickPickResults.shift(),
   showErrorMessage: async () => undefined,
   showInformationMessage: async () => undefined,
   showWarningMessage: async () => undefined,
