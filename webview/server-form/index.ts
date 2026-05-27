@@ -11,6 +11,8 @@ const privateKeyBrowse = document.querySelector<HTMLButtonElement>('#privateKeyB
 const password = document.querySelector<HTMLInputElement>('#password');
 const passwordToggle = document.querySelector<HTMLButtonElement>('#passwordToggle');
 const jumpHost = document.querySelector<HTMLSelectElement>('select[name="jumpHostId"]');
+const jumpHostGroup = document.querySelector<HTMLSelectElement>('select[name="jumpHostGroup"]');
+const jumpHostOptions = jumpHost ? Array.from(jumpHost.querySelectorAll<HTMLOptionElement>('option[data-group]')) : [];
 const error = document.querySelector<HTMLElement>('#form-error');
 const testStatus = document.querySelector<HTMLElement>('#testStatus');
 const testConnectionButton = document.querySelector<HTMLButtonElement>('#testConnectionButton');
@@ -101,6 +103,25 @@ function updateAuthFields(): void {
   document.body.classList.toggle('auth-password', !isPrivateKey);
 }
 
+function updateJumpHostFields(): void {
+  if (!jumpHost || !jumpHostGroup) {
+    return;
+  }
+
+  const selectedGroup = jumpHostGroup.value;
+  const isDirect = selectedGroup.length === 0;
+  jumpHost.disabled = isDirect;
+
+  for (const option of jumpHostOptions) {
+    option.hidden = option.dataset.group !== selectedGroup;
+  }
+
+  const selectedOption = jumpHost.selectedOptions[0];
+  if (isDirect || (selectedOption?.value && selectedOption.dataset.group !== selectedGroup)) {
+    jumpHost.value = '';
+  }
+}
+
 function updateSummary(): void {
   const username = field('username')?.value.trim() ?? '';
   const host = field('host')?.value.trim() ?? '';
@@ -151,11 +172,16 @@ passwordToggle?.addEventListener('click', () => {
   passwordToggle.setAttribute('aria-pressed', String(nextVisible));
 });
 
-form?.addEventListener('input', () => {
+function refreshFormState(): void {
   clearTestStatus();
+  updateJumpHostFields();
   updateSummary();
-});
+}
+
+form?.addEventListener('input', refreshFormState);
+form?.addEventListener('change', refreshFormState);
 updateAuthFields();
+updateJumpHostFields();
 updateSummary();
 
 function currentPayload(): Record<string, FormDataEntryValue> | undefined {
@@ -179,6 +205,13 @@ function validatePayload(payload: Record<string, FormDataEntryValue>): boolean {
     setTesting(false);
     clearTestStatus();
     setError('Select or enter a private key path.');
+    return false;
+  }
+  if (jumpHostGroup?.value && !jumpHost?.value) {
+    setSaving(false);
+    setTesting(false);
+    clearTestStatus();
+    setError('Select a jump host server or choose Direct connection.');
     return false;
   }
   return true;

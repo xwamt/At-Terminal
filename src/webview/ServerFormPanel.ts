@@ -265,7 +265,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
                 .join('')}
             </select>
           </label>
-          <label class="field-stack">Jump Host Server
+          <label class="field-stack jump-host-server-field">Jump Host Server
             <select name="jumpHostId"${selectedJumpHost ? '' : ' disabled'}>
               <option value="">Select a server</option>
               ${jumpHostOptions

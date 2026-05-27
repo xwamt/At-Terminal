@@ -153,6 +153,10 @@ select:focus {
   min-height: 32px;
 }
 
+.jump-host-server-field select:disabled {
+  opacity: 0.72;
+}
+
 .field-wide {
   grid-column: 1 / -1;
 }

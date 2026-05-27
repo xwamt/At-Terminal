@@ -80,6 +80,7 @@ describe('ServerFormPanel markup', () => {
     expect(css).toContain('.file-picker-row');
     expect(css).toContain('.connection-summary');
     expect(css).toContain('.primary-action.is-loading');
+    expect(css).toContain('.jump-host-server-field');
   });
 
   it('renders grouped jump host controls in the connection panel', () => {
