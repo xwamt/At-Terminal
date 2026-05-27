@@ -455,6 +455,11 @@
       ],
       "view/item/context": [
         {
+          "command": "sshManager.addServer",
+          "when": "view == sshManager.servers && viewItem == group",
+          "group": "management@1"
+        },
+        {
           "command": "sshManager.connect",
           "when": "view == sshManager.servers && viewItem == server",
           "group": "inline@1"

@@ -30,6 +30,11 @@ describe('SFTP package contributions', () => {
     expect(pkg.contributes.menus['view/item/context']).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          command: 'sshManager.addServer',
+          when: 'view == sshManager.servers && viewItem == group',
+          group: 'management@1'
+        }),
+        expect.objectContaining({
           command: 'sshManager.sftp.edit',
           when: 'view == sshManager.sftpFiles && viewItem == sftpFile',
           group: 'open@1'
