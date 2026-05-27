@@ -17,6 +17,20 @@ const jumpHost: ServerConfig = {
   updatedAt: 1
 };
 
+const appServer: ServerConfig = {
+  id: 'app-1',
+  label: 'App CN',
+  group: 'prod',
+  host: 'app.example.com',
+  port: 22,
+  username: 'deploy',
+  authType: 'password',
+  keepAliveInterval: 30,
+  encoding: 'utf-8',
+  createdAt: 1,
+  updatedAt: 1
+};
+
 describe('ServerFormPanel markup', () => {
   it('renders the refreshed server form structure', () => {
     const html = renderServerForm();
@@ -75,6 +89,28 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('Direct connection');
     expect(html).toContain('Bastion CN - ops@bastion.example.com:22');
     expect(html).toContain('data-summary="route"');
+  });
+
+  it('renders editable group suggestions from existing server groups', () => {
+    const html = renderServerForm(undefined, [jumpHost, appServer]);
+
+    expect(html).toContain('name="group"');
+    expect(html).toContain('list="serverGroupSuggestions"');
+    expect(html).toContain('<datalist id="serverGroupSuggestions">');
+    expect(html).toContain('<option value="Default"></option>');
+    expect(html).toContain('<option value="prod"></option>');
+  });
+
+  it('prefills the group when adding from a selected group node', () => {
+    const html = renderServerForm(undefined, [jumpHost], 'prod');
+
+    expect(html).toContain('name="group" value="prod"');
+  });
+
+  it('displays Default for a group-scoped add from the Default group', () => {
+    const html = renderServerForm(undefined, [jumpHost], 'Default');
+
+    expect(html).toContain('name="group" value="Default"');
   });
 
   it('excludes the edited server from jump host options', () => {

@@ -222,6 +222,8 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const agentCommandTrustSummary = server?.agentCommandAutoApprove
     ? 'Agent commands: trusted for non-destructive commands'
     : 'Agent commands: manual approval';
+  const groupSuggestions = groupNames(servers);
+  const groupValue = server ? server.group ?? '' : initialGroup ?? '';
 
   return `<main class="server-form-shell">
   <header class="form-header">
@@ -240,7 +242,12 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
         </div>
         <div class="field-grid">
           <label class="field-stack">Label <input name="label" value="${escapeAttr(server?.label ?? '')}" required autocomplete="off"></label>
-          <label class="field-stack">Group <input name="group" value="${escapeAttr(server?.group ?? '')}" placeholder="Default" autocomplete="off"></label>
+          <label class="field-stack">Group
+            <input name="group" value="${escapeAttr(groupValue)}" placeholder="Default" autocomplete="off" list="serverGroupSuggestions">
+            <datalist id="serverGroupSuggestions">
+              ${groupSuggestions.map((group) => `<option value="${escapeAttr(group)}"></option>`).join('')}
+            </datalist>
+          </label>
           <label class="field-stack field-wide">Host <input name="host" value="${escapeAttr(server?.host ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
           <label class="field-stack">Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required autocomplete="off"></label>
@@ -343,4 +350,15 @@ function escapeHtml(value: string): string {
 
 function formatJumpHostOption(server: ServerConfig): string {
   return `${server.label} - ${server.username}@${server.host}:${server.port}`;
+}
+
+function groupNames(servers: ServerConfig[]): string[] {
+  return Array.from(new Set(['Default', ...servers.map((server) => displayGroupName(server.group))])).sort((a, b) =>
+    a.localeCompare(b)
+  );
+}
+
+function displayGroupName(group: string | undefined): string {
+  const trimmed = group?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : 'Default';
 }
