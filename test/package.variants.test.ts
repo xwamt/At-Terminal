@@ -53,19 +53,25 @@ describe('package variants', () => {
     expect(packageScript).toContain("join(stage, 'README.md')");
   });
 
-  it('keeps README images local in packaged VSIX files', () => {
-    expect(packageScript).toContain("join(root, 'docs', 'images')");
+  it('keeps packaged VSIX files lean by excluding bundled dependencies and large screenshots', () => {
+    expect(packageScript).toContain('createPackagedManifest');
+    expect(packageScript).toContain('prunePackagedDependencies');
+    expect(packageScript).toContain('RUNTIME_DEPENDENCIES');
+    expect(packageScript).toContain("'ssh2'");
+    expect(packageScript).toContain("'--omit=optional'");
+    expect(packageScript).not.toContain("join(root, 'docs', 'images')");
     expect(packageScript).toContain("join(root, 'docs', 'features.md')");
     expect(packageScript).toContain("join(root, 'docs', 'features.zh-CN.md')");
     expect(packageScript).toContain("join(root, 'docs', 'usage.zh-CN.md')");
     expect(packageScript).toContain("join(root, 'docs', 'mcp')");
-    expect(packageScript).toContain(".endsWith('.gif')");
     expect(packageScript).toContain('--no-rewrite-relative-links');
     expect(packageScript).not.toContain('--baseImagesUrl');
     expect(packageScript).not.toContain('https://example.com/at-terminal');
     expect(vscodeIgnore).toContain('!docs/*.md');
-    expect(vscodeIgnore).toContain('!docs/images/*.png');
     expect(vscodeIgnore).toContain('!docs/mcp/*.yaml');
+    expect(vscodeIgnore).toContain('node_modules/**');
+    expect(vscodeIgnore).toContain('!node_modules/ssh2/**');
+    expect(vscodeIgnore).not.toContain('!docs/images/*.png');
     expect(readme).not.toContain('.gif');
     expect(baseReadme).not.toContain('.gif');
   });

@@ -9,8 +9,6 @@ coverage/**
 docs/**
 !docs/
 !docs/*.md
-!docs/images/
-!docs/images/*.png
 !docs/mcp/
 !docs/mcp/*.yaml
 src/**
@@ -39,7 +37,14 @@ package-lock.json
 tsconfig.json
 vitest.config.ts
 
-node_modules/.bin/**
+node_modules/**
+!node_modules/
+!node_modules/ssh2/**
+!node_modules/asn1/**
+!node_modules/bcrypt-pbkdf/**
+!node_modules/safer-buffer/**
+!node_modules/tweetnacl/**
+node_modules/**/.bin/**
 node_modules/**/*.md
 node_modules/**/test/**
 node_modules/**/tests/**

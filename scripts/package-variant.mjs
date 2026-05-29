@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const variant = process.argv[2];
@@ -12,6 +12,30 @@ const stage = join(root, '.package-work', variant);
 const manifestName = variant === 'base' ? 'package.base.json' : 'package.mcp.json';
 const readmeName = variant === 'base' ? 'README-base.md' : 'README.md';
 const manifest = JSON.parse(await readFile(join(root, manifestName), 'utf8'));
+const RUNTIME_DEPENDENCIES = ['ssh2'];
+
+function createPackagedManifest(sourceManifest) {
+  return {
+    ...sourceManifest,
+    dependencies: Object.fromEntries(
+      Object.entries(sourceManifest.dependencies ?? {}).filter(([name]) => RUNTIME_DEPENDENCIES.includes(name))
+    )
+  };
+}
+
+async function prunePackagedDependencies(directory) {
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && ['test', 'tests', 'example', 'examples', '.github'].includes(entry.name))
+      .map((entry) => rm(join(entry.parentPath, entry.name), { recursive: true, force: true }))
+  );
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
+      .map((entry) => rm(join(entry.parentPath, entry.name), { force: true }))
+  );
+}
 
 await rm(stage, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
@@ -26,26 +50,24 @@ await cp(join(root, 'docs', 'features.zh-CN.md'), join(stage, 'docs', 'features.
 await cp(join(root, 'docs', 'usage.md'), join(stage, 'docs', 'usage.md'));
 await cp(join(root, 'docs', 'usage.zh-CN.md'), join(stage, 'docs', 'usage.zh-CN.md'));
 await cp(join(root, 'docs', 'README.zh-CN.md'), join(stage, 'docs', 'README.zh-CN.md'));
-await cp(join(root, 'docs', 'images'), join(stage, 'docs', 'images'), {
-  recursive: true,
-  filter: (source) => !source.toLowerCase().endsWith('.gif')
-});
 await cp(join(root, 'docs', 'mcp'), join(stage, 'docs', 'mcp'), { recursive: true });
 await cp(join(root, 'webview'), join(stage, 'webview'), { recursive: true });
 await cp(join(root, '.vscodeignore'), join(stage, '.vscodeignore'));
-await writeFile(join(stage, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+await writeFile(join(stage, 'package.json'), `${JSON.stringify(createPackagedManifest(manifest), null, 2)}\n`, 'utf8');
 await cp(join(root, readmeName), join(stage, 'README.md'));
 
 const install = spawnSync(
   process.platform === 'win32' ? 'cmd' : 'npm',
   process.platform === 'win32'
-    ? ['/c', 'npm', 'install', '--omit=dev', '--package-lock=false', '--ignore-scripts']
-    : ['install', '--omit=dev', '--package-lock=false', '--ignore-scripts'],
+    ? ['/c', 'npm', 'install', '--omit=dev', '--omit=optional', '--package-lock=false', '--ignore-scripts']
+    : ['install', '--omit=dev', '--omit=optional', '--package-lock=false', '--ignore-scripts'],
   { cwd: stage, stdio: 'inherit' }
 );
 if (install.status !== 0) {
   process.exit(install.status ?? 1);
 }
+
+await prunePackagedDependencies(join(stage, 'node_modules'));
 
 const result = spawnSync(
   process.platform === 'win32' ? 'cmd' : 'npx',
