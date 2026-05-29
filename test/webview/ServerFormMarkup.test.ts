@@ -98,34 +98,36 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('data-summary="route"');
   });
 
-  it('renders server group choices as an anchored select control', () => {
+  it('renders server group choices as editable suggestions', () => {
     const html = renderServerForm(undefined, [jumpHost, appServer]);
 
     expect(html).toContain('name="group"');
-    expect(html).toContain('<select name="group">');
+    expect(html).toContain('list="serverGroupSuggestions"');
+    expect(html).toContain('<datalist id="serverGroupSuggestions">');
     expect(html).toContain('<option value="Default">Default</option>');
     expect(html).toContain('<option value="prod">prod</option>');
-    expect(html).not.toContain('list="serverGroupSuggestions"');
-    expect(html).not.toContain('<datalist id="serverGroupSuggestions">');
+    expect(html).not.toContain('<select name="group">');
   });
 
-  it('keeps the live group summary wired to the select control', () => {
+  it('keeps the live group summary wired to editable group input', () => {
     const script = readFileSync(join(process.cwd(), 'webview/server-form/index.ts'), 'utf8');
 
     expect(script).toContain('function field(name: string): HTMLInputElement | HTMLSelectElement | null');
-    expect(script).toContain('element instanceof HTMLSelectElement');
+    expect(script).toContain('element instanceof HTMLInputElement');
   });
 
   it('prefills the group when adding from a selected group node', () => {
     const html = renderServerForm(undefined, [jumpHost], 'prod');
 
-    expect(html).toContain('<option value="prod" selected>prod</option>');
+    expect(html).toContain('name="group" value="prod"');
+    expect(html).toContain('<option value="prod">prod</option>');
   });
 
   it('displays Default for a group-scoped add from the Default group', () => {
     const html = renderServerForm(undefined, [jumpHost], 'Default');
 
-    expect(html).toContain('<option value="Default" selected>Default</option>');
+    expect(html).toContain('name="group" value="Default"');
+    expect(html).toContain('<option value="Default">Default</option>');
   });
 
   it('excludes the edited server from jump host options', () => {

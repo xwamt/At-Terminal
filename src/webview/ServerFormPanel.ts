@@ -245,9 +245,10 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
         <div class="field-grid">
           <label class="field-stack">Label <input name="label" value="${escapeAttr(server?.label ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">Group
-            <select name="group">
-              ${selectGroupOptions(groupSuggestions, groupValue)}
-            </select>
+            <input name="group" value="${escapeAttr(displayGroupName(groupValue))}" list="serverGroupSuggestions" autocomplete="off">
+            <datalist id="serverGroupSuggestions">
+              ${groupSuggestionOptions(groupSuggestions, groupValue)}
+            </datalist>
           </label>
           <label class="field-stack field-wide">Host <input name="host" value="${escapeAttr(server?.host ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
@@ -373,13 +374,12 @@ function groupNames(servers: ServerConfig[]): string[] {
   );
 }
 
-function selectGroupOptions(groups: string[], selectedGroup: string): string {
+function groupSuggestionOptions(groups: string[], selectedGroup: string): string {
   const selected = displayGroupName(selectedGroup);
   const options = Array.from(new Set([...groups, selected])).sort((a, b) => a.localeCompare(b));
   return options
     .map((group) => {
-      const selectedAttr = group === selected ? ' selected' : '';
-      return `<option value="${escapeAttr(group)}"${selectedAttr}>${escapeHtml(group)}</option>`;
+      return `<option value="${escapeAttr(group)}">${escapeHtml(group)}</option>`;
     })
     .join('');
 }
