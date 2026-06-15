@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ServerConfig } from '../../src/config/schema';
-import { formatJumpHostDeleteBlockMessage } from '../../src/extension';
+import { deleteServerAndTrust, formatJumpHostDeleteBlockMessage } from '../../src/extension';
 
 function server(overrides: Partial<ServerConfig> = {}): ServerConfig {
   return {
@@ -26,5 +26,26 @@ describe('jump host delete blocking', () => {
         server({ id: 'app-2', label: 'App Two' })
       ])
     ).toBe('Cannot delete "Bastion" because it is used as a jump host by: App One, App Two');
+  });
+
+  it('removes the server and its trusted host key together', async () => {
+    const deletedServers: string[] = [];
+    const forgottenHosts: string[] = [];
+
+    await deleteServerAndTrust.remove(server({ id: 'server-1', host: '10.0.0.5', port: 2222 }), {
+      configManager: {
+        async deleteServer(id: string): Promise<void> {
+          deletedServers.push(id);
+        }
+      },
+      hostKeyStore: {
+        async forget(host: string, port: number): Promise<void> {
+          forgottenHosts.push(`${host}:${port}`);
+        }
+      }
+    });
+
+    expect(deletedServers).toEqual(['server-1']);
+    expect(forgottenHosts).toEqual(['10.0.0.5:2222']);
   });
 });

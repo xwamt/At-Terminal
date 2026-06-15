@@ -13,6 +13,10 @@ const passwordToggle = document.querySelector<HTMLButtonElement>('#passwordToggl
 const jumpHost = document.querySelector<HTMLSelectElement>('select[name="jumpHostId"]');
 const jumpHostGroup = document.querySelector<HTMLSelectElement>('select[name="jumpHostGroup"]');
 const jumpHostOptions = jumpHost ? Array.from(jumpHost.querySelectorAll<HTMLOptionElement>('option[data-group]')) : [];
+const groupInput = document.querySelector<HTMLInputElement>('input[name="group"]');
+const groupMenu = document.querySelector<HTMLElement>('#serverGroupSuggestions');
+const groupToggle = document.querySelector<HTMLButtonElement>('.group-combobox-toggle');
+const groupOptions = groupMenu ? Array.from(groupMenu.querySelectorAll<HTMLButtonElement>('[data-group-option]')) : [];
 const error = document.querySelector<HTMLElement>('#form-error');
 const testStatus = document.querySelector<HTMLElement>('#testStatus');
 const testConnectionButton = document.querySelector<HTMLButtonElement>('#testConnectionButton');
@@ -75,6 +79,41 @@ function selectedAuth(): string {
 function agentCommandAutoApproveEnabled(): boolean {
   const input = document.querySelector<HTMLInputElement>('input[name="agentCommandAutoApprove"]');
   return input?.checked === true;
+}
+
+let suppressNextGroupFocus = false;
+
+function groupFilterValue(): string {
+  return groupInput?.value.trim().toLocaleLowerCase() ?? '';
+}
+
+function setGroupMenuOpen(isOpen: boolean): void {
+  if (!groupMenu || !groupInput) {
+    return;
+  }
+  groupMenu.hidden = !isOpen;
+  groupInput.setAttribute('aria-expanded', String(isOpen));
+}
+
+function openGroupMenu(showAll = false): void {
+  if (!groupMenu || !groupInput) {
+    return;
+  }
+
+  const filter = showAll ? '' : groupFilterValue();
+  let visibleCount = 0;
+  for (const option of groupOptions) {
+    const value = option.dataset.groupOption?.toLocaleLowerCase() ?? '';
+    const visible = !filter || value.includes(filter);
+    option.hidden = !visible;
+    visibleCount += visible ? 1 : 0;
+  }
+
+  setGroupMenuOpen(visibleCount > 0);
+}
+
+function closeGroupMenu(): void {
+  setGroupMenuOpen(false);
 }
 
 function selectAuth(value: string): void {
@@ -169,6 +208,55 @@ passwordToggle?.addEventListener('click', () => {
   passwordToggle.textContent = nextVisible ? 'Hide' : 'Show';
   passwordToggle.setAttribute('aria-label', nextVisible ? 'Hide password' : 'Show password');
   passwordToggle.setAttribute('aria-pressed', String(nextVisible));
+});
+
+groupInput?.addEventListener('input', () => {
+  openGroupMenu(false);
+});
+
+groupInput?.addEventListener('focus', () => {
+  if (suppressNextGroupFocus) {
+    suppressNextGroupFocus = false;
+    return;
+  }
+  openGroupMenu(false);
+});
+
+groupInput?.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeGroupMenu();
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    openGroupMenu(true);
+    groupOptions.find((option) => !option.hidden)?.focus();
+  }
+});
+
+groupToggle?.addEventListener('click', () => {
+  openGroupMenu(true);
+  suppressNextGroupFocus = true;
+  groupInput?.focus();
+});
+
+for (const option of groupOptions) {
+  option.addEventListener('click', () => {
+    if (groupInput) {
+      groupInput.value = option.dataset.groupOption ?? option.textContent?.trim() ?? '';
+      groupInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    suppressNextGroupFocus = true;
+    closeGroupMenu();
+    groupInput?.focus();
+  });
+}
+
+document.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!(target instanceof Node) || target === groupInput || target === groupToggle || groupMenu?.contains(target)) {
+    return;
+  }
+  closeGroupMenu();
 });
 
 function refreshFormState(): void {

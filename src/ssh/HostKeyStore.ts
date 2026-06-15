@@ -43,6 +43,12 @@ export class HostKeyStore {
     return this.read()[this.key(host, port)];
   }
 
+  async forget(host: string, port: number): Promise<void> {
+    const keys = this.read();
+    delete keys[this.key(host, port)];
+    await this.globalState.update(HOST_KEYS_KEY, keys);
+  }
+
   private read(): Record<string, TrustedHostKey> {
     return this.globalState.get<Record<string, TrustedHostKey>>(HOST_KEYS_KEY, {});
   }

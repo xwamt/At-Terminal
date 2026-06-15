@@ -225,7 +225,7 @@ export function activate(context: vscode.ExtensionContext): void {
         'Delete'
       );
       if (answer === 'Delete') {
-        await configManager.deleteServer(item.server.id);
+        await deleteServerAndTrust.remove(item.server, { configManager, hostKeyStore });
         treeProvider.refresh();
       }
     }),
@@ -421,3 +421,17 @@ export function formatJumpHostDeleteBlockMessage(server: ServerConfig, reference
     .map((reference) => reference.label)
     .join(', ')}`;
 }
+
+export const deleteServerAndTrust = {
+  formatBlockMessage: formatJumpHostDeleteBlockMessage,
+  async remove(
+    server: ServerConfig,
+    dependencies: {
+      configManager: Pick<ConfigManager, 'deleteServer'>;
+      hostKeyStore: Pick<HostKeyStore, 'forget'>;
+    }
+  ): Promise<void> {
+    await dependencies.configManager.deleteServer(server.id);
+    await dependencies.hostKeyStore.forget(server.host, server.port);
+  }
+};

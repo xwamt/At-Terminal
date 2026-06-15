@@ -81,6 +81,9 @@ describe('ServerFormPanel markup', () => {
     expect(css).toContain('.connection-summary');
     expect(css).toContain('.primary-action.is-loading');
     expect(css).toContain('.jump-host-server-field');
+    expect(css).toContain('.group-combobox');
+    expect(css).toContain('.group-combobox-menu');
+    expect(css).toContain('.group-combobox-option');
   });
 
   it('renders grouped jump host controls in the connection panel', () => {
@@ -102,11 +105,14 @@ describe('ServerFormPanel markup', () => {
     const html = renderServerForm(undefined, [jumpHost, appServer]);
 
     expect(html).toContain('name="group"');
-    expect(html).toContain('list="serverGroupSuggestions"');
-    expect(html).toContain('<datalist id="serverGroupSuggestions">');
-    expect(html).toContain('<option value="Default">Default</option>');
-    expect(html).toContain('<option value="prod">prod</option>');
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('aria-controls="serverGroupSuggestions"');
+    expect(html).toContain('class="group-combobox-toggle"');
+    expect(html).toContain('<div id="serverGroupSuggestions" class="group-combobox-menu" role="listbox" hidden>');
+    expect(html).toContain('data-group-option="Default"');
+    expect(html).toContain('data-group-option="prod"');
     expect(html).not.toContain('<select name="group">');
+    expect(html).not.toContain('<datalist id="serverGroupSuggestions">');
   });
 
   it('keeps the live group summary wired to editable group input', () => {
@@ -116,18 +122,29 @@ describe('ServerFormPanel markup', () => {
     expect(script).toContain('element instanceof HTMLInputElement');
   });
 
+  it('keeps typed group filtering separate from manual dropdown expansion', () => {
+    const script = readFileSync(join(process.cwd(), 'webview/server-form/index.ts'), 'utf8');
+
+    expect(script).toContain('function openGroupMenu(showAll = false): void');
+    expect(script).toContain("groupInput?.addEventListener('input', () =>");
+    expect(script).toContain('openGroupMenu(false)');
+    expect(script).toContain("groupToggle?.addEventListener('click', () =>");
+    expect(script).toContain('openGroupMenu(true)');
+    expect(script).toContain('suppressNextGroupFocus = true');
+  });
+
   it('prefills the group when adding from a selected group node', () => {
     const html = renderServerForm(undefined, [jumpHost], 'prod');
 
     expect(html).toContain('name="group" value="prod"');
-    expect(html).toContain('<option value="prod">prod</option>');
+    expect(html).toContain('data-group-option="prod"');
   });
 
   it('displays Default for a group-scoped add from the Default group', () => {
     const html = renderServerForm(undefined, [jumpHost], 'Default');
 
     expect(html).toContain('name="group" value="Default"');
-    expect(html).toContain('<option value="Default">Default</option>');
+    expect(html).toContain('data-group-option="Default"');
   });
 
   it('excludes the edited server from jump host options', () => {

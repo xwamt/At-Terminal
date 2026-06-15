@@ -245,10 +245,13 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
         <div class="field-grid">
           <label class="field-stack">Label <input name="label" value="${escapeAttr(server?.label ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">Group
-            <input name="group" value="${escapeAttr(displayGroupName(groupValue))}" list="serverGroupSuggestions" autocomplete="off">
-            <datalist id="serverGroupSuggestions">
-              ${groupSuggestionOptions(groupSuggestions, groupValue)}
-            </datalist>
+            <div class="group-combobox">
+              <input name="group" value="${escapeAttr(displayGroupName(groupValue))}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="serverGroupSuggestions">
+              <button class="group-combobox-toggle" type="button" aria-label="Show all groups" aria-controls="serverGroupSuggestions">v</button>
+              <div id="serverGroupSuggestions" class="group-combobox-menu" role="listbox" hidden>
+                ${groupSuggestionOptions(groupSuggestions, groupValue)}
+              </div>
+            </div>
           </label>
           <label class="field-stack field-wide">Host <input name="host" value="${escapeAttr(server?.host ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
@@ -379,7 +382,9 @@ function groupSuggestionOptions(groups: string[], selectedGroup: string): string
   const options = Array.from(new Set([...groups, selected])).sort((a, b) => a.localeCompare(b));
   return options
     .map((group) => {
-      return `<option value="${escapeAttr(group)}">${escapeHtml(group)}</option>`;
+      return `<button class="group-combobox-option" type="button" role="option" data-group-option="${escapeAttr(group)}">${escapeHtml(
+        group
+      )}</button>`;
     })
     .join('');
 }

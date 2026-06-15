@@ -153,6 +153,66 @@ select:focus {
   min-height: 32px;
 }
 
+.group-combobox {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  min-width: 0;
+}
+
+.group-combobox input {
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.group-combobox-toggle {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+  padding: 7px 0;
+  line-height: 1.35;
+}
+
+.group-combobox-toggle:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.group-combobox-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  max-height: 180px;
+  overflow-y: auto;
+  color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+  background: var(--vscode-dropdown-background, var(--vscode-input-background));
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+
+.group-combobox-option {
+  width: 100%;
+  min-width: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.group-combobox-option:hover,
+.group-combobox-option:focus {
+  color: var(--vscode-list-hoverForeground, inherit);
+  background: var(--vscode-list-hoverBackground);
+  outline: none;
+}
+
 .jump-host-server-field select:disabled {
   opacity: 0.72;
 }

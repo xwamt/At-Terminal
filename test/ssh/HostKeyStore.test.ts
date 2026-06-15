@@ -30,4 +30,11 @@ describe('HostKeyStore', () => {
     await store.trust('example.com', 22, 'SHA256:abc', 'ssh-ed25519');
     expect(await store.check('example.com', 22, 'SHA256:def')).toBe('changed');
   });
+
+  it('forgets a trusted host key by host and port', async () => {
+    const store = new HostKeyStore(new MemoryMemento());
+    await store.trust('example.com', 22, 'SHA256:abc', 'ssh-ed25519');
+    await store.forget('example.com', 22);
+    expect(await store.check('example.com', 22, 'SHA256:def')).toBe('unknown');
+  });
 });
