@@ -270,7 +270,7 @@ export class TerminalPanel {
 
 export function resolveTerminalSettings(configuration: ConfigurationLike): TerminalSettings {
   return {
-    scrollback: configuration.get('scrollback', 5000),
+    scrollback: configuration.get('scrollback', 10000),
     fontSize: configuration.get('terminalFontSize', 14),
     fontFamily: configuration.get('terminalFontFamily', 'Cascadia Code, Menlo, monospace'),
     semanticHighlight: configuration.get('semanticHighlight', true),

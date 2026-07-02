@@ -30,7 +30,7 @@ if (!container) {
 const term = new Terminal(
   createTerminalOptions(
     {
-      scrollback: Number(container.dataset.scrollback ?? '5000'),
+      scrollback: Number(container.dataset.scrollback ?? '10000'),
       fontSize: Number(container.dataset.fontSize ?? '14'),
       fontFamily: container.dataset.fontFamily || 'Cascadia Code, Menlo, monospace'
     },

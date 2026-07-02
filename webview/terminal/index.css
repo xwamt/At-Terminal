@@ -14,7 +14,7 @@ body {
 .terminal-shell {
   display: grid;
   grid-template-rows: 32px minmax(0, 1fr);
-  width: 100vw;
+  width: 100%;
   height: 100vh;
   background: var(--vscode-terminal-background, var(--vscode-editor-background));
 }
@@ -61,8 +61,10 @@ body {
 
 #terminal {
   min-height: 0;
+  min-width: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
   padding: 8px 10px;
   box-sizing: border-box;
   background: var(--vscode-terminal-background, var(--vscode-editor-background));
