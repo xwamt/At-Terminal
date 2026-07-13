@@ -109,7 +109,7 @@ If you add write tools to `autoApprove`, AT Terminal MCP still applies its own w
 Kiro test prompts:
 
 ```text
-Use the AT Terminal MCP tool list_ssh_servers to list my configured SSH servers.
+Use the AT Terminal MCP tool list_ssh_servers to list my SSH servers authorized for background connections.
 Use get_terminal_context to show my AT Terminal context.
 Use sftp_list_directory to list /tmp on the connected AT Terminal server.
 Use sftp_read_file to read /etc/os-release on the connected AT Terminal server.

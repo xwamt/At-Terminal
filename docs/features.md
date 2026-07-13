@@ -61,7 +61,7 @@ AT Terminal MCP contributes VS Code language model tools and a local stdio MCP s
 
 | Tool | Type | Description |
 | --- | --- | --- |
-| `list_ssh_servers` | read-only | Lists configured SSH servers without exposing passwords or private keys. |
+| `list_ssh_servers` | read-only | Lists SSH servers authorized for background connections without exposing passwords or private keys. |
 | `get_terminal_context` | read-only | Returns focused, default connected, connected, and known AT Terminal SSH terminal context. |
 | `run_remote_command` | command | Runs a confirmed non-interactive SSH command and returns stdout, stderr, exit code, timeout, duration, and truncation metadata. |
 | `sftp_list_directory` | read-only | Lists a remote directory through a connected AT Terminal SFTP session. |

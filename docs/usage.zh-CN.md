@@ -109,7 +109,7 @@ Kiro 支持：
 Kiro 测试提示词：
 
 ```text
-Use the AT Terminal MCP tool list_ssh_servers to list my configured SSH servers.
+Use the AT Terminal MCP tool list_ssh_servers to list my SSH servers authorized for background connections.
 Use get_terminal_context to show my AT Terminal context.
 Use sftp_list_directory to list /tmp on the connected AT Terminal server.
 Use sftp_read_file to read /etc/os-release on the connected AT Terminal server.

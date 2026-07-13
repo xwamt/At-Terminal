@@ -78,7 +78,7 @@ mcpServers:
 
 | Need | Use | Notes |
 | --- | --- | --- |
-| See configured server ids | `list_ssh_servers` | Read-only; returns labels and connection metadata without credentials. |
+| See authorized background server ids | `list_ssh_servers` | Read-only; returns labels and connection metadata only for servers that allow background connections, without credentials. |
 | Resolve active/focused SSH session | `get_terminal_context` | Use first when the user says "current", "active", "connected", or does not name a server. |
 | Run remote shell work | `run_remote_command` | Non-interactive commands only. Include `serverId`, or use `active` when appropriate. Use `cwd`, `timeoutMs`, and `maxOutputBytes` for bounded runs. |
 | Browse remote folders | `sftp_list_directory` | Read-only; pass `serverId` or `terminalId` when more than one session exists. |

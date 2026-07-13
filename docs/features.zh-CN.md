@@ -61,7 +61,7 @@ AT Terminal MCP 提供 VS Code language model tools 和本地 stdio MCP server�
 
 | 工具 | 类型 | 说明 |
 | --- | --- | --- |
-| `list_ssh_servers` | 只读 | 列出已配置的 SSH 服务器，不暴露密码或私钥。 |
+| `list_ssh_servers` | 只读 | 列出已允许后台连接的 SSH 服务器，不暴露密码或私钥。 |
 | `get_terminal_context` | 只读 | 返回当前聚焦、默认连接、已连接和已知的 AT Terminal SSH 终端上下文。 |
 | `run_remote_command` | 命令 | 执行经过确认的非交互 SSH 命令，并返回 stdout、stderr、exit code、timeout、duration 和截断信息。 |
 | `sftp_list_directory` | 只读 | 通过已连接的 AT Terminal SFTP 会话列出远程目录。 |
