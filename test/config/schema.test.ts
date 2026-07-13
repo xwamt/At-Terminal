@@ -145,6 +145,42 @@ describe('server config schema', () => {
     expect(parsed.agentCommandAutoApprove).toBeUndefined();
   });
 
+  it('keeps background connection disabled for existing configs', () => {
+    const parsed = parseServerConfig({
+      id: 'server-11',
+      label: 'Existing',
+      host: 'existing.example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.backgroundConnectionAllowed).toBeUndefined();
+    expect(parsed.backgroundConnectionAllowed === true).toBe(false);
+  });
+
+  it('accepts explicit background connection authorization', () => {
+    const parsed = parseServerConfig({
+      id: 'server-12',
+      label: 'Background enabled',
+      host: 'background.example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      backgroundConnectionAllowed: true,
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.backgroundConnectionAllowed).toBe(true);
+  });
+
   it('still rejects unrelated unknown fields', () => {
     expect(() =>
       parseServerConfig({

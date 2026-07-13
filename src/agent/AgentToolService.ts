@@ -26,7 +26,7 @@ export class AgentToolService {
   async listServers() {
     const servers = await this.dependencies.configManager.listServers();
     return {
-      servers: servers.map((server) => ({
+      servers: servers.filter((server) => server.backgroundConnectionAllowed === true).map((server) => ({
         id: server.id,
         label: server.label,
         host: server.host,
@@ -102,7 +102,7 @@ export class AgentToolService {
     if (serverId === 'active' || !serverId) {
       const connected = this.dependencies.terminalContext.getConnectedTerminal();
       if (connected) {
-        return connected.server;
+        return this.requireBackgroundConnectionAllowed(connected.server);
       }
       if (serverId === 'active') {
         throw new Error('No connected active SSH terminal is available.');
@@ -114,6 +114,13 @@ export class AgentToolService {
     const server = await this.dependencies.configManager.getServer(serverId);
     if (!server) {
       throw new Error(`SSH server "${serverId}" was not found.`);
+    }
+    return this.requireBackgroundConnectionAllowed(server);
+  }
+
+  private requireBackgroundConnectionAllowed(server: ServerConfig): ServerConfig {
+    if (server.backgroundConnectionAllowed !== true) {
+      throw new Error(`SSH server "${server.id}" does not allow background connections.`);
     }
     return server;
   }

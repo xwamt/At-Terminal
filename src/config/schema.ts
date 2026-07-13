@@ -12,6 +12,7 @@ export const serverConfigSchema = z
     privateKeyPath: z.string().min(1).optional(),
     jumpHostId: z.string().min(1).optional(),
     agentCommandAutoApprove: z.boolean().optional(),
+    backgroundConnectionAllowed: z.boolean().optional(),
     keepAliveInterval: z.number().int().min(0),
     encoding: z.literal('utf-8'),
     createdAt: z.number().int().nonnegative(),
