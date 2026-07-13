@@ -194,6 +194,8 @@ function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | unde
     privateKeyPath: optionalString(payload.privateKeyPath),
     jumpHostId: optionalString(payload.jumpHostId),
     agentCommandAutoApprove: payload.agentCommandAutoApprove === 'on' || payload.agentCommandAutoApprove === true,
+    backgroundConnectionAllowed:
+      payload.backgroundConnectionAllowed === 'on' || payload.backgroundConnectionAllowed === true,
     keepAliveInterval: Number(payload.keepAliveInterval ?? 30),
     encoding: 'utf-8',
     createdAt: existing?.createdAt ?? now,
@@ -288,6 +290,13 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
               <span class="field-help">Run non-destructive MCP remote commands without asking each time.</span>
             </span>
             <input name="agentCommandAutoApprove" type="checkbox"${server?.agentCommandAutoApprove ? ' checked' : ''}>
+          </label>
+          <label class="field-stack field-wide trust-toggle-row">
+            <span class="trust-toggle-copy">
+              <span class="trust-toggle-title">Allow background connections</span>
+              <span class="field-help">Allow MCP to connect to this server in the background. Only applies to the MCP build.</span>
+            </span>
+            <input name="backgroundConnectionAllowed" type="checkbox"${server?.backgroundConnectionAllowed ? ' checked' : ''}>
           </label>
         </div>
       </section>

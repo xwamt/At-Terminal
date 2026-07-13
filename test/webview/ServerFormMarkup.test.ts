@@ -199,4 +199,31 @@ describe('ServerFormPanel markup', () => {
     expect(html).toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
     expect(html).toContain('Agent commands: trusted for non-destructive commands');
   });
+
+  it('renders the background connection switch off by default', () => {
+    const html = renderServerForm();
+
+    expect(html).toContain('name="backgroundConnectionAllowed"');
+    expect(html).toContain('Allow background connections');
+    expect(html).toContain('Allow MCP to connect to this server in the background. Only applies to the MCP build.');
+    expect(html).not.toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
+  });
+
+  it('renders the background connection switch checked for authorized servers', () => {
+    const html = renderServerForm({
+      id: 'server-1',
+      label: 'Production',
+      host: 'example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      backgroundConnectionAllowed: true,
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(html).toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
+  });
 });
