@@ -12,6 +12,7 @@ const passwordServer: ServerConfig = {
   port: 22,
   username: 'deploy',
   authType: 'password',
+  backgroundConnectionAllowed: true,
   keepAliveInterval: 30,
   encoding: 'utf-8',
   createdAt: 1,
@@ -51,6 +52,9 @@ describe('AssetExportService', () => {
     });
 
     expect(payload.createdAt).toBe(123);
+    expect(payload.servers).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'password-1', backgroundConnectionAllowed: true })])
+    );
     expect(payload.passwords).toEqual({ 'password-1': 'secret' });
     expect(payload.privateKeys).toEqual([
       { serverId: 'key-1', originalBasename: 'id_ed25519', contentBase64: Buffer.from('PRIVATE KEY').toString('base64') }

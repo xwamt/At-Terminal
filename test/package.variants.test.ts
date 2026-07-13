@@ -9,6 +9,7 @@ const extensionSource = readFileSync('src/extension.ts', 'utf8');
 const vscodeIgnore = readFileSync('.vscodeignore', 'utf8');
 const readme = readFileSync('README.md', 'utf8');
 const baseReadme = readFileSync('README-base.md', 'utf8');
+const manifests = [baseManifest, mcpManifest, JSON.parse(readFileSync('package.json', 'utf8'))];
 
 describe('package variants', () => {
   it('keeps the base manifest free of agent and MCP contributions', () => {
@@ -28,6 +29,23 @@ describe('package variants', () => {
   it('keeps the MCP config command only in the MCP manifest', () => {
     expect(JSON.stringify(baseManifest.contributes)).not.toContain('sshManager.installMcpConfig');
     expect(JSON.stringify(mcpManifest.contributes.commands)).toContain('sshManager.installMcpConfig');
+  });
+
+  it('keeps Connect available without showing it as an inline server action', () => {
+    for (const manifest of manifests) {
+      expect(manifest.contributes.commands).toEqual(
+        expect.arrayContaining([expect.objectContaining({ command: 'sshManager.connect', title: 'SSH: Connect' })])
+      );
+      expect(manifest.contributes.menus['view/item/context']).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            command: 'sshManager.connect',
+            when: 'view == sshManager.servers && viewItem == server',
+            group: 'inline@1'
+          })
+        ])
+      );
+    }
   });
 
   it('builds the MCP server only for the MCP variant', () => {

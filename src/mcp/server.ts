@@ -24,7 +24,7 @@ server.registerTool(
   'list_ssh_servers',
   {
     title: 'List SSH Servers',
-    description: 'List configured AT Terminal SSH servers without exposing credentials.',
+    description: 'List AT Terminal SSH servers authorized for background connections without exposing credentials.',
     inputSchema: {}
   },
   async () => {

@@ -38,8 +38,8 @@
         "canBeReferencedInPrompt": true,
         "toolReferenceName": "list_ssh_servers",
         "displayName": "List SSH Servers",
-        "userDescription": "List AT Terminal configured SSH servers.",
-        "modelDescription": "List configured SSH servers from AT Terminal without exposing passwords or private keys.",
+        "userDescription": "List AT Terminal SSH servers authorized for background connections.",
+        "modelDescription": "List configured SSH servers authorized for MCP background connections without exposing passwords or private keys.",
         "inputSchema": {
           "type": "object",
           "properties": {}
@@ -480,11 +480,6 @@
           "command": "sshManager.addServer",
           "when": "view == sshManager.servers && viewItem == group",
           "group": "management@1"
-        },
-        {
-          "command": "sshManager.connect",
-          "when": "view == sshManager.servers && viewItem == server",
-          "group": "inline@1"
         },
         {
           "command": "sshManager.editServer",

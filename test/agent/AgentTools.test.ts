@@ -24,6 +24,7 @@ function server(id = 'server-1'): ServerConfig {
     username: 'deploy',
     authType: 'password',
     agentCommandAutoApprove: false,
+    backgroundConnectionAllowed: true,
     keepAliveInterval: 30,
     encoding: 'utf-8',
     createdAt: 1,

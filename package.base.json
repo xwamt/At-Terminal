@@ -182,11 +182,6 @@
           "group": "management@1"
         },
         {
-          "command": "sshManager.connect",
-          "when": "view == sshManager.servers && viewItem == server",
-          "group": "inline@1"
-        },
-        {
           "command": "sshManager.editServer",
           "when": "view == sshManager.servers && viewItem == server",
           "group": "management@1"

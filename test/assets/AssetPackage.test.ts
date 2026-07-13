@@ -45,6 +45,7 @@ describe('AssetPackage', () => {
             port: 22,
             username: 'deploy',
             authType: 'password',
+            backgroundConnectionAllowed: true,
             keepAliveInterval: 30,
             encoding: 'utf-8',
             createdAt: 1,
@@ -55,7 +56,12 @@ describe('AssetPackage', () => {
         privateKeys: [],
         omissions: []
       }).servers
-    ).toHaveLength(1);
+    ).toEqual([
+      expect.objectContaining({
+        id: 'server-1',
+        backgroundConnectionAllowed: true
+      })
+    ]);
   });
 
   it('rejects host trust exports in v1 payloads', () => {
