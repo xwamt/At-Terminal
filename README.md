@@ -7,6 +7,10 @@
 
 [飞书文档](https://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd?from=from_copylinkhttps://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd?from=from_copylink)
 
+[Features](docs/features.md) · [Usage Guide](docs/usage.md) · [Chinese documentation](docs/README.zh-CN.md) · [Agent skill](skills/at-terminal-mcp/SKILL.md)
+
+MCP clients should start the bundled server at `dist/mcp-server.js`; see the [Usage Guide](docs/usage.md) for configuration examples.
+
 ### 两种构建版本
 
 **AT** **Terminal** 是一款面向 VS Code 兼容 IDE 的 SSH 终端与 SFTP 远程文件工作区扩展。它通过标准 SSH/SFTP 协议直接连接远程服务器，不需要在服务器上安装 VS Code Server、Remote Agent 或任何额外服务端组件。
@@ -15,8 +19,8 @@
 
 项目提供两个面向不同用户的构建版本。
 
-|                              |             |                 |
-| ---------------------------- | ----------- | --------------- |
+| Capability | Base `AT Terminal` | `AT Terminal MCP` |
+| ---------- | ------------------ | ----------------- |
 | 能力                           | AT Terminal | AT Terminal MCP |
 | SSH 终端                       | 支持          | 支持              |
 | SFTP 文件工作区                   | 支持          | 支持              |
