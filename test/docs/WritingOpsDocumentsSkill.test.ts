@@ -65,4 +65,16 @@ describe('writing operations documents skill', () => {
     expect(standard).toContain('## 常见错误');
     expect(standard).toContain('预期结果写成实际结果');
   });
+
+  it('documents skill discovery, installation, and composition in the README', () => {
+    const readme = readFileSync('README.md', 'utf8');
+
+    expect(readme).toContain('### Agent Skills');
+    expect(readme).toContain('skills/at-terminal-mcp/SKILL.md');
+    expect(readme).toContain('skills/writing-ops-documents/SKILL.md');
+    expect(readme).toContain('$at-terminal-mcp');
+    expect(readme).toContain('$writing-ops-documents');
+    expect(readme).toContain('npx skills add xwamt/At-Terminal');
+    expect(readme).toContain('Skills 不复制进 VSIX');
+  });
 });
