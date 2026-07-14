@@ -55,4 +55,14 @@ describe('writing operations documents skill', () => {
     expect(metadata).toContain('$writing-ops-documents');
     expect(metadata).not.toContain('dependencies:');
   });
+
+  it('teaches evidence-safe wording with an example and common mistakes', () => {
+    const standard = readFileSync(`${root}/references/document-standard.md`, 'utf8');
+
+    expect(standard).toContain('## 表达示例');
+    expect(standard).toContain('已验证事实');
+    expect(standard).toContain('推断');
+    expect(standard).toContain('## 常见错误');
+    expect(standard).toContain('预期结果写成实际结果');
+  });
 });
