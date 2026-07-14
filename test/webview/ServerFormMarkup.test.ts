@@ -126,11 +126,22 @@ describe('ServerFormPanel markup', () => {
     const script = readFileSync(join(process.cwd(), 'webview/server-form/index.ts'), 'utf8');
 
     expect(script).toContain('function openGroupMenu(showAll = false): void');
+    expect(script).toContain('function isGroupMenuOpen(): boolean');
     expect(script).toContain("groupInput?.addEventListener('input', () =>");
     expect(script).toContain('openGroupMenu(false)');
+    expect(script).toContain("groupCombobox?.addEventListener('focusout', (event) =>");
     expect(script).toContain("groupToggle?.addEventListener('click', () =>");
+    expect(script).toContain('if (isGroupMenuOpen())');
+    expect(script).toContain('closeGroupMenu()');
     expect(script).toContain('openGroupMenu(true)');
     expect(script).toContain('suppressNextGroupFocus = true');
+  });
+
+  it('keeps the group suggestions hidden until script opens them', () => {
+    const css = readFileSync(join(process.cwd(), 'webview/server-form/index.css'), 'utf8');
+
+    expect(css).toContain('.group-combobox-menu[hidden]');
+    expect(css).toContain('display: none;');
   });
 
   it('prefills the group when adding from a selected group node', () => {

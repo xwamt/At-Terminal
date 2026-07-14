@@ -14,6 +14,7 @@ const jumpHost = document.querySelector<HTMLSelectElement>('select[name="jumpHos
 const jumpHostGroup = document.querySelector<HTMLSelectElement>('select[name="jumpHostGroup"]');
 const jumpHostOptions = jumpHost ? Array.from(jumpHost.querySelectorAll<HTMLOptionElement>('option[data-group]')) : [];
 const groupInput = document.querySelector<HTMLInputElement>('input[name="group"]');
+const groupCombobox = document.querySelector<HTMLElement>('.group-combobox');
 const groupMenu = document.querySelector<HTMLElement>('#serverGroupSuggestions');
 const groupToggle = document.querySelector<HTMLButtonElement>('.group-combobox-toggle');
 const groupOptions = groupMenu ? Array.from(groupMenu.querySelectorAll<HTMLButtonElement>('[data-group-option]')) : [];
@@ -93,6 +94,7 @@ function setGroupMenuOpen(isOpen: boolean): void {
   }
   groupMenu.hidden = !isOpen;
   groupInput.setAttribute('aria-expanded', String(isOpen));
+  groupToggle?.setAttribute('aria-expanded', String(isOpen));
 }
 
 function openGroupMenu(showAll = false): void {
@@ -114,6 +116,10 @@ function openGroupMenu(showAll = false): void {
 
 function closeGroupMenu(): void {
   setGroupMenuOpen(false);
+}
+
+function isGroupMenuOpen(): boolean {
+  return groupMenu?.hidden === false;
 }
 
 function selectAuth(value: string): void {
@@ -222,6 +228,14 @@ groupInput?.addEventListener('focus', () => {
   openGroupMenu(false);
 });
 
+groupCombobox?.addEventListener('focusout', (event) => {
+  const nextTarget = event.relatedTarget;
+  if (nextTarget instanceof Node && groupCombobox.contains(nextTarget)) {
+    return;
+  }
+  closeGroupMenu();
+});
+
 groupInput?.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     closeGroupMenu();
@@ -234,6 +248,10 @@ groupInput?.addEventListener('keydown', (event) => {
 });
 
 groupToggle?.addEventListener('click', () => {
+  if (isGroupMenuOpen()) {
+    closeGroupMenu();
+    return;
+  }
   openGroupMenu(true);
   suppressNextGroupFocus = true;
   groupInput?.focus();
