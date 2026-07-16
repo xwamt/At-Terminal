@@ -7,6 +7,7 @@ export type TransferJob<T> = (progress: TransferProgress) => Promise<T>;
 export interface TransferReporter {
   withProgress<T>(label: string, job: (progress: TransferProgress) => Promise<T>): Promise<T>;
   notifySuccess(message: string): Promise<void>;
+  notifyFailure(message: string): Promise<void>;
 }
 
 const noopProgress: TransferProgress = {
@@ -27,11 +28,15 @@ export class TransferService {
   }
 
   private async runWithReporter<T>(label: string, job: TransferJob<T>): Promise<T> {
-    const runner = this.reporter
-      ? this.reporter.withProgress(label, job)
-      : job(noopProgress);
-    const result = await runner;
-    void this.reporter?.notifySuccess(`${label} completed.`);
-    return result;
+    try {
+      const result = this.reporter
+        ? await this.reporter.withProgress(label, job)
+        : await job(noopProgress);
+      void this.reporter?.notifySuccess(`${label} completed.`);
+      return result;
+    } catch (error) {
+      void this.reporter?.notifyFailure(`${label} failed.`);
+      throw error;
+    }
   }
 }
