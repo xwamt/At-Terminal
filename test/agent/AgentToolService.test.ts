@@ -192,4 +192,37 @@ describe('AgentToolService', () => {
     );
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it('truncates long remote command previews in the confirmation modal', async () => {
+    const longCommand = Array.from({ length: 30 }, (_, i) => `echo line-${i}`).join('\n');
+    vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue('Run Command' as never);
+    const execute = vi.fn(async () => ({
+      serverId: 'server-1',
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command: longCommand,
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      durationMs: 1,
+      timedOut: false,
+      truncated: false
+    }));
+    const service = new AgentToolService({
+      configManager: { getServer: async () => server(), listServers: async () => [server()] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    await service.runRemoteCommand({ serverId: 'server-1', command: longCommand });
+
+    const message = vi.mocked(vscode.window.showWarningMessage).mock.calls[0][0] as string;
+    expect(message).toContain('echo line-0');
+    expect(message).toContain('… (truncated,');
+    expect(message).not.toContain('echo line-29');
+    expect(execute).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ command: longCommand })
+    );
+  });
 });
