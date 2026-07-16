@@ -239,7 +239,7 @@ describe('SftpEditSessionManager save synchronization', () => {
     const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-save-')));
     const confirmAutoSync = vi.fn(async () => true);
     const showStatus = vi.fn();
-    const withSyncProgress = vi.fn(async (_path: string, job: () => Promise<unknown>) => job());
+    const withSyncProgressCalls: string[] = [];
     const showSuccess = vi.fn(async () => undefined);
     const sftp = {
       getActiveServerId: vi.fn(() => 'srv'),
@@ -256,7 +256,10 @@ describe('SftpEditSessionManager save synchronization', () => {
         confirmAutoSync,
         resolveConflict: vi.fn(),
         showStatus,
-        withSyncProgress,
+        withSyncProgress: async <T>(remotePath: string, job: () => Promise<T>) => {
+          withSyncProgressCalls.push(remotePath);
+          return job();
+        },
         showSuccess,
         promptUnsyncedClose: vi.fn()
       }
@@ -277,12 +280,11 @@ describe('SftpEditSessionManager save synchronization', () => {
       expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
       expect(showStatus).toHaveBeenCalledWith('uploading', 'Uploading remote file...');
       expect(showStatus).toHaveBeenCalledWith('idle', 'Remote file synced');
-      expect(withSyncProgress).toHaveBeenCalledWith('/srv/app/index.js', expect.any(Function));
+      expect(withSyncProgressCalls).toEqual(['/srv/app/index.js', '/srv/app/index.js']);
       expect(showSuccess).toHaveBeenCalledWith(
         '/srv/app/index.js',
         'Remote sync completed for /srv/app/index.js'
       );
-      expect(withSyncProgress).toHaveBeenCalledTimes(2);
       expect(showSuccess).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
