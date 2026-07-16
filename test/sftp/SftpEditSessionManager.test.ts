@@ -78,6 +78,56 @@ describe('SftpEditSessionManager open flow', () => {
     }
   });
 
+  it('keeps remote sync progress open until the upload job finishes and uses 8s failure toasts', async () => {
+    try {
+      vi.useFakeTimers();
+      let resolveJob!: (value: string) => void;
+      const jobDone = new Promise<string>((resolve) => {
+        resolveJob = resolve;
+      });
+      let progressTaskFinished = false;
+      vi.spyOn(vscode.window, 'withProgress').mockImplementation(async (options, task) => {
+        if (options.title === 'Sync /srv/app/index.js') {
+          const result = await task({ report: vi.fn() }, {} as never);
+          progressTaskFinished = true;
+          return result as never;
+        }
+        return (await task({ report: vi.fn() }, {} as never)) as never;
+      });
+      const ui = createVscodeSftpEditUi(vscode.window.createStatusBarItem());
+
+      const pending = ui.withSyncProgress!('/srv/app/index.js', async () => await jobDone);
+      await Promise.resolve();
+      expect(progressTaskFinished).toBe(false);
+      resolveJob('ok');
+      await expect(pending).resolves.toBe('ok');
+      expect(progressTaskFinished).toBe(true);
+
+      const failure = ui.showError!('/srv/app/index.js', 'permission denied');
+      let failureSettled = false;
+      void failure.then(() => {
+        failureSettled = true;
+      });
+      await vi.advanceTimersByTimeAsync(7999);
+      await Promise.resolve();
+      expect(failureSettled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await failure;
+      expect(failureSettled).toBe(true);
+      expect(vscode.window.withProgress).toHaveBeenCalledWith(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: '$(error) Remote sync failed for /srv/app/index.js: permission denied',
+          cancellable: false
+        },
+        expect.any(Function)
+      );
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
   it('restores the language mode from the remote filename when VS Code opens a cache file as plaintext', async () => {
     const uri = vscode.Uri.file('C:/tmp/sftp-edit/test.py');
     const document = { uri, fileName: uri.fsPath, languageId: 'plaintext' };
@@ -189,6 +239,8 @@ describe('SftpEditSessionManager save synchronization', () => {
     const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-save-')));
     const confirmAutoSync = vi.fn(async () => true);
     const showStatus = vi.fn();
+    const withSyncProgress = vi.fn(async (_path: string, job: () => Promise<unknown>) => job());
+    const showSuccess = vi.fn(async () => undefined);
     const sftp = {
       getActiveServerId: vi.fn(() => 'srv'),
       stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
@@ -204,6 +256,8 @@ describe('SftpEditSessionManager save synchronization', () => {
         confirmAutoSync,
         resolveConflict: vi.fn(),
         showStatus,
+        withSyncProgress,
+        showSuccess,
         promptUnsyncedClose: vi.fn()
       }
     });
@@ -223,6 +277,13 @@ describe('SftpEditSessionManager save synchronization', () => {
       expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
       expect(showStatus).toHaveBeenCalledWith('uploading', 'Uploading remote file...');
       expect(showStatus).toHaveBeenCalledWith('idle', 'Remote file synced');
+      expect(withSyncProgress).toHaveBeenCalledWith('/srv/app/index.js', expect.any(Function));
+      expect(showSuccess).toHaveBeenCalledWith(
+        '/srv/app/index.js',
+        'Remote sync completed for /srv/app/index.js'
+      );
+      expect(withSyncProgress).toHaveBeenCalledTimes(2);
+      expect(showSuccess).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
       manager.dispose();
