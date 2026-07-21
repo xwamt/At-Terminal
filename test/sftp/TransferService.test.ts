@@ -49,7 +49,8 @@ describe('TransferService', () => {
       },
       notifySuccess: async (message) => {
         messages.push(message);
-      }
+      },
+      notifyFailure: async () => undefined
     };
     const service = new TransferService(reporter);
 
@@ -67,7 +68,8 @@ describe('TransferService', () => {
   it('does not wait for completion notifications to resolve before finishing a transfer', async () => {
     const reporter: TransferReporter = {
       withProgress: async (_label, task) => task({ report: () => undefined }),
-      notifySuccess: async () => new Promise<void>(() => undefined)
+      notifySuccess: async () => new Promise<void>(() => undefined),
+      notifyFailure: async () => undefined
     };
     const service = new TransferService(reporter);
 
@@ -77,5 +79,45 @@ describe('TransferService', () => {
     ]);
 
     expect(result).toBe('finished');
+  });
+
+  it('notifies failure after a transfer job throws', async () => {
+    const failures: string[] = [];
+    const reporter: TransferReporter = {
+      withProgress: async (_label, task) => task({ report: () => undefined }),
+      notifySuccess: async () => undefined,
+      notifyFailure: async (message) => {
+        failures.push(message);
+      }
+    };
+    const service = new TransferService(reporter);
+
+    await expect(
+      service.run('Upload docker-compose.yml', async () => {
+        throw new Error('no space');
+      })
+    ).rejects.toThrow('no space');
+    expect(failures).toEqual(['Upload docker-compose.yml failed.']);
+  });
+
+  it('does not wait for failure notifications to resolve before rejecting a transfer', async () => {
+    const reporter: TransferReporter = {
+      withProgress: async () => {
+        throw new Error('disk full');
+      },
+      notifySuccess: async () => undefined,
+      notifyFailure: async () => new Promise<void>(() => undefined)
+    };
+    const service = new TransferService(reporter);
+
+    const result = await Promise.race([
+      service.run('Upload docker-compose.yml', async () => 'never').then(
+        () => 'resolved',
+        () => 'rejected'
+      ),
+      new Promise((resolve) => setTimeout(() => resolve('blocked'), 20))
+    ]);
+
+    expect(result).toBe('rejected');
   });
 });
