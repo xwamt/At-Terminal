@@ -7,6 +7,35 @@
 
 [飞书文档](https://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd?from=from_copylinkhttps://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd?from=from_copylink)
 
+- [Features](docs/features.md)
+- [Usage Guide](docs/usage.md)
+- [Chinese documentation](docs/README.zh-CN.md)
+
+### Agent Skills
+
+项目提供符合 Agent Skills 规范的可安装技能。Skills 不复制进 VSIX，用户可以按需安装到 Codex、Claude Code、Cursor、GitHub Copilot 等兼容 Agent，避免在每次对话中重复发送完整运维提示词。
+
+| Skill | 用途 |
+| --- | --- |
+| [`at-terminal-mcp`](skills/at-terminal-mcp/SKILL.md) | 通过 AT Terminal MCP 安全执行服务器巡检、故障排查、部署、远程命令和 SFTP 操作，并支持结合工作区代码与远程运行状态联合诊断。 |
+| [`writing-ops-documents`](skills/writing-ops-documents/SKILL.md) | 生成规范的中文 Markdown 运维文档，包括操作记录、故障排查与 RCA、服务部署、服务巡检、交接和应急预案。 |
+
+使用 `skills` CLI 从 GitHub 按需安装：
+
+```bash
+npx skills add xwamt/At-Terminal --skill at-terminal-mcp
+npx skills add xwamt/At-Terminal --skill writing-ops-documents
+```
+
+Agent 提示词只需指向相应技能：
+
+```text
+Use $at-terminal-mcp for SSH servers, remote commands, SFTP, deployments, incidents, and workspace-to-server troubleshooting.
+Use $writing-ops-documents for operation records, troubleshooting reports, deployment documents, inspection reports, RCA, and other operations documentation.
+```
+
+当两个技能同时适用时，先使用 `$at-terminal-mcp` 收集并验证远程证据，再使用 `$writing-ops-documents` 将事实、推断、操作、验证结果和遗留风险整理为规范文档。
+
 ### 两种构建版本
 
 **AT** **Terminal** 是一款面向 VS Code 兼容 IDE 的 SSH 终端与 SFTP 远程文件工作区扩展。它通过标准 SSH/SFTP 协议直接连接远程服务器，不需要在服务器上安装 VS Code Server、Remote Agent 或任何额外服务端组件。
@@ -14,6 +43,13 @@
 **AT** **Terminal** **MCP** 是 AT Terminal 的 Agent 增强版本。它保留完整的 SSH 终端、SFTP 文件管理和远程文件本地编辑能力，同时增加 VS Code Language Model Tools 与本地 stdio MCP Server，让 GitHub Copilot Chat、Kiro、Cursor、Continue 等支持工具调用或 MCP 的 AI IDE，可以通过受控工具读取远程文件、执行非交互命令，并协助完成远程脚本和配置文件维护
 
 项目提供两个面向不同用户的构建版本。
+
+| Capability | Base `AT Terminal` | `AT Terminal MCP` |
+| --- | --- | --- |
+| SSH terminal and SFTP workspace | Included | Included |
+| VS Code Language Model Tools | Not included | Included |
+| Local stdio MCP server (`dist/mcp-server.js`) | Not included | Included |
+| Installable Agent Skills | Installed separately | Installed separately |
 
 |                              |             |                 |
 | ---------------------------- | ----------- | --------------- |

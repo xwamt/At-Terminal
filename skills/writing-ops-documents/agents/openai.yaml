@@ -1,0 +1,4 @@
+interface:
+  display_name: "Operations Documents"
+  short_description: "Write consistent, auditable operations documents."
+  default_prompt: "Use $writing-ops-documents to turn my evidence into a Chinese Markdown operations document."
