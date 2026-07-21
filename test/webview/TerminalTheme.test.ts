@@ -87,4 +87,14 @@ describe('terminal theme integration', () => {
     expect(css).not.toContain('height: calc(100% - 1.5em)');
     expect(css).not.toContain('margin-bottom: 1.5em');
   });
+
+  it('keeps the xterm host shrinkable so FitAddon can reduce cols when the panel narrows', () => {
+    const css = readFileSync(join(process.cwd(), 'webview/terminal/index.css'), 'utf8');
+
+    expect(css).toContain('min-width: 0');
+    expect(css).toContain('grid-template-columns: minmax(0, 1fr)');
+    expect(css).toContain('position: absolute');
+    expect(css).toContain('max-width: 100%');
+    expect(css).toContain('overflow-x: hidden');
+  });
 });

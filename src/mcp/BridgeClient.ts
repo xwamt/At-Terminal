@@ -73,39 +73,57 @@ export class BridgeClient {
   }
 
   private async call<T>(path: string, body: unknown): Promise<T> {
-    const discovery = await readBridgeDiscovery(this.options.home ?? homedir());
-    if (!discovery) {
-      throw new Error(
-        'AT Terminal MCP bridge is not running. Open VS Code with the AT Terminal extension installed, then reload this MCP server.'
-      );
-    }
-
     const fetchImpl = this.options.fetch ?? fetch;
-    let response: FetchLikeResponse;
-    try {
-      response = await fetchImpl(`http://${BRIDGE_HOST}:${discovery.port}${path}`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          [BRIDGE_TOKEN_HEADER]: discovery.token
-        },
-        body: JSON.stringify(body)
-      });
-    } catch {
-      throw new Error('AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.');
-    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const discovery = await readBridgeDiscovery(this.options.home ?? homedir());
+      if (!discovery) {
+        if (attempt < 2) {
+          await delayBridgeRetry();
+          continue;
+        }
+        throw new Error(
+          'AT Terminal MCP bridge is not running. Open VS Code with the AT Terminal extension installed, then reload this MCP server.'
+        );
+      }
 
-    const parsed = await parseJsonResponse(response);
-    if (!response.ok) {
+      let response: FetchLikeResponse;
+      try {
+        response = await fetchImpl(`http://${BRIDGE_HOST}:${discovery.port}${path}`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            [BRIDGE_TOKEN_HEADER]: discovery.token
+          },
+          body: JSON.stringify(body)
+        });
+      } catch {
+        if (attempt < 2) {
+          await delayBridgeRetry();
+          continue;
+        }
+        throw new Error('AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.');
+      }
+
+      const parsed = await parseJsonResponse(response);
+      if (response.ok) {
+        return parsed as T;
+      }
+      if (response.status === 401 && attempt < 2) {
+        await delayBridgeRetry();
+        continue;
+      }
       const message =
         typeof parsed === 'object' && parsed !== null && 'error' in parsed
           ? String(parsed.error)
           : `Bridge request failed with HTTP ${response.status}.`;
       throw new Error(message);
     }
-
-    return parsed as T;
+    throw new Error('AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.');
   }
+}
+
+function delayBridgeRetry(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 100));
 }
 
 async function parseJsonResponse(response: FetchLikeResponse): Promise<unknown> {

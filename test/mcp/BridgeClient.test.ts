@@ -121,6 +121,34 @@ describe('BridgeClient', () => {
     );
   });
 
+  it('retries with refreshed bridge discovery after the previous VS Code bridge is unreachable', async () => {
+    const home = await tempHome();
+    await writeBridgeDiscovery(home, { port: 12345, token: 'stale-token', pid: 1, updatedAt: 1 });
+    const fetch = vi.fn(async (_url: string, init: { headers: Record<string, string> }) => {
+      if (init.headers[BRIDGE_TOKEN_HEADER] === 'stale-token') {
+        await writeBridgeDiscovery(home, { port: 23456, token: 'fresh-token', pid: 2, updatedAt: 2 });
+        throw new Error('connect ECONNREFUSED 127.0.0.1:12345');
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ servers: [{ id: 'server-1' }] })
+      };
+    });
+    const client = new BridgeClient({ home, fetch: fetch as never });
+
+    await expect(client.listServers()).resolves.toEqual({ servers: [{ id: 'server-1' }] });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenLastCalledWith('http://127.0.0.1:23456/tools/list_ssh_servers', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [BRIDGE_TOKEN_HEADER]: 'fresh-token'
+      },
+      body: '{}'
+    });
+  });
+
   it('reports non-json bridge responses without masking the HTTP status', async () => {
     const home = await tempHome();
     await writeBridgeDiscovery(home, { port: 12345, token: 'secret', pid: 1, updatedAt: 1 });
