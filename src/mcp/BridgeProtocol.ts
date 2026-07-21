@@ -2,8 +2,11 @@ import type { TerminalContextSnapshot } from '../terminal/TerminalContext';
 
 export const BRIDGE_HOST = '127.0.0.1';
 export const BRIDGE_TOKEN_HEADER = 'x-at-terminal-token';
+export const BRIDGE_MAX_BODY_BYTES = 2 * 1024 * 1024;
+export const BRIDGE_SELECTION_CACHE_MS = 1500;
 
 export interface BridgeDiscovery {
+  id?: string;
   port: number;
   token: string;
   pid: number;
@@ -62,3 +65,4 @@ export interface SftpCreateFileBridgeRequest extends SftpPathBridgeRequest {
 export interface BridgeErrorResponse {
   error: string;
 }
+
