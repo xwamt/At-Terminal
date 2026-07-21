@@ -198,7 +198,7 @@ export function parseBodyWithSchema<T>(
 }
 
 export async function readLimitedBody(
-  request: AsyncIterable<Buffer | string>,
+  request: AsyncIterable<Buffer | string> | Iterable<Buffer | string>,
   maxBytes: number
 ): Promise<{ ok: true; body: string } | { ok: false; status: 413; error: string }> {
   const chunks: Buffer[] = [];

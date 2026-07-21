@@ -2,7 +2,7 @@
   "name": "at-terminal-mcp",
   "displayName": "AT Terminal MCP",
   "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "publisher": "local",
   "icon": "media/at-terminal-icon.png",
   "engines": {
@@ -579,6 +579,12 @@
           "type": "boolean",
           "default": true,
           "description": "Enable frontend semantic highlighting for plain SSH terminal output that does not already contain ANSI colors."
+        },
+                "sshManager.idleDisconnectMinutes": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "description": "Disconnect idle SSH terminals after this many minutes. Set 0 to disable."
         },
         "sshManager.keepAliveInterval": {
           "type": "number",
