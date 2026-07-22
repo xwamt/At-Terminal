@@ -1,4 +1,4 @@
-﻿# AT Terminal MCP 中文文档
+# AT Terminal MCP 中文文档
 
 **[更适合ai IDE的终端插件](https://github.com/xwamt/At-Terminal)**
 ----------------------------------------------------------
@@ -65,6 +65,18 @@ Use $writing-ops-documents for operation records, troubleshooting reports, deplo
 
 如果只需要在 IDE 内使用 SSH/SFTP，安装基础版 AT Terminal 即可。如果用户希望 GitHub Copilot Chat、Kiro、Cursor、Continue 等 Agent 调用远程命令或远程文件工具，应安装 AT Terminal MCP。
 
+### 后台连接授权（0.2.17）
+
+为适配当前 **Agent 窗口形态** 的 AI IDE（例如 Codex、Cursor Agent、Kiro 等：对话在独立 Agent 侧，IDE 更多承担扩展宿主角色），AT Terminal MCP 增加了按服务器维度的 **「允许后台连接（Allow background connections）」** 授权。
+
+启用后，Agent 可通过 MCP 在后台发现并连接已授权的 SSH 服务器、执行受控远程命令，而 **IDE 本身可以作为服务基座与资产管理窗口**——负责保存服务器资产、凭据、信任策略与 MCP 桥接，不必始终打开交互式终端会话。
+
+使用说明：
+
+1. 在服务器编辑页先勾选 **Trust agent remote commands**，再勾选其子项 **Allow background connections**。
+2. 未授权的服务器不会出现在 `list_ssh_servers` 中，`run_remote_command` 也会拒绝未授权目标。
+3. 旧配置默认关闭后台连接，升级后需按服务器显式开启。
+
 #### 构建产物
 
 请先安装 Node.js 和 npm。建议使用较新的 Node.js LTS 版本。进入项目根目录后安装依赖：
@@ -86,13 +98,13 @@ npm run package:mcp
 打包成功后，项目根目录会生成类似下面的文件：
 
 ```textile
-at-terminal-mcp-0.2.13.vsix
+at-terminal-mcp-0.2.17.vsix
 ```
 
 生成 .vsix 后，可以在 VS Code / Cursor / Kiro 等兼容 VS Code 插件的 IDE 中通过“从 VSIX 安装”安装，也可以使用命令行安装
 
 ```bash
-code --install-extension at-terminal-mcp-0.2.13.vsix
+code --install-extension at-terminal-mcp-0.2.17.vsix
 #如果安装基础版，则把文件名替换为实际生成的 at-terminal-*.vsix。
 ```
 
