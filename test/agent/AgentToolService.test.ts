@@ -232,6 +232,7 @@ describe('AgentToolService', () => {
 
   it('truncates long remote command previews in the confirmation modal', async () => {
     const longCommand = Array.from({ length: 30 }, (_, i) => `echo line-${i}`).join('\n');
+    const authorized = { ...server(), backgroundConnectionAllowed: true };
     vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue('Run Command' as never);
     const execute = vi.fn(async () => ({
       serverId: 'server-1',
@@ -246,7 +247,7 @@ describe('AgentToolService', () => {
       truncated: false
     }));
     const service = new AgentToolService({
-      configManager: { getServer: async () => server(), listServers: async () => [server()] } as never,
+      configManager: { getServer: async () => authorized, listServers: async () => [authorized] } as never,
       terminalContext: new TerminalContextRegistry(),
       executor: { execute } as unknown as RemoteCommandExecutor
     });
