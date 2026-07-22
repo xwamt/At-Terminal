@@ -79,6 +79,13 @@ p {
   align-items: start;
 }
 
+.form-right-col {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  align-content: start;
+}
+
 .form-panel {
   min-width: 0;
   overflow: hidden;
@@ -221,10 +228,16 @@ select:focus {
   grid-column: 1 / -1;
 }
 
-.trust-toggle-row {
-  align-items: center;
+.trust-block {
+  grid-column: 1 / -1;
   border: 1px solid var(--vscode-input-border, transparent);
   border-radius: 6px;
+  overflow: hidden;
+  background: var(--vscode-input-background);
+}
+
+.trust-toggle-row {
+  align-items: center;
   display: flex;
   flex-direction: row;
   gap: 12px;
@@ -247,6 +260,28 @@ select:focus {
 .trust-toggle-row input[type='checkbox'] {
   flex: 0 0 auto;
   width: auto;
+}
+
+.trust-sub {
+  border-top: 1px dashed var(--vscode-panel-border);
+  padding: 0 10px 10px;
+}
+
+.trust-sub[hidden] {
+  display: none !important;
+}
+
+.trust-sub-inner {
+  margin-left: 12px;
+  border-left: 2px solid var(--vscode-focusBorder);
+  padding: 8px 0 2px 12px;
+}
+
+.trust-sub .trust-toggle-row {
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 6px;
+  background: var(--vscode-sideBar-background);
+  padding: 9px 11px;
 }
 
 .form-panel-summary {
@@ -457,6 +492,10 @@ select:focus {
   .form-section-grid,
   .field-grid,
   .auth-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-right-col {
     grid-template-columns: 1fr;
   }
 

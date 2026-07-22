@@ -183,6 +183,8 @@ async function passwordForConnectionTest(
 
 function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | undefined): ServerConfig {
   const now = Date.now();
+  const agentCommandAutoApprove =
+    payload.agentCommandAutoApprove === 'on' || payload.agentCommandAutoApprove === true;
   return parseServerConfig({
     id: existing?.id ?? randomUUID(),
     label: String(payload.label ?? '').trim(),
@@ -193,9 +195,10 @@ function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | unde
     authType: String(payload.authType),
     privateKeyPath: optionalString(payload.privateKeyPath),
     jumpHostId: optionalString(payload.jumpHostId),
-    agentCommandAutoApprove: payload.agentCommandAutoApprove === 'on' || payload.agentCommandAutoApprove === true,
+    agentCommandAutoApprove,
     backgroundConnectionAllowed:
-      payload.backgroundConnectionAllowed === 'on' || payload.backgroundConnectionAllowed === true,
+      agentCommandAutoApprove &&
+      (payload.backgroundConnectionAllowed === 'on' || payload.backgroundConnectionAllowed === true),
     keepAliveInterval: Number(payload.keepAliveInterval ?? 30),
     encoding: 'utf-8',
     createdAt: existing?.createdAt ?? now,
@@ -223,7 +226,9 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const selectedJumpHost = jumpHostOptions.find((candidate) => candidate.id === server?.jumpHostId);
   const selectedJumpHostGroup = selectedJumpHost ? displayGroupName(selectedJumpHost.group) : '';
   const jumpHostGroups = groupNames(jumpHostOptions);
-  const agentCommandTrustSummary = server?.agentCommandAutoApprove
+  const agentCommandTrusted = server?.agentCommandAutoApprove === true;
+  const backgroundConnectionAllowed = agentCommandTrusted && server?.backgroundConnectionAllowed === true;
+  const agentCommandTrustSummary = agentCommandTrusted
     ? 'Agent commands: trusted for non-destructive commands'
     : 'Agent commands: manual approval';
   const groupSuggestions = groupNames(servers);
@@ -259,81 +264,98 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
           <label class="field-stack">Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
           <label class="field-stack">Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">Keepalive <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
-          <label class="field-stack">Jump Host Group
-            <select name="jumpHostGroup">
-              <option value="">Direct connection</option>
-              ${jumpHostGroups
-                .map((group) => {
-                  const selected = group === selectedJumpHostGroup ? ' selected' : '';
-                  return `<option value="${escapeAttr(group)}"${selected}>${escapeHtml(group)}</option>`;
-                })
-                .join('')}
-            </select>
-          </label>
-          <label class="field-stack jump-host-server-field">Jump Host Server
-            <select name="jumpHostId"${selectedJumpHost ? '' : ' disabled'}>
-              <option value="">Select a server</option>
-              ${jumpHostOptions
-                .map((candidate) => {
-                  const group = displayGroupName(candidate.group);
-                  const selected = candidate.id === server?.jumpHostId ? ' selected' : '';
-                  return `<option value="${escapeAttr(candidate.id)}" data-group="${escapeAttr(group)}"${selected}>${escapeHtml(
-                    formatJumpHostOption(candidate)
-                  )}</option>`;
-                })
-                .join('')}
-            </select>
-          </label>
-          <label class="field-stack field-wide trust-toggle-row">
-            <span class="trust-toggle-copy">
-              <span class="trust-toggle-title">Trust agent remote commands</span>
-              <span class="field-help">Run non-destructive MCP remote commands without asking each time.</span>
-            </span>
-            <input name="agentCommandAutoApprove" type="checkbox"${server?.agentCommandAutoApprove ? ' checked' : ''}>
-          </label>
-          <label class="field-stack field-wide trust-toggle-row">
-            <span class="trust-toggle-copy">
-              <span class="trust-toggle-title">Allow background connections</span>
-              <span class="field-help">Allow MCP to connect to this server in the background. Only applies to the MCP build.</span>
-            </span>
-            <input name="backgroundConnectionAllowed" type="checkbox"${server?.backgroundConnectionAllowed ? ' checked' : ''}>
-          </label>
+          <div class="trust-block field-wide">
+            <label class="trust-toggle-row" for="agentCommandAutoApprove">
+              <span class="trust-toggle-copy">
+                <span class="trust-toggle-title">Trust agent remote commands</span>
+                <span class="field-help">Run non-destructive MCP remote commands without asking each time.</span>
+              </span>
+              <input id="agentCommandAutoApprove" name="agentCommandAutoApprove" type="checkbox"${agentCommandTrusted ? ' checked' : ''}>
+            </label>
+            <div id="backgroundConnectionSub" class="trust-sub${agentCommandTrusted ? ' is-open' : ''}"${agentCommandTrusted ? '' : ' hidden'}>
+              <div class="trust-sub-inner">
+                <label class="trust-toggle-row" for="backgroundConnectionAllowed">
+                  <span class="trust-toggle-copy">
+                    <span class="trust-toggle-title">Allow background connections</span>
+                    <span class="field-help">Allow MCP to connect to this server in the background. Only applies to the MCP build.</span>
+                  </span>
+                  <input id="backgroundConnectionAllowed" name="backgroundConnectionAllowed" type="checkbox"${backgroundConnectionAllowed ? ' checked' : ''}${agentCommandTrusted ? '' : ' disabled'}>
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="form-panel form-panel-auth">
-        <div class="form-panel-header">
-          <h2>Authentication</h2>
-          <span>Credentials</span>
-        </div>
-        <input id="authType" name="authType" type="hidden" value="${authType}">
-        <div class="auth-card-grid" role="radiogroup" aria-label="Authentication method">
-          <button class="auth-card${isPassword ? ' is-selected' : ''}" type="button" data-auth-option="password" role="radio" aria-checked="${isPassword}">
-            <span class="auth-card-title">Password</span>
-            <span class="auth-card-copy">Use a password saved in VS Code SecretStorage.</span>
-          </button>
-          <button class="auth-card${isPrivateKey ? ' is-selected' : ''}" type="button" data-auth-option="privateKey" role="radio" aria-checked="${isPrivateKey}">
-            <span class="auth-card-title">Private Key</span>
-            <span class="auth-card-copy">Save a local key path and read the key only when connecting.</span>
-          </button>
-        </div>
-        <div class="auth-fields">
-          <label class="field-stack auth-password-field">Password
-            <div class="password-input-row">
-              <input id="password" name="password" type="password" autocomplete="new-password">
-              <button id="passwordToggle" class="secondary-action password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
-            </div>
-            <span class="field-help">${passwordHelp}</span>
-          </label>
-          <label class="field-stack auth-key-field">Private key
-            <div class="file-picker-row">
-              <input id="privateKeyPath" name="privateKeyPath" value="${escapeAttr(server?.privateKeyPath ?? '')}" placeholder="Select a private key file">
-              <button id="privateKeyBrowse" class="secondary-action" type="button">Browse...</button>
-            </div>
-            <span class="field-help">Only the local path is saved. Key contents are not copied into settings.</span>
-          </label>
-        </div>
-      </section>
+      <div class="form-right-col">
+        <section class="form-panel form-panel-auth">
+          <div class="form-panel-header">
+            <h2>Authentication</h2>
+            <span>Credentials</span>
+          </div>
+          <input id="authType" name="authType" type="hidden" value="${authType}">
+          <div class="auth-card-grid" role="radiogroup" aria-label="Authentication method">
+            <button class="auth-card${isPassword ? ' is-selected' : ''}" type="button" data-auth-option="password" role="radio" aria-checked="${isPassword}">
+              <span class="auth-card-title">Password</span>
+              <span class="auth-card-copy">Use a password saved in VS Code SecretStorage.</span>
+            </button>
+            <button class="auth-card${isPrivateKey ? ' is-selected' : ''}" type="button" data-auth-option="privateKey" role="radio" aria-checked="${isPrivateKey}">
+              <span class="auth-card-title">Private Key</span>
+              <span class="auth-card-copy">Save a local key path and read the key only when connecting.</span>
+            </button>
+          </div>
+          <div class="auth-fields">
+            <label class="field-stack auth-password-field">Password
+              <div class="password-input-row">
+                <input id="password" name="password" type="password" autocomplete="new-password">
+                <button id="passwordToggle" class="secondary-action password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+              </div>
+              <span class="field-help">${passwordHelp}</span>
+            </label>
+            <label class="field-stack auth-key-field">Private key
+              <div class="file-picker-row">
+                <input id="privateKeyPath" name="privateKeyPath" value="${escapeAttr(server?.privateKeyPath ?? '')}" placeholder="Select a private key file">
+                <button id="privateKeyBrowse" class="secondary-action" type="button">Browse...</button>
+              </div>
+              <span class="field-help">Only the local path is saved. Key contents are not copied into settings.</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="form-panel form-panel-jump">
+          <div class="form-panel-header">
+            <h2>Jump Host</h2>
+            <span>Bastion route</span>
+          </div>
+          <div class="field-grid">
+            <label class="field-stack">Jump Host Group
+              <select name="jumpHostGroup">
+                <option value="">Direct connection</option>
+                ${jumpHostGroups
+                  .map((group) => {
+                    const selected = group === selectedJumpHostGroup ? ' selected' : '';
+                    return `<option value="${escapeAttr(group)}"${selected}>${escapeHtml(group)}</option>`;
+                  })
+                  .join('')}
+              </select>
+            </label>
+            <label class="field-stack jump-host-server-field">Jump Host Server
+              <select name="jumpHostId"${selectedJumpHost ? '' : ' disabled'}>
+                <option value="">Select a server</option>
+                ${jumpHostOptions
+                  .map((candidate) => {
+                    const group = displayGroupName(candidate.group);
+                    const selected = candidate.id === server?.jumpHostId ? ' selected' : '';
+                    return `<option value="${escapeAttr(candidate.id)}" data-group="${escapeAttr(group)}"${selected}>${escapeHtml(
+                      formatJumpHostOption(candidate)
+                    )}</option>`;
+                  })
+                  .join('')}
+              </select>
+            </label>
+          </div>
+        </section>
+      </div>
 
       <section class="form-panel form-panel-summary">
         <div class="form-panel-header">
@@ -350,7 +372,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
           <div class="summary-line" data-summary="agentCommands">${agentCommandTrustSummary}</div>
         </div>
       </section>
-    </div>
+    </div>    </div>
     <footer class="form-footer">
       <div class="form-feedback">
         <div id="form-error" class="form-error" role="status" aria-live="polite"></div>

@@ -81,14 +81,20 @@ describe('ServerFormPanel markup', () => {
     expect(css).toContain('.connection-summary');
     expect(css).toContain('.primary-action.is-loading');
     expect(css).toContain('.jump-host-server-field');
+    expect(css).toContain('.form-right-col');
+    expect(css).toContain('.trust-block');
+    expect(css).toContain('.trust-sub');
     expect(css).toContain('.group-combobox');
     expect(css).toContain('.group-combobox-menu');
     expect(css).toContain('.group-combobox-option');
   });
 
-  it('renders grouped jump host controls in the connection panel', () => {
+  it('renders grouped jump host controls in a panel under authentication', () => {
     const html = renderServerForm(undefined, [jumpHost, appServer]);
 
+    expect(html).toContain('class="form-right-col"');
+    expect(html).toContain('class="form-panel form-panel-jump"');
+    expect(html).toContain('<h2>Jump Host</h2>');
     expect(html).toContain('name="jumpHostGroup"');
     expect(html).toContain('name="jumpHostId"');
     expect(html).toContain('Direct connection');
@@ -99,6 +105,7 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('data-group="prod"');
     expect(html).toContain('App CN - deploy@app.example.com:22');
     expect(html).toContain('data-summary="route"');
+    expect(html.indexOf('form-panel-auth')).toBeLessThan(html.indexOf('form-panel-jump'));
   });
 
   it('renders server group choices as editable suggestions', () => {
@@ -131,6 +138,16 @@ describe('ServerFormPanel markup', () => {
     expect(script).toContain("groupToggle?.addEventListener('click', () =>");
     expect(script).toContain('openGroupMenu(true)');
     expect(script).toContain('suppressNextGroupFocus = true');
+  });
+
+  it('keeps background connection nested under trust in the form script', () => {
+    const script = readFileSync(join(process.cwd(), 'webview/server-form/index.ts'), 'utf8');
+
+    expect(script).toContain('function updateTrustFields(): void');
+    expect(script).toContain("document.querySelector<HTMLInputElement>('input[name=\"backgroundConnectionAllowed\"]')");
+    expect(script).toContain('background.disabled = !trusted');
+    expect(script).toContain('background.checked = false');
+    expect(script).toContain('updateTrustFields()');
   });
 
   it('prefills the group when adding from a selected group node', () => {
@@ -200,16 +217,43 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('Agent commands: trusted for non-destructive commands');
   });
 
-  it('renders the background connection switch off by default', () => {
+  it('nests the background connection switch under trust and hides it by default', () => {
     const html = renderServerForm();
 
+    expect(html).toContain('class="trust-block field-wide"');
+    expect(html).toContain('id="backgroundConnectionSub"');
     expect(html).toContain('name="backgroundConnectionAllowed"');
     expect(html).toContain('Allow background connections');
     expect(html).toContain('Allow MCP to connect to this server in the background. Only applies to the MCP build.');
+    expect(html).toMatch(/id="backgroundConnectionSub"[^>]*hidden/);
+    expect(html).toMatch(/name="backgroundConnectionAllowed"[^>]*disabled/);
     expect(html).not.toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
   });
 
-  it('renders the background connection switch checked for authorized servers', () => {
+  it('shows the background connection switch only when trust is enabled', () => {
+    const html = renderServerForm({
+      id: 'server-1',
+      label: 'Production',
+      host: 'example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      agentCommandAutoApprove: true,
+      backgroundConnectionAllowed: true,
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(html).toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
+    expect(html).toContain('class="trust-sub is-open"');
+    expect(html).not.toMatch(/id="backgroundConnectionSub"[^>]*hidden/);
+    expect(html).toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
+    expect(html).not.toMatch(/name="backgroundConnectionAllowed"[^>]*disabled/);
+  });
+
+  it('does not check background connections when trust is off even if previously authorized', () => {
     const html = renderServerForm({
       id: 'server-1',
       label: 'Production',
@@ -224,6 +268,9 @@ describe('ServerFormPanel markup', () => {
       updatedAt: 2
     });
 
-    expect(html).toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
+    expect(html).not.toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
+    expect(html).toMatch(/id="backgroundConnectionSub"[^>]*hidden/);
+    expect(html).not.toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
+    expect(html).toMatch(/name="backgroundConnectionAllowed"[^>]*disabled/);
   });
 });

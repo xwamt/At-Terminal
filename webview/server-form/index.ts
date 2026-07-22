@@ -81,6 +81,25 @@ function agentCommandAutoApproveEnabled(): boolean {
   return input?.checked === true;
 }
 
+function updateTrustFields(): void {
+  const trust = document.querySelector<HTMLInputElement>('input[name="agentCommandAutoApprove"]');
+  const background = document.querySelector<HTMLInputElement>('input[name="backgroundConnectionAllowed"]');
+  const sub = document.querySelector<HTMLElement>('#backgroundConnectionSub');
+  const trusted = trust?.checked === true;
+
+  if (sub) {
+    sub.classList.toggle('is-open', trusted);
+    sub.hidden = !trusted;
+  }
+
+  if (background) {
+    background.disabled = !trusted;
+    if (!trusted) {
+      background.checked = false;
+    }
+  }
+}
+
 let suppressNextGroupFocus = false;
 
 function groupFilterValue(): string {
@@ -261,6 +280,7 @@ document.addEventListener('click', (event) => {
 
 function refreshFormState(): void {
   clearTestStatus();
+  updateTrustFields();
   updateJumpHostFields();
   updateSummary();
 }
@@ -268,6 +288,7 @@ function refreshFormState(): void {
 form?.addEventListener('input', refreshFormState);
 form?.addEventListener('change', refreshFormState);
 updateAuthFields();
+updateTrustFields();
 updateJumpHostFields();
 updateSummary();
 

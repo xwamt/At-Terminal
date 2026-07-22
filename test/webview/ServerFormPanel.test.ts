@@ -257,7 +257,41 @@ describe('ServerFormPanel message handling', () => {
     expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ agentCommandAutoApprove: true }), 'secret');
   });
 
-  it('persists background connection authorization from the form payload', async () => {
+  it('persists background connection authorization when trust is also enabled', async () => {
+    const saveServer = vi.fn();
+
+    await handleServerFormMessage(
+      {
+        type: 'submit',
+        payload: {
+          label: 'Production',
+          group: 'prod',
+          host: 'example.com',
+          port: 22,
+          username: 'deploy',
+          authType: 'password',
+          password: 'secret',
+          agentCommandAutoApprove: 'on',
+          backgroundConnectionAllowed: 'on',
+          keepAliveInterval: 30
+        }
+      },
+      undefined,
+      { saveServer } as never,
+      vi.fn(),
+      { dispose: vi.fn(), webview: { postMessage: vi.fn() } } as never
+    );
+
+    expect(saveServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentCommandAutoApprove: true,
+        backgroundConnectionAllowed: true
+      }),
+      'secret'
+    );
+  });
+
+  it('clears background connection authorization when trust is disabled', async () => {
     const saveServer = vi.fn();
 
     await handleServerFormMessage(
@@ -281,7 +315,13 @@ describe('ServerFormPanel message handling', () => {
       { dispose: vi.fn(), webview: { postMessage: vi.fn() } } as never
     );
 
-    expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ backgroundConnectionAllowed: true }), 'secret');
+    expect(saveServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentCommandAutoApprove: false,
+        backgroundConnectionAllowed: false
+      }),
+      'secret'
+    );
   });
 
   it('tests the current form connection without saving or closing the panel', async () => {
