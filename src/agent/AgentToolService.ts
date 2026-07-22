@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import type { TerminalContextRegistry, TerminalContextSnapshot } from '../terminal/TerminalContext';
+import { formatRemoteCommandConfirmMessage } from '../utils/commandPreview';
 import type { RemoteCommandExecutor, RemoteCommandResult } from './RemoteCommandExecutor';
 import type { SftpAgentService } from './SftpAgentService';
 
@@ -48,11 +49,16 @@ export class AgentToolService {
       throw new Error('Remote command cannot be empty.');
     }
     const server = await this.resolveServer(input.serverId);
-    const warning = isObviouslyDestructive(command) ? '\n\nWarning: this command appears destructive.' : '';
-    const needsConfirmation = server.agentCommandAutoApprove !== true || Boolean(warning);
+    const destructive = isObviouslyDestructive(command);
+    const needsConfirmation = server.agentCommandAutoApprove !== true || destructive;
     if (needsConfirmation) {
       const answer = await vscode.window.showWarningMessage(
-        `Run remote command on ${server.label} (${server.host})?\n\n${command}${warning}`,
+        formatRemoteCommandConfirmMessage({
+          serverLabel: server.label,
+          host: server.host,
+          command,
+          destructive
+        }),
         { modal: true },
         'Run Command'
       );

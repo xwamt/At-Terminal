@@ -1,4 +1,4 @@
-# AT Terminal MCP 中文文档
+﻿# AT Terminal MCP 中文文档
 
 **[更适合ai IDE的终端插件](https://github.com/xwamt/At-Terminal)**
 ----------------------------------------------------------
@@ -7,9 +7,34 @@
 
 [飞书文档](https://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd?from=from_copylinkhttps://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd?from=from_copylink)
 
-[Features](docs/features.md) · [Usage Guide](docs/usage.md) · [Chinese documentation](docs/README.zh-CN.md) · [Agent skill](skills/at-terminal-mcp/SKILL.md)
+- [Features](docs/features.md)
+- [Usage Guide](docs/usage.md)
+- [Chinese documentation](docs/README.zh-CN.md)
 
-MCP clients should start the bundled server at `dist/mcp-server.js`; see the [Usage Guide](docs/usage.md) for configuration examples.
+### Agent Skills
+
+项目提供符合 Agent Skills 规范的可安装技能。Skills 不复制进 VSIX，用户可以按需安装到 Codex、Claude Code、Cursor、GitHub Copilot 等兼容 Agent，避免在每次对话中重复发送完整运维提示词。
+
+| Skill | 用途 |
+| --- | --- |
+| [`at-terminal-mcp`](skills/at-terminal-mcp/SKILL.md) | 通过 AT Terminal MCP 安全执行服务器巡检、故障排查、部署、远程命令和 SFTP 操作，并支持结合工作区代码与远程运行状态联合诊断。 |
+| [`writing-ops-documents`](skills/writing-ops-documents/SKILL.md) | 生成规范的中文 Markdown 运维文档，包括操作记录、故障排查与 RCA、服务部署、服务巡检、交接和应急预案。 |
+
+使用 `skills` CLI 从 GitHub 按需安装：
+
+```bash
+npx skills add xwamt/At-Terminal --skill at-terminal-mcp
+npx skills add xwamt/At-Terminal --skill writing-ops-documents
+```
+
+Agent 提示词只需指向相应技能：
+
+```text
+Use $at-terminal-mcp for SSH servers, remote commands, SFTP, deployments, incidents, and workspace-to-server troubleshooting.
+Use $writing-ops-documents for operation records, troubleshooting reports, deployment documents, inspection reports, RCA, and other operations documentation.
+```
+
+当两个技能同时适用时，先使用 `$at-terminal-mcp` 收集并验证远程证据，再使用 `$writing-ops-documents` 将事实、推断、操作、验证结果和遗留风险整理为规范文档。
 
 ### 两种构建版本
 
@@ -20,7 +45,14 @@ MCP clients should start the bundled server at `dist/mcp-server.js`; see the [Us
 项目提供两个面向不同用户的构建版本。
 
 | Capability | Base `AT Terminal` | `AT Terminal MCP` |
-| ---------- | ------------------ | ----------------- |
+| --- | --- | --- |
+| SSH terminal and SFTP workspace | Included | Included |
+| VS Code Language Model Tools | Not included | Included |
+| Local stdio MCP server (`dist/mcp-server.js`) | Not included | Included |
+| Installable Agent Skills | Installed separately | Installed separately |
+
+|                              |             |                 |
+| ---------------------------- | ----------- | --------------- |
 | 能力                           | AT Terminal | AT Terminal MCP |
 | SSH 终端                       | 支持          | 支持              |
 | SFTP 文件工作区                   | 支持          | 支持              |

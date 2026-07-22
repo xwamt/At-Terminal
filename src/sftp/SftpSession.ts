@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Client, type ClientChannel, type ConnectConfig, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
-import { buildSshConnectionHandle, type SshConnectionHandle } from '../ssh/SshConnectionConfig';
+import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionHandle } from '../ssh/SshConnectionConfig';
 import { quotePosixShellPath, safePreviewName } from './RemotePath';
 import type { TransferProgress } from './TransferService';
 import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './SftpTypes';
@@ -43,13 +43,14 @@ export class SftpSession {
 
   constructor(
     private readonly server: ServerConfig,
-    private readonly passwords: PasswordSource
+    private readonly passwords: PasswordSource,
+    private readonly hostKeyVerifier?: HostKeyVerifier
   ) {}
 
   async connect(): Promise<void> {
     const client = new Client();
     this.client = client;
-    const handle = await buildSshConnectionHandle(this.server, this.passwords);
+    const handle = await buildSshConnectionHandle(this.server, this.passwords, this.hostKeyVerifier);
     this.connectionHandle = handle;
 
     try {

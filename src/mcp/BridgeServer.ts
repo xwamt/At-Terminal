@@ -1,10 +1,19 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
+import type { z } from 'zod';
 import type { AgentToolService } from '../agent/AgentToolService';
 import { formatError } from '../utils/errors';
+import {
+  sftpCreateFileBridgeSchema,
+  sftpListDirectoryBridgeSchema,
+  sftpPathBridgeSchema,
+  sftpReadFileBridgeSchema,
+  sftpWriteFileBridgeSchema,
+  runRemoteCommandBridgeSchema
+} from './bridgeSchemas';
 import { removeBridgeDiscovery, writeBridgeDiscovery } from './BridgeDiscovery';
-import { BRIDGE_HOST, BRIDGE_TOKEN_HEADER, type RunRemoteCommandBridgeRequest } from './BridgeProtocol';
+import { BRIDGE_HOST, BRIDGE_MAX_BODY_BYTES, BRIDGE_TOKEN_HEADER } from './BridgeProtocol';
 
 export interface BridgeHandlerDependencies {
   service: AgentToolService;
@@ -27,6 +36,7 @@ export class BridgeServer {
   private server: Server | undefined;
   private token = '';
   private port: number | undefined;
+  private readonly bridgeId = randomUUID();
 
   constructor(
     private readonly service: AgentToolService,
@@ -55,6 +65,7 @@ export class BridgeServer {
     }
     this.port = address.port;
     await writeBridgeDiscovery(this.home, {
+      id: this.bridgeId,
       port: address.port,
       token: this.token,
       pid: process.pid,
@@ -70,7 +81,7 @@ export class BridgeServer {
     this.port = undefined;
     await removeBridgeDiscovery(
       this.home,
-      port && token ? { port, token, pid: process.pid } : undefined
+      port && token ? { id: this.bridgeId, port, token, pid: process.pid } : undefined
     );
     if (!server) {
       return;
@@ -98,13 +109,16 @@ export function createBridgeRequestHandler(dependencies: BridgeHandlerDependenci
         return json(200, await dependencies.service.getTerminalContext());
       }
       if (request.path === '/tools/run_remote_command') {
-        const input = parseBody<RunRemoteCommandBridgeRequest>(request.body);
-        const command = input.command?.trim();
+        const parsed = parseBodyWithSchema(request.body, runRemoteCommandBridgeSchema);
+        if (!parsed.ok) {
+          return json(400, { error: parsed.error });
+        }
+        const command = parsed.data.command.trim();
         if (!command) {
           return json(400, { error: 'Remote command cannot be empty.' });
         }
         try {
-          return json(200, await dependencies.service.runRemoteCommand({ ...input, command }));
+          return json(200, await dependencies.service.runRemoteCommand({ ...parsed.data, command }));
         } catch (error) {
           if (error instanceof Error && error.message === 'Remote command was cancelled.') {
             return json(400, { error: error.message });
@@ -113,22 +127,46 @@ export function createBridgeRequestHandler(dependencies: BridgeHandlerDependenci
         }
       }
       if (request.path === '/tools/sftp_list_directory') {
-        return json(200, await dependencies.service.sftpListDirectory(parseBody(request.body)));
+        const parsed = parseBodyWithSchema(request.body, sftpListDirectoryBridgeSchema);
+        if (!parsed.ok) {
+          return json(400, { error: parsed.error });
+        }
+        return json(200, await dependencies.service.sftpListDirectory(parsed.data));
       }
       if (request.path === '/tools/sftp_stat_path') {
-        return json(200, await dependencies.service.sftpStatPath(parseBody(request.body)));
+        const parsed = parseBodyWithSchema(request.body, sftpPathBridgeSchema);
+        if (!parsed.ok) {
+          return json(400, { error: parsed.error });
+        }
+        return json(200, await dependencies.service.sftpStatPath(parsed.data));
       }
       if (request.path === '/tools/sftp_read_file') {
-        return json(200, await dependencies.service.sftpReadFile(parseBody(request.body)));
+        const parsed = parseBodyWithSchema(request.body, sftpReadFileBridgeSchema);
+        if (!parsed.ok) {
+          return json(400, { error: parsed.error });
+        }
+        return json(200, await dependencies.service.sftpReadFile(parsed.data));
       }
       if (request.path === '/tools/sftp_write_file') {
-        return json(200, await dependencies.service.sftpWriteFile(parseBody(request.body)));
+        const parsed = parseBodyWithSchema(request.body, sftpWriteFileBridgeSchema);
+        if (!parsed.ok) {
+          return json(400, { error: parsed.error });
+        }
+        return json(200, await dependencies.service.sftpWriteFile(parsed.data));
       }
       if (request.path === '/tools/sftp_create_file') {
-        return json(200, await dependencies.service.sftpCreateFile(parseBody(request.body)));
+        const parsed = parseBodyWithSchema(request.body, sftpCreateFileBridgeSchema);
+        if (!parsed.ok) {
+          return json(400, { error: parsed.error });
+        }
+        return json(200, await dependencies.service.sftpCreateFile(parsed.data));
       }
       if (request.path === '/tools/sftp_create_directory') {
-        return json(200, await dependencies.service.sftpCreateDirectory(parseBody(request.body)));
+        const parsed = parseBodyWithSchema(request.body, sftpPathBridgeSchema);
+        if (!parsed.ok) {
+          return json(400, { error: parsed.error });
+        }
+        return json(200, await dependencies.service.sftpCreateDirectory(parsed.data));
       }
       return json(404, { error: 'Unknown AT Terminal MCP bridge endpoint.' });
     } catch (error) {
@@ -137,11 +175,43 @@ export function createBridgeRequestHandler(dependencies: BridgeHandlerDependenci
   };
 }
 
-function parseBody<T>(body: string | undefined): T {
-  if (!body) {
-    return {} as T;
+export function parseBodyWithSchema<T>(
+  body: string | undefined,
+  schema: z.ZodType<T>
+): { ok: true; data: T } | { ok: false; error: string } {
+  let raw: unknown = {};
+  if (body) {
+    try {
+      raw = JSON.parse(body);
+    } catch {
+      return { ok: false, error: 'Invalid JSON body.' };
+    }
   }
-  return JSON.parse(body) as T;
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`).join('; ')
+    };
+  }
+  return { ok: true, data: parsed.data };
+}
+
+export async function readLimitedBody(
+  request: AsyncIterable<Buffer | string> | Iterable<Buffer | string>,
+  maxBytes: number
+): Promise<{ ok: true; body: string } | { ok: false; status: 413; error: string }> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buf.length;
+    if (size > maxBytes) {
+      return { ok: false, status: 413, error: `Request body exceeds ${maxBytes} bytes.` };
+    }
+    chunks.push(buf);
+  }
+  return { ok: true, body: Buffer.concat(chunks).toString('utf8') };
 }
 
 function json(status: number, body: unknown): BridgeResponse {
@@ -154,15 +224,18 @@ async function handleNodeRequest(
   response: ServerResponse
 ): Promise<void> {
   try {
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const limited = await readLimitedBody(request, BRIDGE_MAX_BODY_BYTES);
+    if (!limited.ok) {
+      response.statusCode = limited.status;
+      response.setHeader('content-type', 'application/json; charset=utf-8');
+      response.end(JSON.stringify({ error: limited.error }));
+      return;
     }
     const result = await handler({
       method: request.method ?? 'GET',
       path: request.url ?? '/',
       headers: request.headers,
-      body: Buffer.concat(chunks).toString('utf8')
+      body: limited.body
     });
     response.statusCode = result.status;
     response.setHeader('content-type', 'application/json; charset=utf-8');

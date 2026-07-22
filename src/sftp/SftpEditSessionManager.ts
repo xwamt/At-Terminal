@@ -4,7 +4,11 @@ import { mkdir, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import * as vscode from 'vscode';
 import { formatError } from '../utils/errors';
-import { showTimedNotification } from '../utils/notifications';
+import {
+  FAILED_NOTIFICATION_MS,
+  showTimedNotification,
+  TIMED_NOTIFICATION_MS
+} from '../utils/notifications';
 import { safePreviewName } from './RemotePath';
 import type { SftpFileStat } from './SftpTypes';
 
@@ -25,6 +29,8 @@ export interface SftpEditUi {
   confirmAutoSync(remotePath: string): Promise<boolean>;
   resolveConflict(remotePath: string): Promise<SftpEditConflictChoice>;
   showStatus(state: SftpEditSyncState, message: string): void;
+  withSyncProgress?<T>(remotePath: string, job: () => Promise<T>): Promise<T>;
+  showSuccess?(remotePath: string, message: string): Promise<void>;
   showError?(remotePath: string, message: string): Promise<void>;
   promptUnsyncedClose(remotePath: string): Promise<SftpEditCloseChoice>;
 }
@@ -267,12 +273,19 @@ export class SftpEditSessionManager {
       session.lastError = undefined;
       this.options.ui.showStatus('uploading', 'Uploading remote file...');
       try {
-        const uploaded = await this.uploadIfUnchanged(session);
+        const runUpload = async () => this.uploadIfUnchanged(session);
+        const uploaded = this.options.ui.withSyncProgress
+          ? await this.options.ui.withSyncProgress(session.remotePath, runUpload)
+          : await runUpload();
         if (!uploaded) {
           return;
         }
         session.syncState = 'idle';
         this.options.ui.showStatus('idle', 'Remote file synced');
+        void this.options.ui.showSuccess?.(
+          session.remotePath,
+          `Remote sync completed for ${session.remotePath}`
+        );
       } catch (error) {
         await this.failSync(session, error);
       } finally {
@@ -384,8 +397,25 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
         setTimeout(() => statusBarItem.hide(), 2000);
       }
     },
+    async withSyncProgress(remotePath, job) {
+      return await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Sync ${remotePath}`,
+          cancellable: false
+        },
+        async () => await job()
+      );
+    },
+    async showSuccess(_remotePath, message) {
+      await showTimedNotification(message, 'info', TIMED_NOTIFICATION_MS);
+    },
     async showError(remotePath, message) {
-      await showTimedNotification(`Remote sync failed for ${remotePath}: ${message}`, 'error');
+      await showTimedNotification(
+        `Remote sync failed for ${remotePath}: ${message}`,
+        'error',
+        FAILED_NOTIFICATION_MS
+      );
     },
     async promptUnsyncedClose(remotePath) {
       const answer = await vscode.window.showWarningMessage(

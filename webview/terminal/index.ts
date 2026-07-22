@@ -44,7 +44,6 @@ term.loadAddon(new WebLinksAddon());
 term.open(container);
 watchTerminalTheme(term);
 watchTerminalZebraStripes(term);
-fitAddon.fit();
 
 const clipboard: TerminalClipboard = {
   readText: () => navigator.clipboard?.readText() ?? Promise.resolve(''),
@@ -71,11 +70,35 @@ term.onData((data) => {
   vscode.postMessage({ type: 'input', payload: data });
 });
 
-const resizeObserver = new ResizeObserver(() => {
+let lastCols = 0;
+let lastRows = 0;
+let fitFrame = 0;
+
+function fitAndNotify(force = false): void {
   fitAddon.fit();
-  vscode.postMessage({ type: 'resize', rows: term.rows, cols: term.cols });
+  if (!force && term.cols === lastCols && term.rows === lastRows) {
+    return;
+  }
+  lastCols = term.cols;
+  lastRows = term.rows;
+  vscode.postMessage({ type: force ? 'ready' : 'resize', rows: term.rows, cols: term.cols });
+}
+
+function scheduleFit(force = false): void {
+  if (fitFrame) {
+    cancelAnimationFrame(fitFrame);
+  }
+  fitFrame = requestAnimationFrame(() => {
+    fitFrame = 0;
+    fitAndNotify(force);
+  });
+}
+
+const resizeObserver = new ResizeObserver(() => {
+  scheduleFit();
 });
 resizeObserver.observe(container);
+window.addEventListener('resize', () => scheduleFit());
 
 window.addEventListener('message', (event: MessageEvent) => {
   const message = event.data as { type?: string; payload?: unknown };
@@ -94,4 +117,4 @@ window.addEventListener('message', (event: MessageEvent) => {
   }
 });
 
-vscode.postMessage({ type: 'ready', rows: term.rows, cols: term.cols });
+scheduleFit(true);

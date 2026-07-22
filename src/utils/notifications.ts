@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 export type TimedNotificationKind = 'info' | 'warning' | 'error';
 
 export const TIMED_NOTIFICATION_MS = 3000;
+export const FAILED_NOTIFICATION_MS = 8000;
 
 export async function showTimedNotification(
   message: string,

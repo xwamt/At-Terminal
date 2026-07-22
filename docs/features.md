@@ -73,6 +73,10 @@ AT Terminal MCP contributes VS Code language model tools and a local stdio MCP s
 
 ## Safety Behavior
 
+- SFTP agent writes use a real first-write authorization prompt per server for the current extension host session.
+- All SSH and SFTP connect paths verify host keys (unknown hosts prompt; changed hosts are blocked).
+- MCP bridge discovery supports multiple IDE windows via `~/.at-terminal/mcp-bridges/`; clients prefer bridges with connected terminals. `~/.at-terminal/mcp-bridge.json` remains a last-writer compatibility snapshot.
+- Bridge requests validate JSON schemas and enforce a maximum body size (2 MiB).
 - `run_remote_command` asks for confirmation before commands unless the target server has `Trust agent remote commands` enabled. Dangerous-looking commands still ask for confirmation.
 - The server trust switch affects only `run_remote_command`. It does not bypass SFTP write authorization or SSH host key trust.
 - SFTP write tools ask for first-write authorization per server during the current extension host session.

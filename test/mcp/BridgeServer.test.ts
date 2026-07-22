@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBridgeRequestHandler } from '../../src/mcp/BridgeServer';
-import { BRIDGE_TOKEN_HEADER } from '../../src/mcp/BridgeProtocol';
+import { createBridgeRequestHandler, readLimitedBody } from '../../src/mcp/BridgeServer';
+import { BRIDGE_MAX_BODY_BYTES, BRIDGE_TOKEN_HEADER } from '../../src/mcp/BridgeProtocol';
 
 async function call(
   handler: ReturnType<typeof createBridgeRequestHandler>,
@@ -157,5 +157,51 @@ describe('createBridgeRequestHandler', () => {
       status: 400,
       body: { error: 'Remote command was cancelled.' }
     });
+  });
+
+  it('returns 400 when sftp_stat_path body fails schema validation', async () => {
+    const handler = createBridgeRequestHandler({
+      token: 'secret',
+      service: {
+        sftpStatPath: vi.fn()
+      } as never
+    });
+
+    await expect(
+      call(handler, {
+        path: '/tools/sftp_stat_path',
+        token: 'secret',
+        body: { path: 123 }
+      })
+    ).resolves.toMatchObject({
+      status: 400,
+      body: { error: expect.stringMatching(/path|invalid|expected/i) }
+    });
+  });
+
+  it('returns 400 when run_remote_command is missing command', async () => {
+    const handler = createBridgeRequestHandler({
+      token: 'secret',
+      service: { runRemoteCommand: vi.fn() } as never
+    });
+    await expect(
+      call(handler, { path: '/tools/run_remote_command', token: 'secret', body: {} })
+    ).resolves.toMatchObject({ status: 400 });
+  });
+});
+
+describe('readLimitedBody', () => {
+  it('rejects bodies larger than BRIDGE_MAX_BODY_BYTES', async () => {
+    const big = 'x'.repeat(BRIDGE_MAX_BODY_BYTES + 1);
+    const result = await readLimitedBody([Buffer.from(big)], BRIDGE_MAX_BODY_BYTES);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(413);
+    }
+  });
+
+  it('accepts bodies within the limit', async () => {
+    const result = await readLimitedBody([Buffer.from('{"ok":true}')], BRIDGE_MAX_BODY_BYTES);
+    expect(result).toEqual({ ok: true, body: '{"ok":true}' });
   });
 });
