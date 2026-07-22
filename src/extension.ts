@@ -3,7 +3,7 @@ import { AgentToolService } from './agent/AgentToolService';
 import { registerAgentTools } from './agent/AgentTools';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
 import { SftpAgentService } from './agent/SftpAgentService';
-import { SftpWriteAuthorizer } from './agent/SftpWriteAuthorizer';
+import { createProductionSftpWriteAuthorizer } from './agent/createSftpWriteAuthorizer';
 import { assetPrivateKeyDirectory, exportAssetsCommand, importAssetsCommand } from './assets/AssetCommands';
 import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
@@ -41,8 +41,33 @@ export function activate(context: vscode.ExtensionContext): void {
   const hostKeyStore = new HostKeyStore(context.globalState);
   const treeProvider = new ServerTreeProvider(configManager);
   const terminalContext = new TerminalContextRegistry();
+  const hostKeyVerifier = {
+    async verify(host: string, port: number, fingerprint: string): Promise<boolean> {
+      const status = await hostKeyStore.check(host, port, fingerprint);
+      if (status === 'trusted') {
+        return true;
+      }
+      if (status === 'changed') {
+        await showTimedNotification(
+          `Host key for ${host}:${port} changed. Connection blocked. Fingerprint: ${fingerprint}`,
+          'error'
+        );
+        return false;
+      }
+      const answer = await vscode.window.showWarningMessage(
+        `Trust SSH host ${host}:${port}? Fingerprint: ${fingerprint}`,
+        { modal: true },
+        'Trust and Connect'
+      );
+      if (answer === 'Trust and Connect') {
+        await hostKeyStore.trust(host, port, fingerprint);
+        return true;
+      }
+      return false;
+    }
+  };
   const sftpManager = new SftpManager({
-    createSession: (terminal) => new SftpSession(terminal.server, configManager),
+    createSession: (terminal) => new SftpSession(terminal.server, configManager, hostKeyVerifier),
     reporter: new VscodeTransferReporter()
   });
   const sftpTreeProvider = new SftpTreeProvider({
@@ -85,31 +110,6 @@ export function activate(context: vscode.ExtensionContext): void {
     sftpManager.removeTerminalContext(terminalId);
   });
 
-  const hostKeyVerifier = {
-    async verify(host: string, port: number, fingerprint: string): Promise<boolean> {
-      const status = await hostKeyStore.check(host, port, fingerprint);
-      if (status === 'trusted') {
-        return true;
-      }
-      if (status === 'changed') {
-        await showTimedNotification(
-          `Host key for ${host}:${port} changed. Connection blocked. Fingerprint: ${fingerprint}`,
-          'error'
-        );
-        return false;
-      }
-      const answer = await vscode.window.showWarningMessage(
-        `Trust SSH host ${host}:${port}? Fingerprint: ${fingerprint}`,
-        { modal: true },
-        'Trust and Connect'
-      );
-      if (answer === 'Trust and Connect') {
-        await hostKeyStore.trust(host, port, fingerprint);
-        return true;
-      }
-      return false;
-    }
-  };
   const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier);
   let agentToolDisposables: vscode.Disposable[] = [];
   let bridgeServer: BridgeServer | undefined;
@@ -123,10 +123,10 @@ export function activate(context: vscode.ExtensionContext): void {
       uriScheme: vscode.env.uriScheme,
       extensionPath: context.extensionUri.fsPath
     });
-    const sftpWriteAuthorizer = new SftpWriteAuthorizer(async () => true);
+    const sftpWriteAuthorizer = createProductionSftpWriteAuthorizer();
     sftpAgentService = new SftpAgentService({
       terminalContext,
-      createSession: (terminal) => new SftpSession(terminal.server, configManager),
+      createSession: (terminal) => new SftpSession(terminal.server, configManager, hostKeyVerifier),
       authorizer: sftpWriteAuthorizer
     });
     const agentToolService = new AgentToolService({

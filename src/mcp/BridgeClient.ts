@@ -1,8 +1,10 @@
 import { homedir } from 'node:os';
-import { readBridgeDiscovery } from './BridgeDiscovery';
+import { listBridgeDiscoveries } from './BridgeDiscovery';
 import {
   BRIDGE_HOST,
+  BRIDGE_SELECTION_CACHE_MS,
   BRIDGE_TOKEN_HEADER,
+  type BridgeDiscovery,
   type GetTerminalContextBridgeResponse,
   type ListSshServersBridgeResponse,
   type RunRemoteCommandBridgeRequest,
@@ -29,6 +31,9 @@ type FetchLike = (
 ) => Promise<FetchLikeResponse>;
 
 export class BridgeClient {
+  private activeDiscovery: BridgeDiscovery | undefined;
+  private activeExpiresAt = 0;
+
   constructor(
     private readonly options: {
       home?: string;
@@ -72,18 +77,96 @@ export class BridgeClient {
     return this.call('/tools/sftp_create_directory', input);
   }
 
+  private clearActiveDiscovery(): void {
+    this.activeDiscovery = undefined;
+    this.activeExpiresAt = 0;
+  }
+
+  private async resolveDiscovery(fetchImpl: FetchLike): Promise<BridgeDiscovery> {
+    const now = Date.now();
+    if (this.activeDiscovery && now < this.activeExpiresAt) {
+      return this.activeDiscovery;
+    }
+
+    const home = this.options.home ?? homedir();
+    const candidates = await listBridgeDiscoveries(home);
+    if (candidates.length === 0) {
+      throw new Error(
+        'AT Terminal MCP bridge is not running. Open VS Code with the AT Terminal extension installed, then reload this MCP server.'
+      );
+    }
+
+    let best: { discovery: BridgeDiscovery; score: number } | undefined;
+    for (const discovery of candidates) {
+      try {
+        const health = await fetchImpl(`http://${BRIDGE_HOST}:${discovery.port}/health`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            [BRIDGE_TOKEN_HEADER]: discovery.token
+          },
+          body: '{}'
+        });
+        if (!health.ok) {
+          continue;
+        }
+
+        const contextResponse = await fetchImpl(
+          `http://${BRIDGE_HOST}:${discovery.port}/tools/get_terminal_context`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              [BRIDGE_TOKEN_HEADER]: discovery.token
+            },
+            body: '{}'
+          }
+        );
+        if (!contextResponse.ok) {
+          continue;
+        }
+        const context = (await contextResponse.json()) as {
+          connectedTerminals?: unknown[];
+        };
+        const connectedCount = Array.isArray(context.connectedTerminals)
+          ? context.connectedTerminals.length
+          : 0;
+        const score = connectedCount > 0 ? 2 : 1;
+        if (!best || score > best.score) {
+          best = { discovery, score };
+        }
+        if (score === 2) {
+          break;
+        }
+      } catch {
+        // try next candidate
+      }
+    }
+
+    if (!best) {
+      throw new Error(
+        'AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.'
+      );
+    }
+
+    this.activeDiscovery = best.discovery;
+    this.activeExpiresAt = Date.now() + BRIDGE_SELECTION_CACHE_MS;
+    return best.discovery;
+  }
+
   private async call<T>(path: string, body: unknown): Promise<T> {
     const fetchImpl = this.options.fetch ?? fetch;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const discovery = await readBridgeDiscovery(this.options.home ?? homedir());
-      if (!discovery) {
+      let discovery: BridgeDiscovery;
+      try {
+        discovery = await this.resolveDiscovery(fetchImpl);
+      } catch (error) {
         if (attempt < 2) {
+          this.clearActiveDiscovery();
           await delayBridgeRetry();
           continue;
         }
-        throw new Error(
-          'AT Terminal MCP bridge is not running. Open VS Code with the AT Terminal extension installed, then reload this MCP server.'
-        );
+        throw error;
       }
 
       let response: FetchLikeResponse;
@@ -97,11 +180,14 @@ export class BridgeClient {
           body: JSON.stringify(body)
         });
       } catch {
+        this.clearActiveDiscovery();
         if (attempt < 2) {
           await delayBridgeRetry();
           continue;
         }
-        throw new Error('AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.');
+        throw new Error(
+          'AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.'
+        );
       }
 
       const parsed = await parseJsonResponse(response);
@@ -109,6 +195,7 @@ export class BridgeClient {
         return parsed as T;
       }
       if (response.status === 401 && attempt < 2) {
+        this.clearActiveDiscovery();
         await delayBridgeRetry();
         continue;
       }
@@ -118,7 +205,9 @@ export class BridgeClient {
           : `Bridge request failed with HTTP ${response.status}.`;
       throw new Error(message);
     }
-    throw new Error('AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.');
+    throw new Error(
+      'AT Terminal MCP bridge is not reachable. Reload VS Code with AT Terminal running, then retry.'
+    );
   }
 }
 
