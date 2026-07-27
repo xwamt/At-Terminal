@@ -10,6 +10,7 @@ import { ConfigManager } from './config/ConfigManager';
 import type { ServerConfig } from './config/schema';
 import { BridgeServer } from './mcp/BridgeServer';
 import { detectHostApp } from './mcp/hostApp';
+import { syncPackagedHub } from './mcp/hubSync';
 import {
   ensureIdeMcpConfig,
   installContinueMcpConfig,
@@ -149,6 +150,9 @@ export function activate(context: vscode.ExtensionContext): void {
         typeof context.extension?.packageJSON?.version === 'string'
           ? context.extension.packageJSON.version
           : undefined
+    });
+    void syncPackagedHub(context).catch((error) => {
+      console.error('AT Terminal hub sync failed:', formatError(error));
     });
     void bridgeServer.start().catch((error) => {
       void showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');

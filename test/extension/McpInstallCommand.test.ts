@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
   ensureKiroMcpConfig: vi.fn(async () => undefined),
   installContinueMcpConfig: vi.fn(async () => 'continue-config'),
   installIdeMcpConfig: vi.fn(async () => 'ide-config'),
-  installKiroMcpConfig: vi.fn(async () => 'kiro-config')
+  installKiroMcpConfig: vi.fn(async () => 'kiro-config'),
+  syncPackagedHub: vi.fn(async () => ({ updated: false, activeVersion: '0.1.0' }))
 }));
 
 vi.mock('../../src/mcp/BridgeServer', () => ({
@@ -16,6 +17,10 @@ vi.mock('../../src/mcp/BridgeServer', () => ({
     dispose = mocks.bridgeDispose;
     start = mocks.bridgeStart;
   }
+}));
+
+vi.mock('../../src/mcp/hubSync', () => ({
+  syncPackagedHub: mocks.syncPackagedHub
 }));
 
 vi.mock('../../src/mcp/McpConfigInstaller', () => ({
@@ -68,6 +73,7 @@ describe('sshManager.installMcpConfig command', () => {
     mocks.installContinueMcpConfig.mockClear();
     mocks.installIdeMcpConfig.mockClear();
     mocks.installKiroMcpConfig.mockClear();
+    mocks.syncPackagedHub.mockClear();
     delete (vscode.workspace as { workspaceFolders?: unknown }).workspaceFolders;
     vi.spyOn(vscode.commands, 'registerCommand').mockImplementation((name: string, handler: (...args: unknown[]) => unknown) => {
       registeredCommands.set(name, handler);
@@ -102,6 +108,7 @@ describe('sshManager.installMcpConfig command', () => {
   it('ensures current IDE MCP config points at the current bundled server on activation', () => {
     activate(extensionContext());
 
+    expect(mocks.syncPackagedHub).toHaveBeenCalledOnce();
     expect(mocks.ensureIdeMcpConfig).toHaveBeenCalledWith({
       target: { id: 'kiro', displayName: 'Kiro' },
       mcpServerPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10/dist/mcp-server.js'

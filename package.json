@@ -596,7 +596,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:base": "node esbuild.config.mjs --variant=base",
-    "build:mcp": "node esbuild.config.mjs --variant=mcp",
+    "copy:hub": "node -e \"const fs=require('fs');const p=require.resolve('@at-series/mcp-hub/hub');fs.mkdirSync('dist',{recursive:true});fs.copyFileSync(p,'dist/hub.js');console.log('copied hub.js')\"",
+    "build:mcp": "node esbuild.config.mjs --variant=mcp && npm run copy:hub",
     "package:base": "npm run build:base && node scripts/package-variant.mjs base",
     "package:mcp": "npm run build:mcp && node scripts/package-variant.mjs mcp"
   },
