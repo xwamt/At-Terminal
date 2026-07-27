@@ -115,13 +115,21 @@ export function activate(context: vscode.ExtensionContext): void {
   let installMcpConfigCommand: vscode.Disposable | undefined;
   let uninstallMcpConfigCommand: vscode.Disposable | undefined;
   if (MCP_ENABLED) {
+    // MCP activate order: detectHostApp → syncPackagedHub → AgentToolService →
+    // BridgeServer.start (publish) → ensureAtSeriesConfig → install/uninstall commands.
+    // Dispose (via BridgeServer in subscriptions) only unpublishes; never uninstalls MCP
+    // config or deletes hub.js.
     const hostEnv = {
       appName: vscode.env.appName,
       appRoot: vscode.env.appRoot,
       uriScheme: vscode.env.uriScheme,
       extensionPath: context.extensionUri.fsPath
     };
+    const hostApp = detectHostApp(hostEnv);
     const currentWorkspaceFolder = () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    void syncPackagedHub(context).catch((error) => {
+      console.error('AT Terminal hub sync failed:', formatError(error));
+    });
     const sftpWriteAuthorizer = createProductionSftpWriteAuthorizer();
     sftpAgentService = new SftpAgentService({
       terminalContext,
@@ -136,14 +144,11 @@ export function activate(context: vscode.ExtensionContext): void {
     });
     bridgeServer = new BridgeServer({
       service: agentToolService,
-      hostApp: detectHostApp(hostEnv),
+      hostApp,
       pluginVersion:
         typeof context.extension?.packageJSON?.version === 'string'
           ? context.extension.packageJSON.version
           : undefined
-    });
-    void syncPackagedHub(context).catch((error) => {
-      console.error('AT Terminal hub sync failed:', formatError(error));
     });
     void bridgeServer.start().catch((error) => {
       void showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');

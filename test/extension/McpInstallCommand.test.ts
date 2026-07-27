@@ -110,4 +110,18 @@ describe('sshManager MCP config commands', () => {
       workspaceFolder: undefined
     });
   });
+
+  it('dispose unpublishes bridge without uninstalling MCP config', async () => {
+    const context = extensionContext();
+    activate(context);
+
+    mocks.uninstallAtSeriesConfigForCurrentIde.mockClear();
+    for (const subscription of [...context.subscriptions].reverse()) {
+      await Promise.resolve(subscription.dispose());
+    }
+    deactivate();
+
+    expect(mocks.bridgeDispose).toHaveBeenCalled();
+    expect(mocks.uninstallAtSeriesConfigForCurrentIde).not.toHaveBeenCalled();
+  });
 });
