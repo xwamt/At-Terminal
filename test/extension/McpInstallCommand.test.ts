@@ -4,11 +4,8 @@ import * as vscode from 'vscode';
 const mocks = vi.hoisted(() => ({
   bridgeDispose: vi.fn(async () => undefined),
   bridgeStart: vi.fn(async () => undefined),
-  ensureIdeMcpConfig: vi.fn(async () => undefined),
-  ensureKiroMcpConfig: vi.fn(async () => undefined),
-  installContinueMcpConfig: vi.fn(async () => 'continue-config'),
-  installIdeMcpConfig: vi.fn(async () => 'ide-config'),
-  installKiroMcpConfig: vi.fn(async () => 'kiro-config'),
+  ensureAtSeriesConfigForCurrentIde: vi.fn(async () => ({ updated: true })),
+  uninstallAtSeriesConfigForCurrentIde: vi.fn(async () => ({ removed: true })),
   syncPackagedHub: vi.fn(async () => ({ updated: false, activeVersion: '0.1.0' }))
 }));
 
@@ -24,21 +21,8 @@ vi.mock('../../src/mcp/hubSync', () => ({
 }));
 
 vi.mock('../../src/mcp/McpConfigInstaller', () => ({
-  ensureIdeMcpConfig: mocks.ensureIdeMcpConfig,
-  ensureKiroMcpConfig: mocks.ensureKiroMcpConfig,
-  installContinueMcpConfig: mocks.installContinueMcpConfig,
-  installIdeMcpConfig: mocks.installIdeMcpConfig,
-  resolveIdeMcpConfigTarget: vi.fn((options: { extensionPath?: string }) => {
-    const extensionPath = options.extensionPath ?? '';
-    if (extensionPath.includes('/.cursor/') || extensionPath.includes('\\.cursor\\')) {
-      return { id: 'cursor', displayName: 'Cursor' };
-    }
-    if (extensionPath.includes('/.kiro/') || extensionPath.includes('\\.kiro\\')) {
-      return { id: 'kiro', displayName: 'Kiro' };
-    }
-    return undefined;
-  }),
-  installKiroMcpConfig: mocks.installKiroMcpConfig
+  ensureAtSeriesConfigForCurrentIde: mocks.ensureAtSeriesConfigForCurrentIde,
+  uninstallAtSeriesConfigForCurrentIde: mocks.uninstallAtSeriesConfigForCurrentIde
 }));
 
 import { activate, deactivate } from '../../src/extension';
@@ -60,7 +44,7 @@ function extensionContext(extensionRoot = 'C:/Users/alan/.kiro/extensions/local.
   } as unknown as vscode.ExtensionContext;
 }
 
-describe('sshManager.installMcpConfig command', () => {
+describe('sshManager MCP config commands', () => {
   const registeredCommands = new Map<string, (...args: unknown[]) => unknown>();
 
   beforeEach(() => {
@@ -68,11 +52,8 @@ describe('sshManager.installMcpConfig command', () => {
     registeredCommands.clear();
     mocks.bridgeDispose.mockClear();
     mocks.bridgeStart.mockClear();
-    mocks.ensureIdeMcpConfig.mockClear();
-    mocks.ensureKiroMcpConfig.mockClear();
-    mocks.installContinueMcpConfig.mockClear();
-    mocks.installIdeMcpConfig.mockClear();
-    mocks.installKiroMcpConfig.mockClear();
+    mocks.ensureAtSeriesConfigForCurrentIde.mockClear();
+    mocks.uninstallAtSeriesConfigForCurrentIde.mockClear();
     mocks.syncPackagedHub.mockClear();
     delete (vscode.workspace as { workspaceFolders?: unknown }).workspaceFolders;
     vi.spyOn(vscode.commands, 'registerCommand').mockImplementation((name: string, handler: (...args: unknown[]) => unknown) => {
@@ -89,48 +70,44 @@ describe('sshManager.installMcpConfig command', () => {
     vi.restoreAllMocks();
   });
 
-  it('installs current IDE MCP config even when no workspace is open', async () => {
-    activate(extensionContext());
-
-    await registeredCommands.get('sshManager.installMcpConfig')?.();
-
-    expect(mocks.installIdeMcpConfig).toHaveBeenCalledWith({
-      target: { id: 'kiro', displayName: 'Kiro' },
-      mcpServerPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10/dist/mcp-server.js'
-    });
-    expect(mocks.installKiroMcpConfig).not.toHaveBeenCalled();
-    expect(mocks.installContinueMcpConfig).not.toHaveBeenCalled();
-    expect(vscode.window.showErrorMessage).not.toHaveBeenCalledWith(
-      'Open a workspace folder before installing AT Terminal MCP config.'
-    );
-  });
-
-  it('ensures current IDE MCP config points at the current bundled server on activation', () => {
+  it('ensures AT Series MCP config on activation', () => {
     activate(extensionContext());
 
     expect(mocks.syncPackagedHub).toHaveBeenCalledOnce();
-    expect(mocks.ensureIdeMcpConfig).toHaveBeenCalledWith({
-      target: { id: 'kiro', displayName: 'Kiro' },
-      mcpServerPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10/dist/mcp-server.js'
+    expect(mocks.ensureAtSeriesConfigForCurrentIde).toHaveBeenCalledWith({
+      appName: vscode.env.appName,
+      appRoot: vscode.env.appRoot,
+      uriScheme: vscode.env.uriScheme,
+      extensionPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10',
+      workspaceFolder: undefined
     });
-    expect(mocks.ensureKiroMcpConfig).not.toHaveBeenCalled();
   });
 
-  it('uses Cursor MCP config when the extension is installed in Cursor', async () => {
-    activate(extensionContext('C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.10'));
-
-    expect(mocks.ensureIdeMcpConfig).toHaveBeenCalledWith({
-      target: { id: 'cursor', displayName: 'Cursor' },
-      mcpServerPath: 'C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.10/dist/mcp-server.js'
-    });
+  it('install command calls ensure for current IDE', async () => {
+    activate(extensionContext());
 
     await registeredCommands.get('sshManager.installMcpConfig')?.();
 
-    expect(mocks.installIdeMcpConfig).toHaveBeenCalledWith({
-      target: { id: 'cursor', displayName: 'Cursor' },
-      mcpServerPath: 'C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.10/dist/mcp-server.js'
+    expect(mocks.ensureAtSeriesConfigForCurrentIde).toHaveBeenCalledWith({
+      appName: vscode.env.appName,
+      appRoot: vscode.env.appRoot,
+      uriScheme: vscode.env.uriScheme,
+      extensionPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10',
+      workspaceFolder: undefined
     });
-    expect(mocks.ensureKiroMcpConfig).not.toHaveBeenCalled();
-    expect(mocks.installKiroMcpConfig).not.toHaveBeenCalled();
+  });
+
+  it('uninstall command removes AT Series MCP config', async () => {
+    activate(extensionContext('C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.10'));
+
+    await registeredCommands.get('sshManager.uninstallAtSeriesMcpConfig')?.();
+
+    expect(mocks.uninstallAtSeriesConfigForCurrentIde).toHaveBeenCalledWith({
+      appName: vscode.env.appName,
+      appRoot: vscode.env.appRoot,
+      uriScheme: vscode.env.uriScheme,
+      extensionPath: 'C:/Users/alan/.cursor/extensions/local.at-terminal-mcp-0.2.10',
+      workspaceFolder: undefined
+    });
   });
 });

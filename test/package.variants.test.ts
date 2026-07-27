@@ -28,7 +28,9 @@ describe('package variants', () => {
 
   it('keeps the MCP config command only in the MCP manifest', () => {
     expect(JSON.stringify(baseManifest.contributes)).not.toContain('sshManager.installMcpConfig');
+    expect(JSON.stringify(baseManifest.contributes)).not.toContain('sshManager.uninstallAtSeriesMcpConfig');
     expect(JSON.stringify(mcpManifest.contributes.commands)).toContain('sshManager.installMcpConfig');
+    expect(JSON.stringify(mcpManifest.contributes.commands)).toContain('sshManager.uninstallAtSeriesMcpConfig');
   });
 
   it('keeps Connect available without showing it as an inline server action', () => {

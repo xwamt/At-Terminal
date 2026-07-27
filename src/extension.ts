@@ -12,10 +12,8 @@ import { BridgeServer } from './mcp/BridgeServer';
 import { detectHostApp } from './mcp/hostApp';
 import { syncPackagedHub } from './mcp/hubSync';
 import {
-  ensureIdeMcpConfig,
-  installContinueMcpConfig,
-  installIdeMcpConfig,
-  resolveIdeMcpConfigTarget
+  ensureAtSeriesConfigForCurrentIde,
+  uninstallAtSeriesConfigForCurrentIde
 } from './mcp/McpConfigInstaller';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
@@ -117,14 +115,15 @@ export function activate(context: vscode.ExtensionContext): void {
   let bridgeServer: BridgeServer | undefined;
   let sftpAgentService: SftpAgentService | undefined;
   let installMcpConfigCommand: vscode.Disposable | undefined;
+  let uninstallMcpConfigCommand: vscode.Disposable | undefined;
   if (MCP_ENABLED) {
-    const mcpServerPath = vscode.Uri.joinPath(context.extensionUri, 'dist', 'mcp-server.js').fsPath;
-    const ideMcpConfigTarget = resolveIdeMcpConfigTarget({
+    const hostEnv = {
       appName: vscode.env.appName,
       appRoot: vscode.env.appRoot,
       uriScheme: vscode.env.uriScheme,
       extensionPath: context.extensionUri.fsPath
-    });
+    };
+    const currentWorkspaceFolder = () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const sftpWriteAuthorizer = createProductionSftpWriteAuthorizer();
     sftpAgentService = new SftpAgentService({
       terminalContext,
@@ -140,12 +139,7 @@ export function activate(context: vscode.ExtensionContext): void {
     agentToolDisposables = registerAgentTools(agentToolService);
     bridgeServer = new BridgeServer({
       service: agentToolService,
-      hostApp: detectHostApp({
-        appName: vscode.env.appName,
-        appRoot: vscode.env.appRoot,
-        uriScheme: vscode.env.uriScheme,
-        extensionPath: context.extensionUri.fsPath
-      }),
+      hostApp: detectHostApp(hostEnv),
       pluginVersion:
         typeof context.extension?.packageJSON?.version === 'string'
           ? context.extension.packageJSON.version
@@ -157,20 +151,45 @@ export function activate(context: vscode.ExtensionContext): void {
     void bridgeServer.start().catch((error) => {
       void showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');
     });
-    void ensureIdeMcpConfig({ target: ideMcpConfigTarget, mcpServerPath }).catch((error) => {
-      void showTimedNotification(`AT Terminal MCP config could not be updated: ${formatError(error)}`, 'warning');
+    void ensureAtSeriesConfigForCurrentIde({
+      ...hostEnv,
+      workspaceFolder: currentWorkspaceFolder()
+    }).catch((error) => {
+      void showTimedNotification(`AT Series MCP config could not be updated: ${formatError(error)}`, 'warning');
     });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
-      const targets = ideMcpConfigTarget ? [await installIdeMcpConfig({ target: ideMcpConfigTarget, mcpServerPath })] : [];
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (workspaceFolder) {
-        targets.push(await installContinueMcpConfig({ workspaceFolder, mcpServerPath }));
-      }
-      if (targets.length > 0) {
-        await showTimedNotification(`AT Terminal MCP config installed: ${targets.join('; ')}`);
+      const result = await ensureAtSeriesConfigForCurrentIde({
+        ...hostEnv,
+        workspaceFolder: currentWorkspaceFolder()
+      });
+      if (result) {
+        await showTimedNotification(
+          result.updated ? 'AT Series MCP config installed/repaired.' : 'AT Series MCP config is already up to date.'
+        );
         return;
       }
-      await showTimedNotification('No supported IDE MCP config target was detected. Open a workspace to install Continue config.', 'warning');
+      await showTimedNotification(
+        'No supported IDE MCP config target was detected. Open a workspace to install Continue config.',
+        'warning'
+      );
+    });
+    uninstallMcpConfigCommand = vscode.commands.registerCommand('sshManager.uninstallAtSeriesMcpConfig', async () => {
+      const result = await uninstallAtSeriesConfigForCurrentIde({
+        ...hostEnv,
+        workspaceFolder: currentWorkspaceFolder()
+      });
+      if (result?.removed) {
+        await showTimedNotification('AT Series MCP config uninstalled.');
+        return;
+      }
+      if (result) {
+        await showTimedNotification('AT Series MCP config was not present.');
+        return;
+      }
+      await showTimedNotification(
+        'No supported IDE MCP config target was detected. Open a workspace to uninstall Continue config.',
+        'warning'
+      );
     });
   }
 
@@ -179,6 +198,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ...(bridgeServer ? [bridgeServer] : []),
     ...(sftpAgentService ? [sftpAgentService] : []),
     ...(installMcpConfigCommand ? [installMcpConfigCommand] : []),
+    ...(uninstallMcpConfigCommand ? [uninstallMcpConfigCommand] : []),
     vscode.window.createTreeView('sshManager.servers', {
       treeDataProvider: treeProvider,
       showCollapseAll: true

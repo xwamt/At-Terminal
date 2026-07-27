@@ -424,7 +424,11 @@
       },
       {
         "command": "sshManager.installMcpConfig",
-        "title": "AT Terminal: Install MCP Config"
+        "title": "Install/Repair AT Series MCP Config"
+      },
+      {
+        "command": "sshManager.uninstallAtSeriesMcpConfig",
+        "title": "Uninstall AT Series MCP Config"
       },
       {
         "command": "sshManager.exportAssets",
