@@ -33,3 +33,5 @@ Local consequences for this repo when implemented:
 
 Requirements (grill decisions): `C:\Users\alan\Desktop\at-series-mcp-hub\docs\requirements.md`
 
+Adaptation record for this repository: [ADR-005](ADR-005-at-series-hub-adaptation.md).
+

@@ -46,8 +46,9 @@ It:
 - Updates the current IDE MCP config, such as Kiro's `~/.kiro/settings/mcp.json` or Cursor's `~/.cursor/mcp.json`.
 - Creates Continue workspace config at `.continue/mcpServers/at-terminal.yaml` when a workspace is open.
 - Writes an **AT Series** MCP server entry that runs `node` against `~/.at-series/mcp/hub.js` (and migrates legacy per-plugin `AT Terminal` entries away).
+- Default `autoApprove` covers hub builtins and read-risk tools only; `run_remote_command` (exec) and SFTP write/create tools stay out of auto-approve.
 
-If automatic config fails, point the IDE MCP client at the shared hub:
+If automatic config fails, point the IDE MCP client at the shared hub (AT Series only — do not point at a per-plugin `mcp-server.js`):
 
 ```json
 {

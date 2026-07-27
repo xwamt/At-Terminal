@@ -2,6 +2,8 @@
 
 AT Terminal MCP 是 AT Terminal 的 MCP 增强版。它保留基础版的 SSH 终端、SFTP 文件管理和远程文件本地编辑能力，并通过共享 **AT Series** MCP hub 向 Kiro、Cursor、Continue 等 Agent 暴露远程命令和 SFTP 工具。
 
+IDE MCP 配置里只有 **AT Series** 这一条入口（运行 `~/.at-series/mcp/hub.js`），不再安装 per-plugin `mcp-server.js`，也不再贡献 `languageModelTools`。详见 [ADR-005](decisions/ADR-005-at-series-hub-adaptation.md)。
+
 如果你只需要 SSH/SFTP 功能，请安装基础版 `AT Terminal`。如果你需要让 IDE Agent 调用远程命令或远程文件工具，请安装 `AT Terminal MCP`。
 
 ## 文档入口

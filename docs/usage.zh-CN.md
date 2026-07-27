@@ -46,8 +46,9 @@ AT Terminal: Install MCP Config
 - 更新当前 IDE 的 MCP 配置，例如 Kiro 的 `~/.kiro/settings/mcp.json` 或 Cursor 的 `~/.cursor/mcp.json`。
 - 当前打开 workspace 时，创建 Continue workspace 配置 `.continue/mcpServers/at-terminal.yaml`。
 - 写入名为 **AT Series** 的 MCP 条目，使用 `node` 运行 `~/.at-series/mcp/hub.js`，并迁移掉旧的 per-plugin `AT Terminal` 条目。
+- 默认 `autoApprove` 仅包含 hub 内置工具与 read 风险工具；`run_remote_command`（exec）以及 SFTP 写/创建类工具不会进入 autoApprove。
 
-如果自动配置失败，手动把 IDE MCP 客户端指向共享 hub：
+如果自动配置失败，手动把 IDE MCP 客户端指向共享 hub（仅 **AT Series**，不要再指向 per-plugin `mcp-server.js`）：
 
 ```json
 {
