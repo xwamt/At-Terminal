@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { AgentToolService } from './agent/AgentToolService';
-import { registerAgentTools } from './agent/AgentTools';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
 import { SftpAgentService } from './agent/SftpAgentService';
 import { createProductionSftpWriteAuthorizer } from './agent/createSftpWriteAuthorizer';
@@ -111,7 +110,6 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier);
-  let agentToolDisposables: vscode.Disposable[] = [];
   let bridgeServer: BridgeServer | undefined;
   let sftpAgentService: SftpAgentService | undefined;
   let installMcpConfigCommand: vscode.Disposable | undefined;
@@ -136,7 +134,6 @@ export function activate(context: vscode.ExtensionContext): void {
       executor: remoteCommandExecutor,
       sftp: sftpAgentService
     });
-    agentToolDisposables = registerAgentTools(agentToolService);
     bridgeServer = new BridgeServer({
       service: agentToolService,
       hostApp: detectHostApp(hostEnv),
@@ -194,7 +191,6 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
-    ...agentToolDisposables,
     ...(bridgeServer ? [bridgeServer] : []),
     ...(sftpAgentService ? [sftpAgentService] : []),
     ...(installMcpConfigCommand ? [installMcpConfigCommand] : []),

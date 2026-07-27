@@ -1,6 +1,6 @@
 # Features
 
-AT Terminal MCP combines the base AT Terminal SSH/SFTP workspace with agent-facing MCP and VS Code language model tools.
+AT Terminal MCP combines the base AT Terminal SSH/SFTP workspace with agent-facing tools exposed through the shared **AT Series** MCP hub.
 
 ## Base AT Terminal Features
 
@@ -57,7 +57,7 @@ This workflow is useful for:
 
 ## MCP And Agent Tools
 
-AT Terminal MCP contributes VS Code language model tools and a local stdio MCP server. The MCP server connects back to the running AT Terminal MCP extension, so credentials and host trust stay inside the extension host.
+AT Terminal MCP publishes tools through the shared **AT Series** hub (`~/.at-series/mcp/hub.js`). The hub connects back to the running AT Terminal MCP extension bridge, so credentials and host trust stay inside the extension host.
 
 | Tool | Type | Description |
 | --- | --- | --- |
@@ -75,7 +75,7 @@ AT Terminal MCP contributes VS Code language model tools and a local stdio MCP s
 
 - SFTP agent writes use a real first-write authorization prompt per server for the current extension host session.
 - All SSH and SFTP connect paths verify host keys (unknown hosts prompt; changed hosts are blocked).
-- MCP bridge discovery supports multiple IDE windows via `~/.at-terminal/mcp-bridges/`; clients prefer bridges with connected terminals. `~/.at-terminal/mcp-bridge.json` remains a last-writer compatibility snapshot.
+- Bridges publish into the AT Series registry under `~/.at-series/bridges/<hostApp>/`.
 - Bridge requests validate JSON schemas and enforce a maximum body size (2 MiB).
 - `run_remote_command` asks for confirmation before commands unless the target server has `Trust agent remote commands` enabled. Dangerous-looking commands still ask for confirmation.
 - The server trust switch affects only `run_remote_command`. It does not bypass SFTP write authorization or SSH host key trust.

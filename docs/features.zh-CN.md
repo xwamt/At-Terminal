@@ -1,6 +1,6 @@
 # 功能介绍
 
-AT Terminal MCP 将 AT Terminal 基础版的 SSH/SFTP 工作区能力与面向 Agent 的 MCP 和 VS Code language model tools 结合在一起。
+AT Terminal MCP 将 AT Terminal 基础版的 SSH/SFTP 工作区能力与通过共享 **AT Series** MCP hub 暴露的 Agent 工具结合在一起。
 
 ## 基础 AT Terminal 能力
 
@@ -57,7 +57,7 @@ MCP 版仍然包含基础版工作流：
 
 ## MCP 和 Agent 工具
 
-AT Terminal MCP 提供 VS Code language model tools 和本地 stdio MCP server。MCP server 会连接回正在运行的 AT Terminal MCP 扩展，因此凭据和主机信任仍保留在扩展宿主内。
+AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发布工具。hub 会连接回正在运行的 AT Terminal MCP 扩展 bridge，因此凭据和主机信任仍保留在扩展宿主内。
 
 | 工具 | 类型 | 说明 |
 | --- | --- | --- |
@@ -75,21 +75,22 @@ AT Terminal MCP 提供 VS Code language model tools 和本地 stdio MCP server�
 
 - `run_remote_command` 在目标服务器启用 `Trust agent remote commands` 前会请求确认。疑似危险命令仍会请求确认。
 - 服务器信任开关只影响 `run_remote_command`，不会跳过 SFTP 写入授权或 SSH 主机指纹信任。
+- Bridge 发布到 AT Series 注册表 `~/.at-series/bridges/<hostApp>/`。
 - SFTP 写入工具会在当前扩展宿主会话内，对每台服务器的首次写入请求确认。
 - 只读工具不会返回密码、私钥或 SecretStorage 内容。
 - SFTP 读取有大小限制，避免把大文件直接灌入 Agent 上下文。
-- 写入工具会解析远程路径，并禁止修改远程根路径。
+- 写入工具会解析远程路径，不允许修改远程根路径。
 
 ## 资产导入导出
 
-运行 `AT Terminal: Export Assets` 可以创建加密的 `.at-terminal-assets` 包，用于保存 SSH 服务器配置。密码和私钥文件是可选导出项，只有在选择后才会包含。
+运行 `AT Terminal: Export Assets` 可创建加密的 `.at-terminal-assets` 包，包含 SSH 服务器配置。密码和私钥文件是可选导出项，只有勾选后才会包含。
 
-在另一个受支持的 IDE 或设备中运行 `AT Terminal: Import Assets`，可以解密并导入选中的资产。导入的私钥会存储在扩展的全局存储区域，服务器配置会更新为新的本地路径。SSH 主机信任记录不会迁移，因此导入后的首次连接仍会请求主机信任确认。
+在另一台支持的 IDE 或设备上运行 `AT Terminal: Import Assets` 可解密并导入所选资产。导入的私钥会存放到扩展的全局存储区，服务器配置会更新为新的本地路径。SSH 主机信任记录不会迁移，因此导入后首次连接仍会请求主机信任确认。
 
-## UI 和主题适配
+## UI 与主题适配
 
-- 使用 Webview 表单添加和编辑服务器。
-- 密码和私钥认证区域清晰分组。
-- 私钥支持通过文件选择器选择。
-- 表单提供内联校验和保存状态。
-- 图标、侧边栏和表单会跟随当前 IDE 主题。
+- 用于添加和编辑服务器的 Webview 表单。
+- 清晰的密码与私钥认证分区。
+- 通过文件选择器选择私钥。
+- 内联校验与保存状态。
+- 图标、侧边栏和表单会适配当前 IDE 主题。

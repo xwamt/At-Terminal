@@ -1,8 +1,10 @@
-name: AT Terminal MCP
+name: AT Series
 version: 0.0.1
 schema: v1
 mcpServers:
-  - name: AT Terminal
+  - name: AT Series
     command: node
     args:
-      - C:/ABSOLUTE/PATH/TO/AT-TERMINAL/dist/mcp-server.js
+      - ${userHome}/.at-series/mcp/hub.js
+    env:
+      AT_SERIES_HOST_APP: continue

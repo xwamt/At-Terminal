@@ -11,17 +11,8 @@ export { AT_SERIES_TOKEN_HEADER, BRIDGE_HOST, BRIDGE_MAX_BODY_BYTES, AT_SERIES_P
 
 /** Legacy auth header accepted during AT Series migration. */
 export const BRIDGE_TOKEN_HEADER = 'x-at-terminal-token';
-export const BRIDGE_SELECTION_CACHE_MS = 1500;
 
 export const AT_TERMINAL_PLUGIN_DISPLAY_NAME = 'AT Terminal';
-
-export interface BridgeDiscovery {
-  id?: string;
-  port: number;
-  token: string;
-  pid: number;
-  updatedAt: number;
-}
 
 export interface BridgeServerSummary {
   id: string;

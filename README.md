@@ -40,15 +40,15 @@ Use $writing-ops-documents for operation records, troubleshooting reports, deplo
 
 **AT** **Terminal** 是一款面向 VS Code 兼容 IDE 的 SSH 终端与 SFTP 远程文件工作区扩展。它通过标准 SSH/SFTP 协议直接连接远程服务器，不需要在服务器上安装 VS Code Server、Remote Agent 或任何额外服务端组件。
 
-**AT** **Terminal** **MCP** 是 AT Terminal 的 Agent 增强版本。它保留完整的 SSH 终端、SFTP 文件管理和远程文件本地编辑能力，同时增加 VS Code Language Model Tools 与本地 stdio MCP Server，让 GitHub Copilot Chat、Kiro、Cursor、Continue 等支持工具调用或 MCP 的 AI IDE，可以通过受控工具读取远程文件、执行非交互命令，并协助完成远程脚本和配置文件维护
+**AT** **Terminal** **MCP** 是 AT Terminal 的 Agent 增强版本。它保留完整的 SSH 终端、SFTP 文件管理和远程文件本地编辑能力，同时通过共享 **AT Series** MCP hub，让 Kiro、Cursor、Continue 等支持 MCP 的 AI IDE 可以通过受控工具读取远程文件、执行非交互命令，并协助完成远程脚本和配置文件维护
 
 项目提供两个面向不同用户的构建版本。
 
 | Capability | Base `AT Terminal` | `AT Terminal MCP` |
 | --- | --- | --- |
 | SSH terminal and SFTP workspace | Included | Included |
-| VS Code Language Model Tools | Not included | Included |
-| Local stdio MCP server (`dist/mcp-server.js`) | Not included | Included |
+| AT Series MCP hub / bridge | Not included | Included |
+| Packaged `dist/hub.js` sync | Not included | Included |
 | Installable Agent Skills | Installed separately | Installed separately |
 
 |                              |             |                 |
@@ -58,8 +58,8 @@ Use $writing-ops-documents for operation records, troubleshooting reports, deplo
 | SFTP 文件工作区                   | 支持          | 支持              |
 | 远程文件本地编辑                     | 支持          | 支持              |
 | 资产导入导出                       | 支持          | 支持              |
-| VS Code Language Model Tools | 不包含         | 支持              |
-| 本地 stdio MCP Server          | 不包含         | 支持              |
+| AT Series MCP hub / bridge   | 不包含         | 支持              |
+| 打包 `hub.js` 同步               | 不包含         | 支持              |
 | MCP 配置安装命令                   | 不包含         | 支持              |
 | Agent 工具指导文件                 | 不包含         | 支持              |
 

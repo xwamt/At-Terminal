@@ -22,13 +22,13 @@ npm run package:mcp
 
 Generated files:
 
-- `at-terminal-2.10.2.vsix`: base extension without MCP tools.
-- `at-terminal-mcp-2.10.2.vsix`: MCP-enabled extension with tools and stdio MCP server.
+- `at-terminal-*.vsix`: base extension without MCP bridge / hub.
+- `at-terminal-mcp-*.vsix`: MCP-enabled extension with AT Series hub packaging and bridge.
 
 Install the MCP build:
 
 ```powershell
-code --install-extension .\at-terminal-mcp-2.10.2.vsix
+code --install-extension .\at-terminal-mcp-0.2.17.vsix
 ```
 
 For Kiro and Cursor, install the VSIX through the IDE's extension UI or compatible command-line installer.
@@ -45,16 +45,25 @@ It:
 
 - Updates the current IDE MCP config, such as Kiro's `~/.kiro/settings/mcp.json` or Cursor's `~/.cursor/mcp.json`.
 - Creates Continue workspace config at `.continue/mcpServers/at-terminal.yaml` when a workspace is open.
-- Uses the installed extension path from the current IDE, so Kiro, Cursor, and other IDEs do not accidentally point at each other's extension directories.
+- Writes an **AT Series** MCP server entry that runs `node` against `~/.at-series/mcp/hub.js` (and migrates legacy per-plugin `AT Terminal` entries away).
 
-If automatic config fails, the MCP config for each IDE only needs `args[0]` to point at `dist/mcp-server.js` inside that IDE's installed AT Terminal MCP extension directory. The `command`, MCP server name, and tool settings are otherwise the same.
+If automatic config fails, point the IDE MCP client at the shared hub:
 
-How to find the extension directory in VS Code-compatible IDEs:
+```json
+{
+  "mcpServers": {
+    "AT Series": {
+      "command": "node",
+      "args": ["C:/Users/YOU/.at-series/mcp/hub.js"],
+      "env": {
+        "AT_SERIES_HOST_APP": "cursor"
+      }
+    }
+  }
+}
+```
 
-1. Open the Command Palette in the target IDE.
-2. Search for and run `Open Extensions Folder`.
-3. Find `local.at-terminal-mcp-<version>` or `at-terminal-mcp-<version>`.
-4. Confirm that `dist/mcp-server.js` exists in that folder, then use its full path in `args`.
+Keep the IDE window with AT Terminal MCP running so the extension can publish its bridge into `~/.at-series` and elect `hub.js`.
 
 ## Tool Targeting
 
@@ -74,16 +83,17 @@ Example:
 
 ```json
 {
-  "name": "AT Terminal MCP",
-  "version": "0.0.1",
-  "schema": "v1",
   "mcpServers": {
-    "AT Terminal": {
+    "AT Series": {
       "command": "node",
       "args": [
-        "<AT Terminal MCP extension directory>/dist/mcp-server.js"
+        "C:/Users/YOU/.at-series/mcp/hub.js"
       ],
+      "env": {
+        "AT_SERIES_HOST_APP": "kiro"
+      },
       "autoApprove": [
+        "at_list_providers",
         "list_ssh_servers",
         "get_terminal_context",
         "sftp_list_directory",
@@ -109,13 +119,11 @@ If you add write tools to `autoApprove`, AT Terminal MCP still applies its own w
 Kiro test prompts:
 
 ```text
-Use the AT Terminal MCP tool list_ssh_servers to list my SSH servers authorized for background connections.
+Use the AT Series / AT Terminal tool list_ssh_servers to list my SSH servers authorized for background connections.
 Use get_terminal_context to show my AT Terminal context.
 Use sftp_list_directory to list /tmp on the connected AT Terminal server.
 Use sftp_read_file to read /etc/os-release on the connected AT Terminal server.
 ```
-
-If you see `MODULE_NOT_FOUND`, check whether `args[0]` points at the extension directory for the current IDE. Kiro should point at Kiro's extension directory, Cursor should point at Cursor's extension directory, and they should not reuse each other's `.vscode/extensions`, `.cursor/extensions`, or `.kiro/extensions` paths.
 
 ## Cursor
 
@@ -128,75 +136,45 @@ Example:
 
 ```json
 {
-  "name": "AT Terminal MCP",
-  "version": "0.0.1",
-  "schema": "v1",
   "mcpServers": {
-    "AT Terminal": {
+    "AT Series": {
       "command": "node",
       "args": [
-        "<AT Terminal MCP extension directory>/dist/mcp-server.js"
+        "${userHome}/.at-series/mcp/hub.js"
       ],
+      "env": {
+        "AT_SERIES_HOST_APP": "cursor"
+      },
       "autoApprove": [
+        "at_list_providers",
         "list_ssh_servers",
         "get_terminal_context",
-        "run_remote_command",
         "sftp_list_directory",
         "sftp_stat_path",
-        "sftp_read_file",
-        "sftp_write_file",
-        "sftp_create_file",
-        "sftp_create_directory"
+        "sftp_read_file"
       ]
     }
   }
 }
 ```
 
-Project-local example with variables:
-
-```json
-{
-  "name": "AT Terminal MCP",
-  "version": "0.0.1",
-  "schema": "v1",
-  "mcpServers": {
-    "AT Terminal": {
-      "command": "node",
-      "args": [
-        "${userHome}/.cursor/extensions/local.at-terminal-mcp-2.10.2/dist/mcp-server.js"
-      ],
-      "autoApprove": [
-        "list_ssh_servers",
-        "get_terminal_context",
-        "run_remote_command",
-        "sftp_list_directory",
-        "sftp_stat_path",
-        "sftp_read_file",
-        "sftp_write_file",
-        "sftp_create_file",
-        "sftp_create_directory"
-      ]
-    }
-  }
-}
-```
-
-Restart Cursor or refresh MCP servers after editing the config. Keep the Cursor window with AT Terminal MCP running so the MCP server can connect to the local bridge.
+Restart Cursor or refresh MCP servers after editing the config. Keep the Cursor window with AT Terminal MCP running so the hub can reach the local bridge.
 
 ## Continue
 
 Workspace example:
 
 ```yaml
-name: AT Terminal MCP
+name: AT Series
 version: 0.0.1
 schema: v1
 mcpServers:
-  - name: AT Terminal
+  - name: AT Series
     command: node
     args:
-      - "<AT Terminal MCP extension directory>/dist/mcp-server.js"
+      - ${userHome}/.at-series/mcp/hub.js
+    env:
+      AT_SERIES_HOST_APP: continue
 ```
 
 The repository also includes this sample file:
@@ -205,24 +183,24 @@ The repository also includes this sample file:
 docs/mcp/continue-at-terminal-mcp.yaml
 ```
 
-## GitHub Copilot Chat
+## Agent Access
 
-After installing `at-terminal-mcp-2.10.2.vsix` in VS Code, Copilot Chat Agent mode can discover the contributed language model tools.
+After installing `at-terminal-mcp-*.vsix`, configure the IDE MCP client for **AT Series** (prefer `AT Terminal: Install MCP Config`). Tools such as `list_ssh_servers`, `get_terminal_context`, and SFTP helpers are exposed through the shared hub rather than VS Code built-in LM tool contributions.
 
 Example prompts:
 
 ```text
-Use #list_ssh_servers to list my AT Terminal SSH servers.
-Use #get_terminal_context to show my AT Terminal context.
-Use #sftp_read_file to read /etc/os-release from the connected AT Terminal server.
+Use list_ssh_servers to list my AT Terminal SSH servers.
+Use get_terminal_context to show my AT Terminal context.
+Use sftp_read_file to read /etc/os-release from the connected AT Terminal server.
 ```
 
-If Copilot cannot see the tools:
+If tools are missing:
 
 1. Confirm that the MCP build is installed, not the base build.
-2. Reload Window.
-3. Open the AT Terminal activity bar view once to activate the extension.
-4. Check that the installed extension's `package.json` contains `contributes.languageModelTools`.
+2. Reload Window and keep AT Terminal MCP activated.
+3. Run `AT Terminal: Install MCP Config`.
+4. Confirm `~/.at-series/mcp/hub.js` exists and the MCP entry is named `AT Series`.
 
 ## Commands
 
@@ -258,9 +236,10 @@ Asset commands:
 - `AT Terminal: Export Assets`
 - `AT Terminal: Import Assets`
 
-MCP command:
+MCP commands:
 
 - `AT Terminal: Install MCP Config`
+- `AT Terminal: Uninstall AT Series MCP Config`
 
 ## Settings
 

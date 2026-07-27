@@ -1,7 +1,7 @@
 ﻿# ADR-004: Adopt AT Series shared MCP Hub (Protocol v1)
 
 ## Status
-Accepted (design); implementation pending
+Accepted (implemented for product packaging: languageModelTools and per-plugin mcp-server entry removed)
 
 ## Date
 2026-07-23
