@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build and test output
+dist/
+out/
+coverage/
+.vscode-test/
+*.tsbuildinfo
+
+# Packaged extensions
+*.vsix
+.package-work/
+
+# Local workspace state
+.worktrees/
+.superpowers/
+docs/brand/
+docs/superpowers/
+media/terminal.svg
+media/terminal-activity.svg
+
+# Editor and OS files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.example.json
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and diagnostics
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local secrets and machine-specific config
+.env
+.env.*
+!.env.example
+!.env.sample
+*.local
+.kiro/
+ATmcp.json
+
+# Binary planning/export artifacts
+*.docx

@@ -1,0 +1,520 @@
+html,
+body {
+  min-width: 0;
+  min-height: 100%;
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+}
+
+.server-form-shell {
+  width: min(920px, 100%);
+  padding: 24px 28px 30px;
+  box-sizing: border-box;
+}
+
+.form-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  margin-bottom: 18px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  color: var(--vscode-foreground);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+h2 {
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+p {
+  max-width: 560px;
+  margin-top: 5px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.form-status {
+  flex: 0 0 auto;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-badge-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.server-form {
+  display: grid;
+  gap: 16px;
+}
+
+.form-section-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.form-right-col {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  align-content: start;
+}
+
+.form-panel {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--vscode-sideBar-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+}
+
+.form-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+}
+
+.form-panel-header span {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.field-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  padding: 7px 9px;
+  line-height: 1.35;
+}
+
+input:hover,
+select:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+input:focus,
+select:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.field-stack select {
+  min-height: 32px;
+}
+
+.group-combobox {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  min-width: 0;
+}
+
+.group-combobox input {
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.group-combobox-toggle {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-left: 0;
+  border-radius: 0 4px 4px 0;
+  padding: 7px 0;
+  line-height: 1.35;
+}
+
+.group-combobox-toggle:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.group-combobox-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  max-height: 180px;
+  overflow-y: auto;
+  color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+  background: var(--vscode-dropdown-background, var(--vscode-input-background));
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+
+.group-combobox-menu[hidden] {
+  display: none;
+}
+
+.group-combobox-option {
+  width: 100%;
+  min-width: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.group-combobox-option:hover,
+.group-combobox-option:focus {
+  color: var(--vscode-list-hoverForeground, inherit);
+  background: var(--vscode-list-hoverBackground);
+  outline: none;
+}
+
+.jump-host-server-field select:disabled {
+  opacity: 0.72;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.trust-block {
+  grid-column: 1 / -1;
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--vscode-input-background);
+}
+
+.trust-toggle-row {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.trust-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.trust-toggle-title {
+  color: var(--vscode-foreground);
+  font-weight: 600;
+}
+
+.trust-toggle-row input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.trust-sub {
+  border-top: 1px dashed var(--vscode-panel-border);
+  padding: 0 10px 10px;
+}
+
+.trust-sub[hidden] {
+  display: none !important;
+}
+
+.trust-sub-inner {
+  margin-left: 12px;
+  border-left: 2px solid var(--vscode-focusBorder);
+  padding: 8px 0 2px 12px;
+}
+
+.trust-sub .trust-toggle-row {
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 6px;
+  background: var(--vscode-sideBar-background);
+  padding: 9px 11px;
+}
+
+.form-panel-summary {
+  grid-column: 1 / -1;
+}
+
+.auth-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px 14px 0;
+}
+
+.auth-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  text-align: left;
+  color: var(--vscode-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.auth-card:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.auth-card.is-selected {
+  color: var(--vscode-list-activeSelectionForeground);
+  background: var(--vscode-list-activeSelectionBackground);
+  border-color: var(--vscode-focusBorder);
+}
+
+.auth-card-title {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.auth-card-copy,
+.field-help {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-card.is-selected .auth-card-copy {
+  color: inherit;
+}
+
+.auth-fields {
+  padding: 14px;
+}
+
+.auth-private-key .auth-password-field,
+.auth-password .auth-key-field {
+  display: none;
+}
+
+.file-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.password-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.password-toggle {
+  min-width: 58px;
+}
+
+.secondary-action {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  border: 0;
+  border-radius: 4px;
+  padding: 7px 10px;
+  line-height: 1.35;
+}
+
+.secondary-action:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.secondary-action[disabled] {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.connection-summary {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.summary-line:first-child {
+  color: var(--vscode-foreground);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 34px;
+  padding-top: 2px;
+}
+
+.form-error {
+  min-width: 0;
+  color: var(--vscode-errorForeground);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.form-feedback {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.test-status {
+  min-width: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.test-status.is-success {
+  color: var(--vscode-testing-iconPassed, var(--vscode-terminal-ansiGreen));
+}
+
+.test-status.is-error {
+  color: var(--vscode-errorForeground);
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.primary-action {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: 0;
+  border-radius: 4px;
+  padding: 8px 14px;
+  line-height: 1.2;
+}
+
+.primary-action[disabled] {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.primary-action.is-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.submit-spinner {
+  display: none;
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+}
+
+.primary-action.is-loading .submit-spinner {
+  display: inline-block;
+  animation: submit-spin 800ms linear infinite;
+}
+
+.primary-action:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.primary-action:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+}
+
+@keyframes submit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .server-form-shell {
+    padding: 20px;
+  }
+
+  .form-section-grid,
+  .field-grid,
+  .auth-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-right-col {
+    grid-template-columns: 1fr;
+  }
+
+  .form-header,
+  .form-footer {
+    display: grid;
+  }
+
+  .form-actions {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .secondary-action,
+  .primary-action {
+    width: 100%;
+  }
+}

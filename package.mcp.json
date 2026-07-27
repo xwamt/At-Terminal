@@ -1,0 +1,616 @@
+{
+  "name": "at-terminal-mcp",
+  "displayName": "AT Terminal MCP",
+  "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
+  "version": "0.2.17",
+  "publisher": "local",
+  "icon": "media/at-terminal-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:sshManager.servers",
+    "onView:sshManager.sftpFiles",
+    "onLanguageModelTool:list_ssh_servers",
+    "onLanguageModelTool:get_terminal_context",
+    "onLanguageModelTool:run_remote_command",
+    "onLanguageModelTool:sftp_list_directory",
+    "onLanguageModelTool:sftp_stat_path",
+    "onLanguageModelTool:sftp_read_file",
+    "onLanguageModelTool:sftp_write_file",
+    "onLanguageModelTool:sftp_create_file",
+    "onLanguageModelTool:sftp_create_directory"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languageModelTools": [
+      {
+        "name": "list_ssh_servers",
+        "tags": [
+          "ssh",
+          "server",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "list_ssh_servers",
+        "displayName": "List SSH Servers",
+        "userDescription": "List AT Terminal SSH servers authorized for background connections.",
+        "modelDescription": "List configured SSH servers authorized for MCP background connections without exposing passwords or private keys.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "get_terminal_context",
+        "tags": [
+          "ssh",
+          "terminal",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "get_terminal_context",
+        "displayName": "Get Terminal Context",
+        "userDescription": "Show focused and default AT Terminal SSH terminal context.",
+        "modelDescription": "Return focusedTerminal, defaultConnectedTerminal, connectedTerminals, and knownTerminals for AT Terminal SSH sessions without exposing credentials.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "run_remote_command",
+        "tags": [
+          "ssh",
+          "terminal",
+          "remote"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "run_remote_command",
+        "displayName": "Run Remote SSH Command",
+        "userDescription": "Run a confirmed non-interactive SSH command through AT Terminal.",
+        "modelDescription": "Run a non-interactive shell command on a configured SSH server and return stdout, stderr, exit code, timeout, and truncation metadata. Use only after the user explicitly intends to run a remote command.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "serverId": {
+              "type": "string",
+              "description": "Configured SSH server id, or active to use the connected active SSH terminal."
+            },
+            "command": {
+              "type": "string",
+              "description": "Non-interactive shell command to run remotely."
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Optional POSIX working directory to cd into before running the command."
+            },
+            "timeoutMs": {
+              "type": "number",
+              "description": "Optional timeout in milliseconds. Values above 120000 are capped."
+            },
+            "maxOutputBytes": {
+              "type": "number",
+              "description": "Optional max bytes to keep separately for stdout and stderr. Values above 256000 are capped."
+            }
+          },
+          "required": [
+            "command"
+          ]
+        }
+      },
+      {
+        "name": "sftp_list_directory",
+        "tags": [
+          "ssh",
+          "sftp",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_list_directory",
+        "displayName": "SFTP List Directory",
+        "userDescription": "List a remote directory through AT Terminal SFTP.",
+        "modelDescription": "List remote directory entries through a connected AT Terminal SFTP session without modifying files.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            }
+          }
+        }
+      },
+      {
+        "name": "sftp_stat_path",
+        "tags": [
+          "ssh",
+          "sftp",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_stat_path",
+        "displayName": "SFTP Stat Path",
+        "userDescription": "Show remote path metadata through AT Terminal SFTP.",
+        "modelDescription": "Return metadata for a remote path through a connected AT Terminal SFTP session without modifying files.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "sftp_read_file",
+        "tags": [
+          "ssh",
+          "sftp",
+          "read-only"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_read_file",
+        "displayName": "SFTP Read File",
+        "userDescription": "Read a bounded UTF-8 remote file through AT Terminal SFTP.",
+        "modelDescription": "Read bounded UTF-8 text from a remote file through a connected AT Terminal SFTP session without modifying files.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            },
+            "maxBytes": {
+              "type": "number",
+              "description": "Optional max bytes to read."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "sftp_write_file",
+        "tags": [
+          "ssh",
+          "sftp"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_write_file",
+        "displayName": "SFTP Write File",
+        "userDescription": "Write UTF-8 text to a remote file through AT Terminal SFTP.",
+        "modelDescription": "Write UTF-8 text to a remote file. AT Terminal prompts for first write authorization per server.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            },
+            "content": {
+              "type": "string",
+              "description": "UTF-8 file content."
+            },
+            "overwrite": {
+              "type": "boolean",
+              "description": "Set true to replace an existing file."
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ]
+        }
+      },
+      {
+        "name": "sftp_create_file",
+        "tags": [
+          "ssh",
+          "sftp"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_create_file",
+        "displayName": "SFTP Create File",
+        "userDescription": "Create a remote file through AT Terminal SFTP.",
+        "modelDescription": "Create a remote file. AT Terminal prompts for first write authorization per server.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            },
+            "content": {
+              "type": "string",
+              "description": "Optional UTF-8 file content."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "name": "sftp_create_directory",
+        "tags": [
+          "ssh",
+          "sftp"
+        ],
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "sftp_create_directory",
+        "displayName": "SFTP Create Directory",
+        "userDescription": "Create a remote directory through AT Terminal SFTP.",
+        "modelDescription": "Create a remote directory. AT Terminal prompts for first write authorization per server.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "terminalId": {
+              "type": "string",
+              "description": "Connected AT Terminal terminal id."
+            },
+            "serverId": {
+              "type": "string",
+              "description": "Connected AT Terminal server id."
+            },
+            "path": {
+              "type": "string",
+              "description": "Remote POSIX path."
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sshManager",
+          "title": "AT Terminal",
+          "icon": "media/at-terminal-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "sshManager": [
+        {
+          "id": "sshManager.servers",
+          "name": "Servers"
+        },
+        {
+          "id": "sshManager.sftpFiles",
+          "name": "SFTP Files",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sshManager.addServer",
+        "title": "SSH: Add Server",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sshManager.editServer",
+        "title": "SSH: Edit Server"
+      },
+      {
+        "command": "sshManager.deleteServer",
+        "title": "SSH: Delete Server"
+      },
+      {
+        "command": "sshManager.connect",
+        "title": "SSH: Connect"
+      },
+      {
+        "command": "sshManager.disconnect",
+        "title": "SSH: Disconnect"
+      },
+      {
+        "command": "sshManager.reconnect",
+        "title": "SSH: Reconnect"
+      },
+      {
+        "command": "sshManager.copyHost",
+        "title": "SSH: Copy Host"
+      },
+      {
+        "command": "sshManager.refresh",
+        "title": "SSH: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sshManager.sftp.refresh",
+        "title": "SFTP: Refresh"
+      },
+      {
+        "command": "sshManager.sftp.upload",
+        "title": "SFTP: Upload"
+      },
+      {
+        "command": "sshManager.sftp.download",
+        "title": "SFTP: Download"
+      },
+      {
+        "command": "sshManager.sftp.delete",
+        "title": "SFTP: Delete"
+      },
+      {
+        "command": "sshManager.sftp.rename",
+        "title": "SFTP: Rename"
+      },
+      {
+        "command": "sshManager.sftp.newFile",
+        "title": "SFTP: New File"
+      },
+      {
+        "command": "sshManager.sftp.newFolder",
+        "title": "SFTP: New Folder"
+      },
+      {
+        "command": "sshManager.sftp.copyPath",
+        "title": "SFTP: Copy Remote Path"
+      },
+      {
+        "command": "sshManager.sftp.edit",
+        "title": "SFTP: Edit"
+      },
+      {
+        "command": "sshManager.sftp.openPreview",
+        "title": "SFTP: Open Preview"
+      },
+      {
+        "command": "sshManager.sftp.cdToDirectory",
+        "title": "SFTP: cd To Directory"
+      },
+      {
+        "command": "sshManager.sftp.goToPath",
+        "title": "SFTP: Go to Path"
+      },
+      {
+        "command": "sshManager.sftp.goUp",
+        "title": "SFTP: Go Up"
+      },
+      {
+        "command": "sshManager.installMcpConfig",
+        "title": "AT Terminal: Install MCP Config"
+      },
+      {
+        "command": "sshManager.exportAssets",
+        "title": "AT Terminal: Export Assets",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "sshManager.importAssets",
+        "title": "AT Terminal: Import Assets",
+        "icon": "$(cloud-download)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sshManager.addServer",
+          "when": "view == sshManager.servers",
+          "group": "navigation"
+        },
+        {
+          "command": "sshManager.refresh",
+          "when": "view == sshManager.servers",
+          "group": "navigation"
+        },
+        {
+          "command": "sshManager.sftp.refresh",
+          "when": "view == sshManager.sftpFiles",
+          "group": "navigation"
+        },
+        {
+          "command": "sshManager.sftp.goUp",
+          "when": "view == sshManager.sftpFiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sshManager.sftp.goToPath",
+          "when": "view == sshManager.sftpFiles",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sshManager.exportAssets",
+          "when": "view == sshManager.servers",
+          "group": "navigation@3"
+        },
+        {
+          "command": "sshManager.importAssets",
+          "when": "view == sshManager.servers",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sshManager.addServer",
+          "when": "view == sshManager.servers && viewItem == group",
+          "group": "management@1"
+        },
+        {
+          "command": "sshManager.editServer",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@1"
+        },
+        {
+          "command": "sshManager.deleteServer",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@2"
+        },
+        {
+          "command": "sshManager.copyHost",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@3"
+        },
+        {
+          "command": "sshManager.sftp.refresh",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sshManager.sftp.upload",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "transfer@1"
+        },
+        {
+          "command": "sshManager.sftp.download",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "transfer@2"
+        },
+        {
+          "command": "sshManager.sftp.edit",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
+          "group": "open@1"
+        },
+        {
+          "command": "sshManager.sftp.openPreview",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
+          "group": "open@2"
+        },
+        {
+          "command": "sshManager.sftp.cdToDirectory",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "open@3"
+        },
+        {
+          "command": "sshManager.sftp.newFile",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@1"
+        },
+        {
+          "command": "sshManager.sftp.newFolder",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "management@2"
+        },
+        {
+          "command": "sshManager.sftp.rename",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@3"
+        },
+        {
+          "command": "sshManager.sftp.delete",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@4"
+        },
+        {
+          "command": "sshManager.sftp.copyPath",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile || viewItem == sftpDisconnectedDirectory || viewItem == sftpDisconnectedFile)",
+          "group": "management@5"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AT Terminal",
+      "properties": {
+        "sshManager.terminalFontSize": {
+          "type": "number",
+          "default": 14,
+          "minimum": 8
+        },
+        "sshManager.terminalFontFamily": {
+          "type": "string",
+          "default": "Cascadia Code, Menlo, monospace"
+        },
+        "sshManager.scrollback": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 100
+        },
+        "sshManager.semanticHighlight": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable frontend semantic highlighting for plain SSH terminal output that does not already contain ANSI colors."
+        },
+                "sshManager.idleDisconnectMinutes": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "description": "Disconnect idle SSH terminals after this many minutes. Set 0 to disable."
+        },
+        "sshManager.keepAliveInterval": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "ssh2": "^1.16.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/ssh2": "^1.15.5",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

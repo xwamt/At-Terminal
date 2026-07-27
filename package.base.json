@@ -1,0 +1,315 @@
+{
+  "name": "at-terminal",
+  "displayName": "AT Terminal",
+  "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
+  "version": "0.2.17",
+  "publisher": "local",
+  "icon": "media/at-terminal-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:sshManager.servers",
+    "onView:sshManager.sftpFiles"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sshManager",
+          "title": "AT Terminal",
+          "icon": "media/at-terminal-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "sshManager": [
+        {
+          "id": "sshManager.servers",
+          "name": "Servers"
+        },
+        {
+          "id": "sshManager.sftpFiles",
+          "name": "SFTP Files",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "sshManager.addServer",
+        "title": "SSH: Add Server",
+        "icon": "$(add)"
+      },
+      {
+        "command": "sshManager.editServer",
+        "title": "SSH: Edit Server"
+      },
+      {
+        "command": "sshManager.deleteServer",
+        "title": "SSH: Delete Server"
+      },
+      {
+        "command": "sshManager.connect",
+        "title": "SSH: Connect"
+      },
+      {
+        "command": "sshManager.disconnect",
+        "title": "SSH: Disconnect"
+      },
+      {
+        "command": "sshManager.reconnect",
+        "title": "SSH: Reconnect"
+      },
+      {
+        "command": "sshManager.copyHost",
+        "title": "SSH: Copy Host"
+      },
+      {
+        "command": "sshManager.refresh",
+        "title": "SSH: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sshManager.sftp.refresh",
+        "title": "SFTP: Refresh"
+      },
+      {
+        "command": "sshManager.sftp.upload",
+        "title": "SFTP: Upload"
+      },
+      {
+        "command": "sshManager.sftp.download",
+        "title": "SFTP: Download"
+      },
+      {
+        "command": "sshManager.sftp.delete",
+        "title": "SFTP: Delete"
+      },
+      {
+        "command": "sshManager.sftp.rename",
+        "title": "SFTP: Rename"
+      },
+      {
+        "command": "sshManager.sftp.newFile",
+        "title": "SFTP: New File"
+      },
+      {
+        "command": "sshManager.sftp.newFolder",
+        "title": "SFTP: New Folder"
+      },
+      {
+        "command": "sshManager.sftp.copyPath",
+        "title": "SFTP: Copy Remote Path"
+      },
+      {
+        "command": "sshManager.sftp.edit",
+        "title": "SFTP: Edit"
+      },
+      {
+        "command": "sshManager.sftp.openPreview",
+        "title": "SFTP: Open Preview"
+      },
+      {
+        "command": "sshManager.sftp.cdToDirectory",
+        "title": "SFTP: cd To Directory"
+      },
+      {
+        "command": "sshManager.sftp.goToPath",
+        "title": "SFTP: Go to Path"
+      },
+      {
+        "command": "sshManager.sftp.goUp",
+        "title": "SFTP: Go Up"
+      },
+      {
+        "command": "sshManager.exportAssets",
+        "title": "AT Terminal: Export Assets",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "sshManager.importAssets",
+        "title": "AT Terminal: Import Assets",
+        "icon": "$(cloud-download)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sshManager.addServer",
+          "when": "view == sshManager.servers",
+          "group": "navigation"
+        },
+        {
+          "command": "sshManager.refresh",
+          "when": "view == sshManager.servers",
+          "group": "navigation"
+        },
+        {
+          "command": "sshManager.sftp.refresh",
+          "when": "view == sshManager.sftpFiles",
+          "group": "navigation"
+        },
+        {
+          "command": "sshManager.sftp.goUp",
+          "when": "view == sshManager.sftpFiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sshManager.sftp.goToPath",
+          "when": "view == sshManager.sftpFiles",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sshManager.exportAssets",
+          "when": "view == sshManager.servers",
+          "group": "navigation@3"
+        },
+        {
+          "command": "sshManager.importAssets",
+          "when": "view == sshManager.servers",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sshManager.addServer",
+          "when": "view == sshManager.servers && viewItem == group",
+          "group": "management@1"
+        },
+        {
+          "command": "sshManager.editServer",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@1"
+        },
+        {
+          "command": "sshManager.deleteServer",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@2"
+        },
+        {
+          "command": "sshManager.copyHost",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@3"
+        },
+        {
+          "command": "sshManager.sftp.refresh",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sshManager.sftp.upload",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "transfer@1"
+        },
+        {
+          "command": "sshManager.sftp.download",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "transfer@2"
+        },
+        {
+          "command": "sshManager.sftp.edit",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
+          "group": "open@1"
+        },
+        {
+          "command": "sshManager.sftp.openPreview",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpFile",
+          "group": "open@2"
+        },
+        {
+          "command": "sshManager.sftp.cdToDirectory",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "open@3"
+        },
+        {
+          "command": "sshManager.sftp.newFile",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@1"
+        },
+        {
+          "command": "sshManager.sftp.newFolder",
+          "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
+          "group": "management@2"
+        },
+        {
+          "command": "sshManager.sftp.rename",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@3"
+        },
+        {
+          "command": "sshManager.sftp.delete",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile)",
+          "group": "management@4"
+        },
+        {
+          "command": "sshManager.sftp.copyPath",
+          "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile || viewItem == sftpDisconnectedDirectory || viewItem == sftpDisconnectedFile)",
+          "group": "management@5"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "AT Terminal",
+      "properties": {
+        "sshManager.terminalFontSize": {
+          "type": "number",
+          "default": 14,
+          "minimum": 8
+        },
+        "sshManager.terminalFontFamily": {
+          "type": "string",
+          "default": "Cascadia Code, Menlo, monospace"
+        },
+        "sshManager.scrollback": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 100
+        },
+        "sshManager.semanticHighlight": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable frontend semantic highlighting for plain SSH terminal output that does not already contain ANSI colors."
+        },
+                "sshManager.idleDisconnectMinutes": {
+          "type": "number",
+          "default": 60,
+          "minimum": 0,
+          "description": "Disconnect idle SSH terminals after this many minutes. Set 0 to disable."
+        },
+        "sshManager.keepAliveInterval": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "ssh2": "^1.16.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/ssh2": "^1.15.5",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.5.2",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
