@@ -7,6 +7,7 @@ import {
   AT_SERIES_TOKEN_HEADER,
   BRIDGE_HOST,
   BRIDGE_MAX_BODY_BYTES,
+  FsBridgePublisher,
   type HostApp
 } from '@at-series/mcp-hub';
 import type { AgentToolService } from '../agent/AgentToolService';
@@ -19,12 +20,14 @@ import {
   sftpWriteFileBridgeSchema,
   runRemoteCommandBridgeSchema
 } from './bridgeSchemas';
-import { removeBridgeDiscovery, writeBridgeDiscovery } from './BridgeDiscovery';
 import {
   AT_TERMINAL_PLUGIN_DISPLAY_NAME,
   BRIDGE_TOKEN_HEADER
 } from './BridgeProtocol';
 import { AT_TERMINAL_PLUGIN_ID, AT_TERMINAL_TOOL_CATALOG } from './toolCatalog';
+
+/** Heartbeat cadence for `~/.at-series` registry freshness (protocol: ≤30s). */
+const BRIDGE_HEARTBEAT_INTERVAL_MS = 30_000;
 
 export interface BridgeServerOptions {
   service: AgentToolService;
@@ -60,6 +63,8 @@ export class BridgeServer {
   private server: Server | undefined;
   private token = '';
   private port: number | undefined;
+  private publisher: FsBridgePublisher | undefined;
+  private heartbeatTimer: ReturnType<typeof setInterval> | undefined;
   private readonly bridgeId = randomUUID();
   private readonly service: AgentToolService;
   private readonly home: string;
@@ -97,29 +102,75 @@ export class BridgeServer {
       throw new Error('Failed to start AT Terminal MCP bridge.');
     }
     this.port = address.port;
-    await writeBridgeDiscovery(this.home, {
-      id: this.bridgeId,
+
+    const connectedTargets = await readConnectedTargets(this.service);
+    const publisher = new FsBridgePublisher({
+      bridgeId: this.bridgeId,
+      hostApp: this.hostApp,
+      home: this.home
+    });
+    this.publisher = publisher;
+    await publisher.publish({
+      protocolVersion: AT_SERIES_PROTOCOL_VERSION,
+      bridgeId: this.bridgeId,
+      pluginId: AT_TERMINAL_PLUGIN_ID,
+      pluginDisplayName: AT_TERMINAL_PLUGIN_DISPLAY_NAME,
+      pluginVersion: this.pluginVersion,
+      hostApp: this.hostApp,
       port: address.port,
       token: this.token,
       pid: process.pid,
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      tools: AT_TERMINAL_TOOL_CATALOG,
+      capabilities: { connectedTargets }
     });
+    this.heartbeatTimer = setInterval(() => {
+      void this.tickHeartbeat();
+    }, BRIDGE_HEARTBEAT_INTERVAL_MS);
+    this.heartbeatTimer.unref?.();
   }
 
   async dispose(): Promise<void> {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
+    const publisher = this.publisher;
+    this.publisher = undefined;
+    if (publisher) {
+      await publisher.unpublish();
+    }
     const server = this.server;
-    const port = this.port;
-    const token = this.token;
     this.server = undefined;
     this.port = undefined;
-    await removeBridgeDiscovery(
-      this.home,
-      port && token ? { id: this.bridgeId, port, token, pid: process.pid } : undefined
-    );
     if (!server) {
       return;
     }
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+
+  private async tickHeartbeat(): Promise<void> {
+    const publisher = this.publisher;
+    if (!publisher) {
+      return;
+    }
+    try {
+      const connectedTargets = await readConnectedTargets(this.service);
+      await publisher.heartbeat({ capabilities: { connectedTargets } });
+    } catch {
+      // Best-effort; next interval retries.
+    }
+  }
+}
+
+async function readConnectedTargets(service: AgentToolService): Promise<number> {
+  try {
+    const context = await service.getTerminalContext();
+    return Array.isArray(context?.connectedTerminals)
+      ? context.connectedTerminals.length
+      : 0;
+  } catch {
+    return 0;
   }
 }
 
@@ -169,15 +220,7 @@ async function buildHealthResponse(
   dependencies: BridgeHandlerDependencies,
   pluginDisplayName: string
 ) {
-  let connectedTargets = 0;
-  try {
-    const context = await dependencies.service.getTerminalContext();
-    connectedTargets = Array.isArray(context?.connectedTerminals)
-      ? context.connectedTerminals.length
-      : 0;
-  } catch {
-    connectedTargets = 0;
-  }
+  const connectedTargets = await readConnectedTargets(dependencies.service);
 
   return {
     ok: true,
