@@ -9,6 +9,7 @@ import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import type { ServerConfig } from './config/schema';
 import { BridgeServer } from './mcp/BridgeServer';
+import { detectHostApp } from './mcp/hostApp';
 import {
   ensureIdeMcpConfig,
   installContinueMcpConfig,
@@ -136,7 +137,19 @@ export function activate(context: vscode.ExtensionContext): void {
       sftp: sftpAgentService
     });
     agentToolDisposables = registerAgentTools(agentToolService);
-    bridgeServer = new BridgeServer(agentToolService);
+    bridgeServer = new BridgeServer({
+      service: agentToolService,
+      hostApp: detectHostApp({
+        appName: vscode.env.appName,
+        appRoot: vscode.env.appRoot,
+        uriScheme: vscode.env.uriScheme,
+        extensionPath: context.extensionUri.fsPath
+      }),
+      pluginVersion:
+        typeof context.extension?.packageJSON?.version === 'string'
+          ? context.extension.packageJSON.version
+          : undefined
+    });
     void bridgeServer.start().catch((error) => {
       void showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');
     });
