@@ -77,6 +77,10 @@ Use $writing-ops-documents for operation records, troubleshooting reports, deplo
 2. 未授权后台连接的服务器不会出现在 `list_ssh_servers` 中；若前端已打开该服务器终端连接，`run_remote_command` 仍可执行。仅在前端未连接时，才要求勾选后台连接。
 3. 旧配置默认关闭后台连接，升级后需按服务器显式开启。
 
+### 本地 MCP Hub 依赖
+
+本仓库通过 `file:` 链接依赖本地 `@at-series/mcp-hub`（路径见根目录 `package.json`）。安装本仓库依赖前，须先在 Hub 仓库对应 worktree 中执行构建（`npm install`、`npm run build -w @at-series/mcp-hub`、`npm run build:hub -w @at-series/mcp-hub`），否则 `require('@at-series/mcp-hub')` / `require('@at-series/mcp-hub/hub')` 可能无法解析。
+
 #### 构建产物
 
 请先安装 Node.js 和 npm。建议使用较新的 Node.js LTS 版本。进入项目根目录后安装依赖：

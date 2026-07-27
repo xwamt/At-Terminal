@@ -601,6 +601,7 @@
     "package:mcp": "npm run build:mcp && node scripts/package-variant.mjs mcp"
   },
   "dependencies": {
+    "@at-series/mcp-hub": "file:../at-series-mcp-hub/.worktrees/p0a-mcp-hub/packages/mcp-hub",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
