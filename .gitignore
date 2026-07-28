@@ -48,3 +48,8 @@ ATmcp.json
 
 # Binary planning/export artifacts
 *.docx
+
+# Local IDE scratch and site-specific ops notes (not for public repo)
+.kilo/
+ops/
+docs/reviews/

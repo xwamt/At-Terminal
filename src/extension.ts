@@ -127,9 +127,22 @@ export function activate(context: vscode.ExtensionContext): void {
     };
     const hostApp = detectHostApp(hostEnv);
     const currentWorkspaceFolder = () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    void syncPackagedHub(context).catch((error) => {
-      console.error('AT Terminal hub sync failed:', formatError(error));
-    });
+    // Await hub sync before writing MCP config so node can resolve ~/.at-series/mcp/hub.js.
+    const hubReady = syncPackagedHub(context)
+      .then((result) => {
+        console.log(
+          `AT Terminal hub sync ok (updated=${result.updated}, active=${result.activeVersion})`
+        );
+        return result;
+      })
+      .catch((error) => {
+        console.error('AT Terminal hub sync failed:', formatError(error));
+        void showTimedNotification(
+          `AT Series hub sync failed: ${formatError(error)}. MCP may not start until Repair succeeds.`,
+          'warning'
+        );
+        throw error;
+      });
     const sftpWriteAuthorizer = createProductionSftpWriteAuthorizer();
     sftpAgentService = new SftpAgentService({
       terminalContext,
@@ -153,13 +166,23 @@ export function activate(context: vscode.ExtensionContext): void {
     void bridgeServer.start().catch((error) => {
       void showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');
     });
-    void ensureAtSeriesConfigForCurrentIde({
-      ...hostEnv,
-      workspaceFolder: currentWorkspaceFolder()
-    }).catch((error) => {
-      void showTimedNotification(`AT Series MCP config could not be updated: ${formatError(error)}`, 'warning');
-    });
+    void hubReady
+      .then(() =>
+        ensureAtSeriesConfigForCurrentIde({
+          ...hostEnv,
+          workspaceFolder: currentWorkspaceFolder()
+        })
+      )
+      .catch((error) => {
+        void showTimedNotification(`AT Series MCP config could not be updated: ${formatError(error)}`, 'warning');
+      });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
+      try {
+        await syncPackagedHub(context);
+      } catch (error) {
+        await showTimedNotification(`AT Series hub sync failed: ${formatError(error)}`, 'error');
+        return;
+      }
       const result = await ensureAtSeriesConfigForCurrentIde({
         ...hostEnv,
         workspaceFolder: currentWorkspaceFolder()

@@ -39,7 +39,7 @@ function createHandler(
     token: overrides.token ?? 'secret',
     bridgeId: overrides.bridgeId ?? 'bridge-1',
     hostApp: (overrides.hostApp ?? 'cursor') as 'cursor',
-    pluginVersion: overrides.pluginVersion ?? '0.2.17',
+    pluginVersion: overrides.pluginVersion ?? '0.3.0',
     service: {
       listServers: async () => ({ servers: [] }),
       getTerminalContext: async () => ({ connectedTerminals: [], knownTerminals: [] }),
@@ -100,7 +100,7 @@ describe('createBridgeRequestHandler', () => {
         bridgeId: 'bridge-1',
         pluginId: AT_TERMINAL_PLUGIN_ID,
         pluginDisplayName: 'AT Terminal',
-        pluginVersion: '0.2.17',
+        pluginVersion: '0.3.0',
         hostApp: 'cursor',
         pid: process.pid,
         updatedAt: expect.any(Number),

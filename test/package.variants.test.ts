@@ -27,6 +27,7 @@ describe('package variants', () => {
     );
     expect(mcpManifest.contributes.languageModelTools).toBeUndefined();
     expect(JSON.stringify(mcpManifest.contributes)).not.toContain('languageModelTools');
+    expect(mcpManifest.dependencies['@modelcontextprotocol/sdk']).toBeUndefined();
   });
 
   it('keeps the MCP config command only in the MCP manifest', () => {

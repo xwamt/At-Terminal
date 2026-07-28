@@ -70,16 +70,18 @@ describe('sshManager MCP config commands', () => {
     vi.restoreAllMocks();
   });
 
-  it('ensures AT Series MCP config on activation', () => {
+  it('ensures AT Series MCP config on activation', async () => {
     activate(extensionContext());
 
     expect(mocks.syncPackagedHub).toHaveBeenCalledOnce();
-    expect(mocks.ensureAtSeriesConfigForCurrentIde).toHaveBeenCalledWith({
-      appName: vscode.env.appName,
-      appRoot: vscode.env.appRoot,
-      uriScheme: vscode.env.uriScheme,
-      extensionPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10',
-      workspaceFolder: undefined
+    await vi.waitFor(() => {
+      expect(mocks.ensureAtSeriesConfigForCurrentIde).toHaveBeenCalledWith({
+        appName: vscode.env.appName,
+        appRoot: vscode.env.appRoot,
+        uriScheme: vscode.env.uriScheme,
+        extensionPath: 'C:/Users/alan/.kiro/extensions/local.at-terminal-mcp-0.2.10',
+        workspaceFolder: undefined
+      });
     });
   });
 

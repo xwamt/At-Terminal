@@ -45,8 +45,10 @@ await rm(join(stage, 'dist', 'mcp-server.js'), { force: true });
 await rm(join(stage, 'dist', 'mcp-server.js.map'), { force: true });
 if (variant === 'mcp') {
   await access(join(stage, 'dist', 'hub.js'));
+  await access(join(stage, 'dist', 'hub-version.json'));
 } else {
   await rm(join(stage, 'dist', 'hub.js'), { force: true });
+  await rm(join(stage, 'dist', 'hub-version.json'), { force: true });
 }
 await cp(join(root, 'media'), join(stage, 'media'), { recursive: true });
 await cp(join(root, 'docs', 'features.md'), join(stage, 'docs', 'features.md'));

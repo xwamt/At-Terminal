@@ -47,7 +47,7 @@ describe('BridgeServer FsBridgePublisher', () => {
       service: createService(2) as never,
       home,
       hostApp,
-      pluginVersion: '0.2.17'
+      pluginVersion: '0.3.0'
     });
     servers.push(server);
 

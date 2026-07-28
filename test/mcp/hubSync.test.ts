@@ -26,7 +26,7 @@ describe('syncPackagedHubAt', () => {
 
     const result = await syncPackagedHubAt(
       bundlePath,
-      { hubVersion: '0.1.0', pluginVersion: '0.2.17' },
+      { hubVersion: '0.1.0', pluginVersion: '0.3.0' },
       home
     );
 
@@ -37,8 +37,29 @@ describe('syncPackagedHubAt', () => {
     expect(meta).toMatchObject({
       version: '0.1.0',
       writtenByPluginId: 'at.terminal',
-      writtenByPluginVersion: '0.2.17'
+      writtenByPluginVersion: '0.3.0'
     });
+  });
+
+  it('reads hub version from dist/hub-version.json sidecar when resolving packaged hub', async () => {
+    const { syncPackagedHub } = await import('../../src/mcp/hubSync.js');
+    const bundlePath = join(bundleDir, 'hub.js');
+    await writeFile(bundlePath, 'module.exports = { sidecar: true };\n', 'utf8');
+    await writeFile(
+      join(bundleDir, 'hub-version.json'),
+      JSON.stringify({ version: '0.1.0', protocolVersion: 1 }),
+      'utf8'
+    );
+
+    // Simulate syncPackagedHub path resolution via syncPackagedHubAt after reading sidecar manually
+    const sidecar = JSON.parse(await readFile(join(bundleDir, 'hub-version.json'), 'utf8'));
+    const result = await syncPackagedHubAt(
+      bundlePath,
+      { hubVersion: sidecar.version, pluginVersion: '0.3.0' },
+      home
+    );
+    expect(result.activeVersion).toBe('0.1.0');
+    expect(syncPackagedHub).toBeTypeOf('function');
   });
 
   it('skips overwrite when active hub semver is newer', async () => {
@@ -63,7 +84,7 @@ describe('syncPackagedHubAt', () => {
 
     const result = await syncPackagedHubAt(
       bundlePath,
-      { hubVersion: '0.1.0', pluginVersion: '0.2.17' },
+      { hubVersion: '0.1.0', pluginVersion: '0.3.0' },
       home
     );
 

@@ -79,9 +79,15 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 2. 未授权后台连接的服务器不会出现在 `list_ssh_servers` 中；若前端已打开该服务器终端连接，`run_remote_command` 仍可执行。仅在前端未连接时，才要求勾选后台连接。
 3. 旧配置默认关闭后台连接，升级后需按服务器显式开启。
 
-### 本地 MCP Hub 依赖
+### MCP Hub 拆分（0.3.0）
 
-本仓库通过 `file:` 链接依赖本地 `@at-series/mcp-hub`（路径见根目录 `package.json`）。安装本仓库依赖前，须先在 Hub 仓库对应 worktree 中执行构建（`npm install`、`npm run build -w @at-series/mcp-hub`、`npm run build:hub -w @at-series/mcp-hub`），否则 `require('@at-series/mcp-hub')` / `require('@at-series/mcp-hub/hub')` 可能无法解析。
+从 **0.3.0** 起，共享 MCP Hub 已从本插件仓库拆分为独立开源包 [`@at-series/mcp-hub`](https://www.npmjs.com/package/@at-series/mcp-hub)：
+
+- **职责边界**：Hub 负责 AT Series 入口聚合、安装器与协议类型；本仓库只保留 AT Terminal 扩展、Bridge 发布与按需同步 `hub.js`。
+- **依赖方式**：通过 npm 公开 registry 声明依赖（当前 `^0.1.1`）。执行 `npm install` 即可拉取，**不再**需要克隆 Hub 仓库，也**不再**使用 `file:` 本地链接。
+- **打包行为**：`npm run build:mcp` / `package:mcp` 会把已发布 Hub 中的运行时复制为 `dist/hub.js`，并写入 `dist/hub-version.json` 供选举同步使用。
+
+架构说明见 [ADR-004](docs/decisions/ADR-004-at-series-mcp-hub.md) 与 [ADR-005](docs/decisions/ADR-005-at-series-hub-adaptation.md)。
 
 #### 构建产物
 
@@ -104,13 +110,13 @@ npm run package:mcp
 打包成功后，项目根目录会生成类似下面的文件：
 
 ```textile
-at-terminal-mcp-0.2.17.vsix
+at-terminal-mcp-0.3.0.vsix
 ```
 
 生成 .vsix 后，可以在 VS Code / Cursor / Kiro 等兼容 VS Code 插件的 IDE 中通过“从 VSIX 安装”安装，也可以使用命令行安装
 
 ```bash
-code --install-extension at-terminal-mcp-0.2.17.vsix
+code --install-extension at-terminal-mcp-0.3.0.vsix
 #如果安装基础版，则把文件名替换为实际生成的 at-terminal-*.vsix。
 ```
 

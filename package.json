@@ -2,7 +2,7 @@
   "name": "at-terminal",
   "displayName": "AT Terminal",
   "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
-  "version": "0.2.17",
+  "version": "0.3.0",
   "publisher": "local",
   "icon": "media/at-terminal-icon.png",
   "engines": {
@@ -305,14 +305,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:base": "node esbuild.config.mjs --variant=base",
-    "copy:hub": "node -e \"const fs=require('fs');const p=require.resolve('@at-series/mcp-hub/hub');fs.mkdirSync('dist',{recursive:true});fs.copyFileSync(p,'dist/hub.js');console.log('copied hub.js')\"",
+    "copy:hub": "node scripts/copy-hub.mjs",
     "build:mcp": "node esbuild.config.mjs --variant=mcp && npm run copy:hub",
     "package:base": "npm run build:base && node scripts/package-variant.mjs base",
     "package:mcp": "npm run build:mcp && node scripts/package-variant.mjs mcp"
   },
   "dependencies": {
-    "@at-series/mcp-hub": "file:../at-series-mcp-hub/.worktrees/p0a-mcp-hub/packages/mcp-hub",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@at-series/mcp-hub": "^0.1.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",

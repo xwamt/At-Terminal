@@ -14,9 +14,8 @@ ADR-002 established per-extension MCP stdio + localhost Bridge. With multiple AT
 
 AT Terminal MCP will migrate to the shared **AT Series Hub** protocol:
 
-- Canonical spec: `C:\Users\alan\Desktop\at-series-mcp-hub\docs\protocol\v1.md`
-- Decision record: `C:\Users\alan\Desktop\at-series-mcp-hub\docs\decisions\ADR-001-at-series-mcp-hub.md`
-- Package: `@at-series/mcp-hub` (protocol types under `packages/protocol`)
+- Canonical package / protocol: [`@at-series/mcp-hub`](https://www.npmjs.com/package/@at-series/mcp-hub) (Protocol v1)
+- Package: `@at-series/mcp-hub` (hub runtime, installers, and protocol types)
 
 Local consequences for this repo when implemented:
 
@@ -30,8 +29,6 @@ Local consequences for this repo when implemented:
 
 - This ADR supersedes the *product packaging* implication of "one MCP server per plugin" from ADR-002
 - ADR-002 security invariants (credentials in extension host, confirmations, host key checks) remain in force
-
-Requirements (grill decisions): `C:\Users\alan\Desktop\at-series-mcp-hub\docs\requirements.md`
 
 Adaptation record for this repository: [ADR-005](ADR-005-at-series-hub-adaptation.md).
 

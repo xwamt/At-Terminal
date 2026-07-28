@@ -28,7 +28,7 @@ Generated files:
 Install the MCP build:
 
 ```powershell
-code --install-extension .\at-terminal-mcp-0.2.17.vsix
+code --install-extension .\at-terminal-mcp-0.3.0.vsix
 ```
 
 For Kiro and Cursor, install the VSIX through the IDE's extension UI or compatible command-line installer.
