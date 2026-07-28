@@ -1,17 +1,18 @@
+import type { HostApp } from '@at-series/mcp-hub';
+import {
+  AT_SERIES_PROTOCOL_VERSION,
+  AT_SERIES_TOKEN_HEADER,
+  BRIDGE_HOST,
+  BRIDGE_MAX_BODY_BYTES
+} from '@at-series/mcp-hub';
 import type { TerminalContextSnapshot } from '../terminal/TerminalContext';
 
-export const BRIDGE_HOST = '127.0.0.1';
-export const BRIDGE_TOKEN_HEADER = 'x-at-terminal-token';
-export const BRIDGE_MAX_BODY_BYTES = 2 * 1024 * 1024;
-export const BRIDGE_SELECTION_CACHE_MS = 1500;
+export { AT_SERIES_TOKEN_HEADER, BRIDGE_HOST, BRIDGE_MAX_BODY_BYTES, AT_SERIES_PROTOCOL_VERSION };
 
-export interface BridgeDiscovery {
-  id?: string;
-  port: number;
-  token: string;
-  pid: number;
-  updatedAt: number;
-}
+/** Legacy auth header accepted during AT Series migration. */
+export const BRIDGE_TOKEN_HEADER = 'x-at-terminal-token';
+
+export const AT_TERMINAL_PLUGIN_DISPLAY_NAME = 'AT Terminal';
 
 export interface BridgeServerSummary {
   id: string;
@@ -63,6 +64,11 @@ export interface SftpCreateFileBridgeRequest extends SftpPathBridgeRequest {
 }
 
 export interface BridgeErrorResponse {
-  error: string;
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
 }
 
+export type { HostApp };

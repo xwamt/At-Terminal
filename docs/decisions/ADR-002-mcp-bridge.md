@@ -20,7 +20,9 @@ Agent 工具需要访问：
 MCP 采用双进程模型：
 
 1. **扩展宿主** 在 `127.0.0.1` 启动 `BridgeServer`，使用随机端口与随机 token，并写入发现元数据。
-2. **`dist/mcp-server.js`**（stdio）通过 `BridgeClient` 携带 token 调用 bridge HTTP 接口。
+2. **共享 AT Series hub**（`~/.at-series/mcp/hub.js`）通过 AT Series 协议发现并调用扩展宿主中的 bridge HTTP 接口。
+
+> Superseded for *product packaging* by [ADR-004](ADR-004-at-series-mcp-hub.md): per-plugin `dist/mcp-server.js` is no longer the recommended IDE entry.
 3. Bridge 处理器把请求委托给扩展宿主内的 `AgentToolService`。
 
 当前发现文件：`~/.at-terminal/mcp-bridge.json`，内容为 `{ port, token, pid, updatedAt }`。

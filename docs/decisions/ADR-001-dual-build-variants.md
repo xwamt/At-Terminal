@@ -22,7 +22,7 @@ AT Terminal 服务两类用户：
 | 基础版 `AT Terminal` | `build:base` / `package:base` | `package.base.json` | `__AT_TERMINAL_MCP_ENABLED__ = false` |
 | MCP 版 `AT Terminal MCP` | `build:mcp` / `package:mcp` | `package.mcp.json` | `__AT_TERMINAL_MCP_ENABLED__ = true` |
 
-运行时通过 `src/buildFlags.ts` 的 `MCP_ENABLED` 门控 Agent / MCP 注册。MCP 构建还会产出供 stdio MCP 客户端使用的 `dist/mcp-server.js`。
+运行时通过 `src/buildFlags.ts` 的 `MCP_ENABLED` 门控 Agent / MCP 注册。MCP 构建会打包 `dist/hub.js`（来自 `@at-series/mcp-hub`）供共享 AT Series MCP 客户端使用；不再产出 per-plugin `dist/mcp-server.js`。
 
 ## 备选方案
 

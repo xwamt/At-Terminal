@@ -4,16 +4,15 @@ Read this reference only when AT Terminal MCP is unavailable, disconnected, or i
 
 ## Preconditions
 
-- Install the MCP build, `at-terminal-mcp-*.vsix`; the base build has no `dist/mcp-server.js`.
-- Keep the IDE window containing AT Terminal MCP running and activated.
-- Prefer the command-palette action `AT Terminal: Install MCP Config` for Kiro, Cursor, and Continue.
-- The configured script path must belong to the IDE hosting the running extension. `MODULE_NOT_FOUND` usually means the path points to another IDE or extension version.
+- Install the MCP build, `at-terminal-mcp-*.vsix`; the base build does not publish an AT Series bridge or sync `hub.js`.
+- Keep the IDE window containing AT Terminal MCP running and activated so the extension can publish its bridge into `~/.at-series`.
+- Prefer the command-palette action `AT Terminal: Install MCP Config` for Kiro, Cursor, and Continue. It writes an **AT Series** MCP entry that points at `~/.at-series/mcp/hub.js`.
 
 ## Recovery workflow
 
-1. Look for `local.at-terminal-mcp-*/dist/mcp-server.js` under the current IDE's extension directory, such as `~/.kiro/extensions`, `~/.cursor/extensions`, or `~/.vscode/extensions`.
-2. If it is absent, ask the user to install the MCP VSIX or provide the absolute server path.
-3. Add or replace an MCP server named `AT Terminal` or `at-terminal` in the relevant client configuration.
+1. Confirm AT Terminal MCP is installed and the IDE window is running.
+2. Run `AT Terminal: Install MCP Config`, or manually add an MCP server named `AT Series` that runs `node` against `~/.at-series/mcp/hub.js`.
+3. If `hub.js` is missing, reload the IDE window with AT Terminal MCP installed so hub sync can elect the packaged `dist/hub.js`.
 4. Restart or refresh the MCP client.
 5. Verify connectivity with `get_terminal_context` or `list_ssh_servers`.
 
@@ -30,9 +29,12 @@ Kiro/Cursor shape:
 ```json
 {
   "mcpServers": {
-    "AT Terminal": {
+    "AT Series": {
       "command": "node",
-      "args": ["C:/ABSOLUTE/PATH/TO/local.at-terminal-mcp-VERSION/dist/mcp-server.js"]
+      "args": ["C:/Users/YOU/.at-series/mcp/hub.js"],
+      "env": {
+        "AT_SERIES_HOST_APP": "cursor"
+      }
     }
   }
 }
@@ -41,14 +43,16 @@ Kiro/Cursor shape:
 Continue shape:
 
 ```yaml
-name: AT Terminal MCP
+name: AT Series
 version: 0.0.1
 schema: v1
 mcpServers:
-  - name: AT Terminal
+  - name: AT Series
     command: node
     args:
-      - C:/ABSOLUTE/PATH/TO/local.at-terminal-mcp-VERSION/dist/mcp-server.js
+      - ${userHome}/.at-series/mcp/hub.js
+    env:
+      AT_SERIES_HOST_APP: continue
 ```
 
 When editing client configuration, preserve unrelated servers and settings. Do not enable write-tool auto-approval as a substitute for operational safety.

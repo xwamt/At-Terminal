@@ -40,15 +40,17 @@ Use $writing-ops-documents for operation records, troubleshooting reports, deplo
 
 **AT** **Terminal** 是一款面向 VS Code 兼容 IDE 的 SSH 终端与 SFTP 远程文件工作区扩展。它通过标准 SSH/SFTP 协议直接连接远程服务器，不需要在服务器上安装 VS Code Server、Remote Agent 或任何额外服务端组件。
 
-**AT** **Terminal** **MCP** 是 AT Terminal 的 Agent 增强版本。它保留完整的 SSH 终端、SFTP 文件管理和远程文件本地编辑能力，同时增加 VS Code Language Model Tools 与本地 stdio MCP Server，让 GitHub Copilot Chat、Kiro、Cursor、Continue 等支持工具调用或 MCP 的 AI IDE，可以通过受控工具读取远程文件、执行非交互命令，并协助完成远程脚本和配置文件维护
+**AT** **Terminal** **MCP** 是 AT Terminal 的 Agent 增强版本。它保留完整的 SSH 终端、SFTP 文件管理和远程文件本地编辑能力，同时通过共享 **AT Series** MCP hub，让 Kiro、Cursor、Continue 等支持 MCP 的 AI IDE 可以通过受控工具读取远程文件、执行非交互命令，并协助完成远程脚本和配置文件维护。
+
+MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.js`），不再使用 per-plugin `mcp-server.js` 或 VS Code `languageModelTools`。安装命令会写入该入口并迁移掉旧的 `AT Terminal` MCP 条目。架构说明见 [ADR-005](docs/decisions/ADR-005-at-series-hub-adaptation.md)。
 
 项目提供两个面向不同用户的构建版本。
 
 | Capability | Base `AT Terminal` | `AT Terminal MCP` |
 | --- | --- | --- |
 | SSH terminal and SFTP workspace | Included | Included |
-| VS Code Language Model Tools | Not included | Included |
-| Local stdio MCP server (`dist/mcp-server.js`) | Not included | Included |
+| AT Series MCP hub / bridge | Not included | Included |
+| Packaged `dist/hub.js` sync | Not included | Included |
 | Installable Agent Skills | Installed separately | Installed separately |
 
 |                              |             |                 |
@@ -58,8 +60,8 @@ Use $writing-ops-documents for operation records, troubleshooting reports, deplo
 | SFTP 文件工作区                   | 支持          | 支持              |
 | 远程文件本地编辑                     | 支持          | 支持              |
 | 资产导入导出                       | 支持          | 支持              |
-| VS Code Language Model Tools | 不包含         | 支持              |
-| 本地 stdio MCP Server          | 不包含         | 支持              |
+| AT Series MCP hub / bridge   | 不包含         | 支持              |
+| 打包 `hub.js` 同步               | 不包含         | 支持              |
 | MCP 配置安装命令                   | 不包含         | 支持              |
 | Agent 工具指导文件                 | 不包含         | 支持              |
 
@@ -76,6 +78,16 @@ Use $writing-ops-documents for operation records, troubleshooting reports, deplo
 1. 在服务器编辑页先勾选 **Trust agent remote commands**，再勾选其子项 **Allow background connections**。
 2. 未授权后台连接的服务器不会出现在 `list_ssh_servers` 中；若前端已打开该服务器终端连接，`run_remote_command` 仍可执行。仅在前端未连接时，才要求勾选后台连接。
 3. 旧配置默认关闭后台连接，升级后需按服务器显式开启。
+
+### MCP Hub 拆分（0.3.0）
+
+从 **0.3.0** 起，共享 MCP Hub 已从本插件仓库拆分为独立开源包 [`@at-series/mcp-hub`](https://www.npmjs.com/package/@at-series/mcp-hub)：
+
+- **职责边界**：Hub 负责 AT Series 入口聚合、安装器与协议类型；本仓库只保留 AT Terminal 扩展、Bridge 发布与按需同步 `hub.js`。
+- **依赖方式**：通过 npm 公开 registry 声明依赖（当前 `^0.1.1`）。执行 `npm install` 即可拉取，**不再**需要克隆 Hub 仓库，也**不再**使用 `file:` 本地链接。
+- **打包行为**：`npm run build:mcp` / `package:mcp` 会把已发布 Hub 中的运行时复制为 `dist/hub.js`，并写入 `dist/hub-version.json` 供选举同步使用。
+
+架构说明见 [ADR-004](docs/decisions/ADR-004-at-series-mcp-hub.md) 与 [ADR-005](docs/decisions/ADR-005-at-series-hub-adaptation.md)。
 
 #### 构建产物
 
@@ -98,13 +110,13 @@ npm run package:mcp
 打包成功后，项目根目录会生成类似下面的文件：
 
 ```textile
-at-terminal-mcp-0.2.17.vsix
+at-terminal-mcp-0.3.0.vsix
 ```
 
 生成 .vsix 后，可以在 VS Code / Cursor / Kiro 等兼容 VS Code 插件的 IDE 中通过“从 VSIX 安装”安装，也可以使用命令行安装
 
 ```bash
-code --install-extension at-terminal-mcp-0.2.17.vsix
+code --install-extension at-terminal-mcp-0.3.0.vsix
 #如果安装基础版，则把文件名替换为实际生成的 at-terminal-*.vsix。
 ```
 

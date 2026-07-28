@@ -19,16 +19,22 @@ describe('package variants', () => {
     expect(baseManifest.dependencies['@modelcontextprotocol/sdk']).toBeUndefined();
   });
 
-  it('keeps the MCP manifest as the only manifest with agent and MCP contributions', () => {
+  it('keeps the MCP manifest free of languageModelTools while retaining MCP activation', () => {
     expect(mcpManifest.displayName).toBe('AT Terminal MCP');
     expect(mcpManifest.activationEvents).toContain('onStartupFinished');
-    expect(mcpManifest.activationEvents).toContain('onLanguageModelTool:list_ssh_servers');
-    expect(JSON.stringify(mcpManifest.contributes.languageModelTools)).toContain('list_ssh_servers');
+    expect(mcpManifest.activationEvents.every((event: string) => !event.startsWith('onLanguageModelTool:'))).toBe(
+      true
+    );
+    expect(mcpManifest.contributes.languageModelTools).toBeUndefined();
+    expect(JSON.stringify(mcpManifest.contributes)).not.toContain('languageModelTools');
+    expect(mcpManifest.dependencies['@modelcontextprotocol/sdk']).toBeUndefined();
   });
 
   it('keeps the MCP config command only in the MCP manifest', () => {
     expect(JSON.stringify(baseManifest.contributes)).not.toContain('sshManager.installMcpConfig');
+    expect(JSON.stringify(baseManifest.contributes)).not.toContain('sshManager.uninstallAtSeriesMcpConfig');
     expect(JSON.stringify(mcpManifest.contributes.commands)).toContain('sshManager.installMcpConfig');
+    expect(JSON.stringify(mcpManifest.contributes.commands)).toContain('sshManager.uninstallAtSeriesMcpConfig');
   });
 
   it('keeps Connect available without showing it as an inline server action', () => {
@@ -48,15 +54,16 @@ describe('package variants', () => {
     }
   });
 
-  it('builds the MCP server only for the MCP variant', () => {
+  it('does not build a per-plugin mcp-server entry', () => {
     expect(buildConfig).toContain('--variant=mcp');
-    expect(buildConfig).toContain('src/mcp/server.ts');
-    expect(buildConfig).toContain('dist/mcp-server.js');
+    expect(buildConfig).not.toContain('src/mcp/server.ts');
+    expect(buildConfig).not.toContain('dist/mcp-server.js');
   });
 
   it('guards extension MCP runtime behind a build flag', () => {
     expect(extensionSource).toContain('MCP_ENABLED');
     expect(extensionSource).toContain('if (MCP_ENABLED)');
+    expect(extensionSource).not.toContain('registerAgentTools');
   });
 
   it('stages package variants before running vsce', () => {
@@ -69,6 +76,12 @@ describe('package variants', () => {
     expect(packageScript).toContain("variant === 'base' ? 'README-base.md' : 'README.md'");
     expect(packageScript).toContain("join(root, readmeName)");
     expect(packageScript).toContain("join(stage, 'README.md')");
+  });
+
+  it('ships hub.js for MCP packaging and never requires mcp-server.js', () => {
+    expect(packageScript).toContain("join(stage, 'dist', 'hub.js')");
+    expect(packageScript).toContain('hub.js');
+    expect(packageScript).toContain('mcp-server.js');
   });
 
   it('keeps packaged VSIX files lean by excluding bundled dependencies and large screenshots', () => {

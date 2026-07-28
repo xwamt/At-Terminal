@@ -26,18 +26,6 @@ const contextConfigs = [
     format: 'cjs',
     external: ['vscode', 'ssh2']
   }),
-  ...(mcpEnabled
-    ? [
-        esbuild.context({
-          ...common,
-          entryPoints: ['src/mcp/server.ts'],
-          outfile: 'dist/mcp-server.js',
-          platform: 'node',
-          format: 'cjs',
-          external: ['vscode']
-        })
-      ]
-    : []),
   esbuild.context({
     ...common,
     entryPoints: ['webview/terminal/index.ts'],

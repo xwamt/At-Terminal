@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const variant = process.argv[2];
@@ -40,9 +40,15 @@ async function prunePackagedDependencies(directory) {
 await rm(stage, { recursive: true, force: true });
 await mkdir(stage, { recursive: true });
 await cp(join(root, 'dist'), join(stage, 'dist'), { recursive: true });
-if (variant === 'base') {
-  await rm(join(stage, 'dist', 'mcp-server.js'), { force: true });
-  await rm(join(stage, 'dist', 'mcp-server.js.map'), { force: true });
+// Per-plugin mcp-server.js is no longer a product surface; strip leftovers from either variant.
+await rm(join(stage, 'dist', 'mcp-server.js'), { force: true });
+await rm(join(stage, 'dist', 'mcp-server.js.map'), { force: true });
+if (variant === 'mcp') {
+  await access(join(stage, 'dist', 'hub.js'));
+  await access(join(stage, 'dist', 'hub-version.json'));
+} else {
+  await rm(join(stage, 'dist', 'hub.js'), { force: true });
+  await rm(join(stage, 'dist', 'hub-version.json'), { force: true });
 }
 await cp(join(root, 'media'), join(stage, 'media'), { recursive: true });
 await cp(join(root, 'docs', 'features.md'), join(stage, 'docs', 'features.md'));

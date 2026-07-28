@@ -55,7 +55,9 @@ describe('AT Terminal MCP skill', () => {
     expect(skill).not.toContain('.kiro/settings/mcp.json');
     expect(skill).not.toContain('.cursor/mcp.json');
     expect(skill).not.toContain('.continue/mcpServers/at-terminal.yaml');
-    expect(setup).toContain('dist/mcp-server.js');
+    expect(setup).toContain('.at-series/mcp/hub.js');
+    expect(setup).toContain('AT Series');
+    expect(setup).not.toContain('dist/mcp-server.js');
     expect(setup).toContain('AT Terminal: Install MCP Config');
     expect(setup).toContain('.kiro/settings/mcp.json');
     expect(setup).toContain('.cursor/mcp.json');
