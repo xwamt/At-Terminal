@@ -6,7 +6,6 @@ import {
   type McpInstallerTarget
 } from '@at-series/mcp-hub';
 import { detectHostApp } from './hostApp';
-import { AT_TERMINAL_TOOL_CATALOG } from './toolCatalog';
 
 export interface AtSeriesIdeMcpConfigOptions {
   appName?: string;
@@ -38,6 +37,7 @@ export function resolveMcpInstallerTarget(
   return undefined;
 }
 
+/** Ensure shared AT Series MCP entry via Hub installer (meta-only autoApprove). */
 export async function ensureAtSeriesConfigForCurrentIde(
   options: AtSeriesIdeMcpConfigOptions
 ): Promise<{ updated: boolean } | undefined> {
@@ -51,8 +51,7 @@ export async function ensureAtSeriesConfigForCurrentIde(
     hostApp,
     hubJsAbsolutePath: options.hubJsAbsolutePath ?? hubJsPath(options.home),
     home: options.home,
-    workspaceFolder: options.workspaceFolder,
-    registryTools: AT_TERMINAL_TOOL_CATALOG
+    workspaceFolder: options.workspaceFolder
   });
 }
 

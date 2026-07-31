@@ -3,15 +3,15 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  AT_SERIES_HOST_APP_ENV,
+  HUB_BUILTIN_TOOL_NAMES,
   MCP_SERVER_DISPLAY_NAME,
+  buildInstallerAtSeriesEnv,
   hubJsPath
 } from '@at-series/mcp-hub';
 import {
   ensureAtSeriesConfigForCurrentIde,
   uninstallAtSeriesConfigForCurrentIde
 } from '../../src/mcp/McpConfigInstaller';
-import { AT_TERMINAL_TOOL_CATALOG } from '../../src/mcp/toolCatalog';
 
 describe('McpConfigInstaller', () => {
   let home: string;
@@ -29,7 +29,7 @@ describe('McpConfigInstaller', () => {
     await rm(home, { recursive: true, force: true });
   });
 
-  it('ensure writes AT Series, migrates AT Terminal away, keeps other-server', async () => {
+  it('ensure writes canonical AT Series via Hub (no plugin catalog autoApprove)', async () => {
     const mcpPath = join(home, '.cursor', 'mcp.json');
     await mkdir(join(home, '.cursor'), { recursive: true });
     await writeFile(
@@ -68,14 +68,15 @@ describe('McpConfigInstaller', () => {
       command: 'uvx',
       args: ['mcp-server-fetch']
     });
-    expect(parsed.mcpServers[MCP_SERVER_DISPLAY_NAME]).toMatchObject({
+    expect(parsed.mcpServers[MCP_SERVER_DISPLAY_NAME]).toEqual({
       command: 'node',
       args: [hubJs.replaceAll('\\', '/')],
-      env: { [AT_SERIES_HOST_APP_ENV]: 'cursor' }
+      env: buildInstallerAtSeriesEnv('cursor'),
+      autoApprove: [...HUB_BUILTIN_TOOL_NAMES]
     });
   });
 
-  it('autoApprove excludes run_remote_command', async () => {
+  it('autoApprove is Hub meta only', async () => {
     const mcpPath = join(home, '.cursor', 'mcp.json');
 
     await ensureAtSeriesConfigForCurrentIde({
@@ -89,10 +90,9 @@ describe('McpConfigInstaller', () => {
       mcpServers: Record<string, { autoApprove?: string[] }>;
     };
     const autoApprove = parsed.mcpServers[MCP_SERVER_DISPLAY_NAME]?.autoApprove ?? [];
-    expect(autoApprove).toContain('at_list_providers');
-    expect(autoApprove).toContain('list_ssh_servers');
+    expect(autoApprove).toEqual([...HUB_BUILTIN_TOOL_NAMES]);
+    expect(autoApprove).not.toContain('list_ssh_servers');
     expect(autoApprove).not.toContain('run_remote_command');
-    expect(AT_TERMINAL_TOOL_CATALOG.find((t) => t.name === 'run_remote_command')?.risk).toBe('exec');
   });
 
   it('uninstall removes AT Series only', async () => {
@@ -106,8 +106,8 @@ describe('McpConfigInstaller', () => {
             [MCP_SERVER_DISPLAY_NAME]: {
               command: 'node',
               args: [hubJs.replaceAll('\\', '/')],
-              env: { [AT_SERIES_HOST_APP_ENV]: 'cursor' },
-              autoApprove: ['at_list_providers']
+              env: buildInstallerAtSeriesEnv('cursor'),
+              autoApprove: [...HUB_BUILTIN_TOOL_NAMES]
             },
             'other-server': { command: 'uvx', args: ['mcp-server-fetch'] }
           }

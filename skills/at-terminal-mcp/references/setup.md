@@ -14,7 +14,7 @@ Read this reference only when AT Terminal MCP is unavailable, disconnected, or i
 2. Run `AT Terminal: Install MCP Config`, or manually add an MCP server named `AT Series` that runs `node` against `~/.at-series/mcp/hub.js`.
 3. If `hub.js` is missing, reload the IDE window with AT Terminal MCP installed so hub sync can elect the packaged `dist/hub.js`.
 4. Restart or refresh the MCP client.
-5. Verify connectivity with `get_terminal_context` or `list_ssh_servers`.
+5. Verify with `at_list_providers`, then `at_select_tools` for `at.terminal`, then `get_terminal_context` or `list_ssh_servers`.
 
 Common configuration targets:
 
@@ -33,8 +33,19 @@ Kiro/Cursor shape:
       "command": "node",
       "args": ["C:/Users/YOU/.at-series/mcp/hub.js"],
       "env": {
-        "AT_SERIES_HOST_APP": "cursor"
-      }
+        "AT_SERIES_HOST_APP": "cursor",
+        "AT_SERIES_TOOL_DISCOVERY": "auto",
+        "AT_SERIES_TOOL_DISCOVERY_THRESHOLD": "20",
+        "AT_SERIES_TOOL_SELECTION_IDLE_MS": "0",
+        "AT_SERIES_TOOL_SELECTION_MAX_CALLS": "0"
+      },
+      "autoApprove": [
+        "at_list_providers",
+        "at_search_tools",
+        "at_get_tool",
+        "at_select_tools",
+        "at_clear_tool_selection"
+      ]
     }
   }
 }
