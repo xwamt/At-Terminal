@@ -48,6 +48,7 @@ export interface SftpPathBridgeRequest extends SftpTargetBridgeRequest {
 
 export interface SftpListDirectoryBridgeRequest extends SftpTargetBridgeRequest {
   path?: string;
+  maxEntries?: number;
 }
 
 export interface SftpReadFileBridgeRequest extends SftpPathBridgeRequest {

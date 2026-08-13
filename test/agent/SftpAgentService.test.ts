@@ -60,8 +60,81 @@ describe('SftpAgentService', () => {
       terminalId: 'terminal-1',
       serverId: 'server-1',
       path: '/home/deploy',
-      entries: [{ name: 'app.js', path: '/home/deploy/app.js', type: 'file', size: 10, modifiedAt: 1 }]
+      entries: [{ name: 'app.js', path: '/home/deploy/app.js', type: 'file', size: 10, modifiedAt: 1 }],
+      truncated: false,
+      total: 1
     });
+  });
+
+  it('truncates directory listings when entries exceed maxEntries', async () => {
+    const entries = Array.from({ length: 12 }, (_, index) => ({
+      name: `file-${index}.txt`,
+      path: `/tmp/file-${index}.txt`,
+      type: 'file' as const,
+      size: index,
+      modifiedAt: index
+    }));
+    const session = {
+      connect: vi.fn(async () => undefined),
+      realpath: vi.fn(async () => '/tmp'),
+      listDirectory: vi.fn(async () => entries),
+      stat: vi.fn(),
+      readFile: vi.fn(),
+      writeFile: vi.fn(),
+      mkdir: vi.fn(),
+      createFile: vi.fn(),
+      dispose: vi.fn()
+    };
+    const service = new SftpAgentService({
+      terminalContext: connectedRegistry(),
+      createSession: () => session as never,
+      authorizer: { requireWrite: vi.fn() }
+    });
+
+    await expect(service.listDirectory({ path: '/tmp', maxEntries: 5 })).resolves.toEqual({
+      terminalId: 'terminal-1',
+      serverId: 'server-1',
+      path: '/tmp',
+      entries: entries.slice(0, 5),
+      truncated: true,
+      total: 12
+    });
+  });
+
+  it('defaults maxEntries to 500 and clamps oversized requests', async () => {
+    const entries = Array.from({ length: 600 }, (_, index) => ({
+      name: `file-${index}.txt`,
+      path: `/tmp/file-${index}.txt`,
+      type: 'file' as const,
+      size: 1,
+      modifiedAt: 1
+    }));
+    const session = {
+      connect: vi.fn(async () => undefined),
+      realpath: vi.fn(async () => '/tmp'),
+      listDirectory: vi.fn(async () => entries),
+      stat: vi.fn(),
+      readFile: vi.fn(),
+      writeFile: vi.fn(),
+      mkdir: vi.fn(),
+      createFile: vi.fn(),
+      dispose: vi.fn()
+    };
+    const service = new SftpAgentService({
+      terminalContext: connectedRegistry(),
+      createSession: () => session as never,
+      authorizer: { requireWrite: vi.fn() }
+    });
+
+    const defaulted = await service.listDirectory({ path: '/tmp' });
+    expect(defaulted.truncated).toBe(true);
+    expect(defaulted.total).toBe(600);
+    expect(defaulted.entries).toHaveLength(500);
+
+    const clamped = await service.listDirectory({ path: '/tmp', maxEntries: 50_000 });
+    expect(clamped.entries).toHaveLength(600);
+    expect(clamped.truncated).toBe(false);
+    expect(clamped.total).toBe(600);
   });
 
   it('reads bounded UTF-8 text and reports truncation', async () => {

@@ -26,6 +26,9 @@ describe('AT Terminal MCP skill', () => {
     expect(skill).toContain('run_remote_command');
     expect(skill).toContain('non-interactive');
     expect(skill).toContain('# Purpose:');
+    expect(skill).toContain('truncated');
+    expect(skill).toContain('maxEntries');
+    expect(skill).toContain('nginx -T');
     expect(skill).toContain('[MCP setup](references/setup.md)');
     expect(skill).toContain('[Safe operations](references/safe-operations.md)');
     expect(skill).toContain('[Workspace troubleshooting](references/workspace-troubleshooting.md)');

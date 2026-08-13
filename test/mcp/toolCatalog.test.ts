@@ -18,4 +18,23 @@ describe('toolCatalog', () => {
     expect(byName.sftp_create_directory).toBe('write');
     expect(byName.run_remote_command).toBe('exec');
   });
+
+  it('documents payload caps for list, read, and command tools', () => {
+    const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((t) => [t.name, t]));
+
+    expect(byName.sftp_list_directory.description).toContain('maxEntries');
+    expect(byName.sftp_list_directory.description).toContain('500');
+    expect(byName.sftp_list_directory.description).toContain('truncated');
+    expect(byName.sftp_list_directory.inputSchema.properties).toMatchObject({
+      maxEntries: expect.objectContaining({ type: 'number' })
+    });
+
+    expect(byName.sftp_read_file.description).toMatch(/65536|64KiB|64\s*\*?\s*1024|64KB/i);
+    expect(byName.sftp_read_file.description).toMatch(/262144|256KiB|256KB/i);
+    expect(byName.sftp_read_file.description).toContain('truncated');
+
+    expect(byName.run_remote_command.description).toContain('64000');
+    expect(byName.run_remote_command.description).toContain('256000');
+    expect(byName.run_remote_command.description).toContain('truncated');
+  });
 });

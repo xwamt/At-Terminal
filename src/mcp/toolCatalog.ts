@@ -47,7 +47,8 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
   {
     name: 'run_remote_command',
     title: 'Run Remote SSH Command',
-    description: 'Run a confirmed non-interactive command on an AT Terminal SSH server.',
+    description:
+      'Run a confirmed non-interactive command on an AT Terminal SSH server. stdout/stderr each default to 64000 bytes (hard cap 256000); when truncated is true, narrow the command—do not dump whole configs (for example nginx -T or docker compose config).',
     risk: 'exec',
     inputSchema: {
       type: 'object',
@@ -72,7 +73,7 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
         maxOutputBytes: {
           type: 'number',
           description:
-            'Optional max bytes to keep separately for stdout and stderr. Values above 256000 are capped.'
+            'Optional max bytes to keep separately for stdout and stderr. Default 64000; values above 256000 are capped. Raise explicitly when a larger bounded capture is required.'
         }
       },
       required: ['command']
@@ -81,7 +82,8 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
   {
     name: 'sftp_list_directory',
     title: 'SFTP List Directory',
-    description: 'List a remote directory through the selected AT Terminal SFTP session.',
+    description:
+      'List a remote directory through the selected AT Terminal SFTP session. Returns at most maxEntries entries (default 500, hard cap 5000) plus truncated/total; when truncated, narrow the path or raise maxEntries.',
     risk: 'read',
     inputSchema: {
       type: 'object',
@@ -90,6 +92,11 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
         path: {
           type: 'string',
           description: 'Remote POSIX path.'
+        },
+        maxEntries: {
+          type: 'number',
+          description:
+            'Optional max directory entries to return. Default 500; values above 5000 are capped.'
         }
       }
     }
@@ -108,7 +115,8 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
   {
     name: 'sftp_read_file',
     title: 'SFTP Read File',
-    description: 'Read bounded UTF-8 text from a remote file through AT Terminal SFTP.',
+    description:
+      'Read bounded UTF-8 text from a remote file through AT Terminal SFTP. Default maxBytes is 65536 (hard cap 262144); when truncated is true, read a smaller range or raise maxBytes explicitly—do not pull whole large configs by default.',
     risk: 'read',
     inputSchema: {
       type: 'object',
@@ -116,7 +124,8 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
         ...pathProperties,
         maxBytes: {
           type: 'number',
-          description: 'Optional max bytes to read.'
+          description:
+            'Optional max bytes to read. Default 65536; values above 262144 are capped.'
         }
       },
       required: ['path']

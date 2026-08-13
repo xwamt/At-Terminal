@@ -18,7 +18,8 @@ const sftpTargetFields = {
 export const sftpListDirectoryBridgeSchema = z
   .object({
     ...sftpTargetFields,
-    path: z.string().min(1).optional()
+    path: z.string().min(1).optional(),
+    maxEntries: z.number().int().positive().optional()
   })
   .strict();
 

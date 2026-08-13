@@ -29,6 +29,8 @@ export interface SftpTargetInput {
 
 const DEFAULT_READ_BYTES = 64 * 1024;
 const MAX_READ_BYTES = 256 * 1024;
+const DEFAULT_MAX_ENTRIES = 500;
+const MAX_ENTRIES = 5_000;
 const WRITE_TIMEOUT_MS = 60_000;
 
 export class SftpAgentService {
@@ -37,15 +39,20 @@ export class SftpAgentService {
 
   constructor(private readonly options: SftpAgentServiceOptions) {}
 
-  async listDirectory(input: SftpTargetInput & { path?: string }) {
+  async listDirectory(input: SftpTargetInput & { path?: string; maxEntries?: number }) {
     const target = await this.resolveTarget(input);
     const session = await this.ensureSession(target.context);
     const path = await this.resolvePath(target.context.terminalId, session, input.path);
+    const entries = await session.listDirectory(path);
+    const maxEntries = clampMaxEntries(input.maxEntries);
+    const truncated = entries.length > maxEntries;
     return {
       terminalId: target.context.terminalId,
       serverId: target.context.server.id,
       path,
-      entries: await session.listDirectory(path)
+      entries: truncated ? entries.slice(0, maxEntries) : entries,
+      truncated,
+      total: entries.length
     };
   }
 
@@ -262,6 +269,13 @@ function clampReadBytes(value: number | undefined): number {
     return DEFAULT_READ_BYTES;
   }
   return Math.min(value, MAX_READ_BYTES);
+}
+
+function clampMaxEntries(value: number | undefined): number {
+  if (!Number.isInteger(value) || value === undefined || value <= 0) {
+    return DEFAULT_MAX_ENTRIES;
+  }
+  return Math.min(value, MAX_ENTRIES);
 }
 
 function looksBinary(buffer: Buffer): boolean {

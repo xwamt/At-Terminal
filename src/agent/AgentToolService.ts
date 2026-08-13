@@ -74,7 +74,12 @@ export class AgentToolService {
     });
   }
 
-  async sftpListDirectory(input: { terminalId?: string; serverId?: string; path?: string }) {
+  async sftpListDirectory(input: {
+    terminalId?: string;
+    serverId?: string;
+    path?: string;
+    maxEntries?: number;
+  }) {
     return await this.requireSftp().listDirectory(input);
   }
 

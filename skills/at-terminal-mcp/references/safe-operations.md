@@ -43,9 +43,14 @@ Do not use this text-file workflow for binaries, databases, large files, live st
 
 - Put a specific `# Purpose:` comment first in every `run_remote_command` command.
 - Use non-interactive, bounded commands. Avoid editors, TUI programs, password prompts, pagers, unbounded recursion, and `tail -f`.
-- Bound logs by time, line count, and output bytes.
+- Bound logs by time, line count, and output bytes. Default maxOutputBytes is 64000 (hard cap 256000); when `truncated` is true, narrow the command instead of raising blindly. Do not default to whole-config dumps such as `nginx -T` or `docker compose config`.
 - Never print secrets or full `.env` contents. Inspect variable names or presence without values.
 - Report stdout, stderr, exit code, timeout, duration, and truncation when relevant.
+
+## SFTP payload discipline
+
+- `sftp_list_directory` returns at most `maxEntries` (default 500, hard cap 5000) plus `truncated`/`total`. When truncated, list a narrower path or raise `maxEntries`.
+- `sftp_read_file` defaults to 65536 bytes (hard cap 262144). When truncated, read a smaller slice or raise `maxBytes` explicitly.
 
 ## Failure and rollback
 
