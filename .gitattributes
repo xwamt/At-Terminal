@@ -1,0 +1,20 @@
+# Normalize text files to LF in the repository.
+* text=auto eol=lf
+
+# Keep Windows shell scripts CRLF where the platform expects it.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Treat packages and common binaries as binary.
+*.vsix binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
