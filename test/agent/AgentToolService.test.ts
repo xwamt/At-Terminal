@@ -243,6 +243,39 @@ describe('AgentToolService', () => {
     });
   });
 
+  it('skips confirmation for a trusted pipeline whose every stage is read-only', async () => {
+    const trusted = { ...server(), backgroundConnectionAllowed: true, agentCommandAutoApprove: true };
+    const command = 'netstat -tulnp | grep 8080';
+    const execute = vi.fn(async () => ({
+      serverId: 'server-1',
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command,
+      exitCode: 0,
+      stdout: 'tcp 0 0 0.0.0.0:8080',
+      stderr: '',
+      durationMs: 1,
+      timedOut: false,
+      truncated: false
+    }));
+    const showWarningMessage = vi.spyOn(vscode.window, 'showWarningMessage');
+    const service = new AgentToolService({
+      configManager: { getServer: async () => trusted, listServers: async () => [trusted] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    await service.runRemoteCommand({ serverId: 'server-1', command });
+
+    expect(showWarningMessage).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(trusted, {
+      command,
+      cwd: undefined,
+      timeoutMs: undefined,
+      maxOutputBytes: undefined
+    });
+  });
+
   it.each([
     'find / -delete',
     '> /etc/passwd',

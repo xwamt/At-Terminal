@@ -5,13 +5,19 @@
  * shape: anything it fails to describe runs unprompted. The gate is an allowlist of read-only
  * commands; everything else is confirmed by a human. `looksDestructive` survives only as a
  * warning banner on the confirmation dialog and never decides whether to prompt.
+ *
+ * A pipeline of read-only stages is still read-only, so `|` is allowed as long as every stage
+ * clears the same allowlist. That is not a hole in the allowlist: nothing runs that could not
+ * have run on its own line.
  */
 
 /**
- * Any of these turns one command into several, or redirects output into a file, so the
- * allowlisted head of the line stops being a description of what will run.
+ * Any of these turns one stage into several, or redirects output into a file, so the
+ * allowlisted head of the stage stops being a description of what will run. `|` is deliberately
+ * absent: what makes a pipe dangerous is what sits on either end of it, and every end is
+ * checked separately below.
  */
-const SHELL_CONTROL_CHARACTERS = /[|&;<>`$(){}\n\r\\]/;
+const SHELL_CONTROL_CHARACTERS = /[&;<>`$(){}\n\r\\]/;
 
 type ArgumentRule = (args: string[]) => boolean;
 
@@ -87,13 +93,35 @@ const READ_ONLY_COMMANDS = new Map<string, ArgumentRule>([
 /** The command names that `agentCommandAutoApprove` can skip confirmation for. */
 export const READ_ONLY_COMMAND_ALLOWLIST: readonly string[] = [...READ_ONLY_COMMANDS.keys()];
 
-export function isReadOnlyAllowlistedCommand(command: string): boolean {
-  const trimmed = command.trim();
+/** One stage of a pipeline: a single command, with no way to reach a second one. */
+function isReadOnlyPipelineStage(stage: string): boolean {
+  const trimmed = stage.trim();
   if (!trimmed || SHELL_CONTROL_CHARACTERS.test(trimmed)) {
     return false;
   }
   const [name, ...args] = trimmed.split(/\s+/);
   return READ_ONLY_COMMANDS.get(name)?.(args) ?? false;
+}
+
+/**
+ * A pipeline is auto-approved only when *every* stage is independently allowlisted, so
+ * `cat x | grep y` passes while `cat x | sh` does not.
+ *
+ * Stages are cut on `|` without lexing quotes, and that only ever costs an extra prompt: a stage
+ * the shell will really run starts right after an unquoted `|`, so it always begins a naive stage
+ * too, and a head that hides behind quotes (`r"m" -rf /`) stops matching an allowlist key at all.
+ * The reverse — a dangerous command that the cut makes look read-only — cannot happen, because
+ * the cut only ever adds stages that must also pass. `grep "a|b" file` is the price: harmless,
+ * but confirmed.
+ */
+export function isReadOnlyAllowlistedCommand(command: string): boolean {
+  const trimmed = command.trim();
+  // `||` is "run the second one if the first fails", not a pipe. Splitting would leave an empty
+  // stage, which fails anyway; rejecting it by name keeps that from looking like a coincidence.
+  if (!trimmed || trimmed.includes('||')) {
+    return false;
+  }
+  return trimmed.split('|').every((stage) => isReadOnlyPipelineStage(stage));
 }
 
 /**

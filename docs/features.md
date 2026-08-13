@@ -77,7 +77,7 @@ AT Terminal MCP publishes tools through the shared **AT Series** hub (`~/.at-ser
 - All SSH and SFTP connect paths verify host keys (unknown hosts prompt; changed hosts are blocked).
 - Bridges publish into the AT Series registry under `~/.at-series/bridges/<hostApp>/`.
 - Bridge requests validate JSON schemas and enforce a maximum body size (2 MiB).
-- `run_remote_command` asks for confirmation before every command. `Trust agent remote commands` narrows that to a read-only allowlist (`ls`, `cat`, `grep`, `ps`, `df`, `systemctl status`, `journalctl` and similar); a command leaves the allowlist as soon as it contains a pipe, a redirect, command chaining, a subshell or a variable expansion.
+- `run_remote_command` asks for confirmation before every command. `Trust agent remote commands` narrows that to a read-only allowlist (`ls`, `cat`, `grep`, `ps`, `df`, `systemctl status`, `journalctl` and similar). A pipeline stays on the allowlist only when every one of its stages is (`netstat -tulnp | grep 8080` skips the prompt, `cat x | sh` does not); a redirect, `&&`, `||`, `;`, a background `&`, a subshell or a variable expansion always drops back to confirmation.
 - The server trust switch affects only `run_remote_command`. It does not bypass SFTP write authorization or SSH host key trust.
 - Writes outside the directory the SFTP session was opened in are highlighted in the prompt and cannot be granted for the whole session.
 - Sensitive paths (`~/.ssh`, `/etc`, `/usr`, `/root`, `*.service`, `authorized_keys`, `sudoers*`, `crontab`) always require a second confirmation and are never remembered.

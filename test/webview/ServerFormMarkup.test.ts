@@ -205,7 +205,7 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('name="agentCommandAutoApprove"');
     expect(html).toContain('Trust agent remote commands');
     expect(html).toContain(
-      'Skip confirmation only for read-only commands (ls, cat, grep, ps, df, systemctl status, journalctl). Everything else, including pipes, redirects and chaining, still asks.'
+      'Skip confirmation only for read-only commands (ls, cat, grep, ps, df, systemctl status, journalctl), and pipelines of them such as ps aux | grep java. Redirects, chaining and everything else still asks.'
     );
     expect(html).not.toContain('Run non-destructive MCP remote commands without asking each time.');
     expect(html).toContain('Agent commands: manual approval');

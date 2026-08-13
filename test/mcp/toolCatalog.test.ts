@@ -45,6 +45,14 @@ describe('toolCatalog', () => {
     expect(byName.run_remote_command.description).toContain('confirmation');
   });
 
+  it('tells the caller what a pipeline has to look like to skip confirmation', () => {
+    const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((tool) => [tool.name, tool]));
+
+    expect(byName.run_remote_command.description).toContain('pipeline');
+    expect(byName.run_remote_command.description).toContain('every one of its stages');
+    expect(byName.run_remote_command.description).not.toContain('no pipes');
+  });
+
   it('tells the caller that write authorization is per directory, not per server', () => {
     const writeTools = AT_TERMINAL_TOOL_CATALOG.filter((tool) => tool.risk === 'write');
 
