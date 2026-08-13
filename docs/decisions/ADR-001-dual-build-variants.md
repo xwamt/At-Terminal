@@ -19,10 +19,10 @@ AT Terminal 服务两类用户：
 
 | 变体 | npm 脚本 | 清单文件 | 编译开关 |
 | --- | --- | --- | --- |
-| 基础版 `AT Terminal` | `build:base` / `package:base` | `package.base.json` | `__AT_TERMINAL_MCP_ENABLED__ = false` |
-| MCP 版 `AT Terminal MCP` | `build:mcp` / `package:mcp` | `package.mcp.json` | `__AT_TERMINAL_MCP_ENABLED__ = true` |
+| 基础版 `AT Terminal` | `build:base` / `package:base` | `package.base.json` | `MCP_ENABLED = false` |
+| MCP 版 `AT Terminal MCP` | `build:mcp` / `package:mcp` | `package.mcp.json` | `MCP_ENABLED = true` |
 
-运行时通过 `src/buildFlags.ts` 的 `MCP_ENABLED` 门控 Agent / MCP 注册。MCP 构建会打包 `dist/hub.js`（来自 `@at-series/mcp-hub`）供共享 AT Series MCP 客户端使用；不再产出 per-plugin `dist/mcp-server.js`。
+`MCP_ENABLED` 由 esbuild 的 `define` 注入（类型声明在 `src/buildFlags.d.ts`），必须在 `if` 处直接读取：一旦经由任何绑定（模块导出或同文件 `const`）中转，esbuild 就无法把分支折叠掉，基础版会把整个 MCP Bridge 打进产物。MCP 构建会打包 `dist/hub.js`（来自 `@at-series/mcp-hub`）供共享 AT Series MCP 客户端使用；不再产出 per-plugin `dist/mcp-server.js`。
 
 ## 备选方案
 

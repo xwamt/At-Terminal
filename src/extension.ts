@@ -4,7 +4,6 @@ import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
 import { SftpAgentService } from './agent/SftpAgentService';
 import { createProductionSftpWriteAuthorizer } from './agent/createSftpWriteAuthorizer';
 import { assetPrivateKeyDirectory, exportAssetsCommand, importAssetsCommand } from './assets/AssetCommands';
-import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import type { ServerConfig } from './config/schema';
 import { BridgeServer } from './mcp/BridgeServer';
