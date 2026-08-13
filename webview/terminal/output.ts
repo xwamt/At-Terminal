@@ -6,7 +6,7 @@ interface TerminalWriter {
 
 export type TerminalOutputMessage =
   | { type?: string; payload?: unknown }
-  | { type: 'outputBytes'; payload: number[] }
+  | { type: 'outputBytes'; payload: string }
   | { type: 'output'; payload: string };
 
 export interface TerminalOutputOptions {
@@ -18,8 +18,8 @@ export function writeTerminalOutputMessage(
   terminal: TerminalWriter,
   options: TerminalOutputOptions = {}
 ): boolean {
-  if (message.type === 'outputBytes' && isByteArray(message.payload)) {
-    const bytes = Uint8Array.from(message.payload);
+  if (message.type === 'outputBytes' && typeof message.payload === 'string') {
+    const bytes = decodeBase64(message.payload);
     const highlighted = highlightBytes(bytes, options.semanticHighlight === true);
     terminal.write(highlighted ?? bytes);
     return true;
@@ -31,8 +31,13 @@ export function writeTerminalOutputMessage(
   return false;
 }
 
-function isByteArray(value: unknown): value is number[] {
-  return Array.isArray(value) && value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255);
+function decodeBase64(payload: string): Uint8Array {
+  const binary = atob(payload);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
 }
 
 function highlightBytes(bytes: Uint8Array, enabled: boolean): string | undefined {

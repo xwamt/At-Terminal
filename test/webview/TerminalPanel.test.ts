@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { ServerConfig } from '../../src/config/schema';
 import { deactivate } from '../../src/extension';
 import { TerminalContextRegistry } from '../../src/terminal/TerminalContext';
+import { TERMINAL_OUTPUT_FLUSH_MS } from '../../src/webview/TerminalOutputBatcher';
 import {
   createTerminalAssets,
   createTerminalViewColumn,
@@ -103,6 +104,14 @@ function createPanel() {
 async function flushPromises(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function outputMessages(panel: vscode.WebviewPanel): string[] {
+  return vi
+    .mocked(panel.webview.postMessage)
+    .mock.calls.map(([message]) => message as { type?: string; payload?: unknown })
+    .filter((message) => message.type === 'outputBytes')
+    .map((message) => Buffer.from(String(message.payload), 'base64').toString());
 }
 
 function deferred<T>() {
@@ -340,19 +349,69 @@ describe('TerminalPanel rendering helpers', () => {
     expect(TerminalPanel.getActive()).toBeUndefined();
   });
 
-  it('posts ANSI terminal output to xterm as raw bytes without stripping escape sequences', async () => {
-    const panelHost = createPanel();
-    vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
-    const rawOutput = Buffer.from('\x1b[31mred\x1b[0m\r\n\x1b[32mgreen\x1b[0m', 'utf8');
+  it('posts ANSI terminal output to xterm as base64 bytes without stripping escape sequences', async () => {
+    try {
+      vi.useFakeTimers();
+      const panelHost = createPanel();
+      vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+      const rawOutput = Buffer.from('\x1b[31mred\x1b[0m\r\n\x1b[32mgreen\x1b[0m', 'utf8');
 
-    TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier);
-    await flushPromises();
-    sessionEvents.at(-1)!.output(rawOutput);
+      TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier);
+      await flushPromises();
+      sessionEvents.at(-1)!.output(rawOutput);
+      vi.advanceTimersByTime(TERMINAL_OUTPUT_FLUSH_MS);
 
-    expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({
-      type: 'outputBytes',
-      payload: [...rawOutput]
-    });
+      expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({
+        type: 'outputBytes',
+        payload: rawOutput.toString('base64')
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('coalesces a burst of SSH packets into a single webview message', async () => {
+    try {
+      vi.useFakeTimers();
+      const panelHost = createPanel();
+      vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+
+      TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier);
+      await flushPromises();
+      const events = sessionEvents.at(-1)!;
+      events.output(Buffer.from('first '));
+      events.output(Buffer.from('second '));
+      events.output(Buffer.from('third'));
+      expect(outputMessages(panelHost.panel)).toEqual([]);
+
+      vi.advanceTimersByTime(TERMINAL_OUTPUT_FLUSH_MS);
+
+      expect(outputMessages(panelHost.panel)).toEqual(['first second third']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('flushes buffered output before the disconnect notice so the tail is not reordered', async () => {
+    try {
+      vi.useFakeTimers();
+      const panelHost = createPanel();
+      vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+
+      const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier);
+      await flushPromises();
+      sessionEvents.at(-1)!.output(Buffer.from('last line'));
+      terminal.disconnect();
+
+      const posted = vi.mocked(panelHost.panel.webview.postMessage).mock.calls.map(([message]) => message);
+      expect(posted).toEqual([
+        { type: 'outputBytes', payload: Buffer.from('last line').toString('base64') },
+        { type: 'status', payload: 'Disconnected' },
+        { type: 'output', payload: formatTerminalNotice('Connection disconnected') }
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ignores late session messages after the webview panel is disposed', async () => {

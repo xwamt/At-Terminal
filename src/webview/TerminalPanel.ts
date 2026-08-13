@@ -10,6 +10,7 @@ import type { TerminalContextRegistry } from '../terminal/TerminalContext';
 import { formatError } from '../utils/errors';
 import { showTimedNotification } from '../utils/notifications';
 import { renderWebviewHtml, type WebviewAsset } from './html';
+import { TerminalOutputBatcher } from './TerminalOutputBatcher';
 
 type TerminalMessage =
   | { type: 'ready'; rows: number; cols: number }
@@ -42,6 +43,7 @@ export class TerminalPanel {
   private disposed = false;
   private connectionGeneration = 0;
   private idleDisconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private outputBatcher: TerminalOutputBatcher | undefined;
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
@@ -152,6 +154,7 @@ export class TerminalPanel {
     this.connectionGeneration++;
     this.clearIdleDisconnect();
     this.session.dispose();
+    this.outputBatcher?.dispose();
     this.connected = false;
     this.terminalContext?.markDisconnected(this.terminalId);
     this.postStatus(statusMessage);
@@ -177,6 +180,7 @@ export class TerminalPanel {
       this.connectionGeneration++;
       this.clearIdleDisconnect();
       this.session.dispose();
+      this.outputBatcher?.dispose();
       this.connected = false;
       this.terminalContext?.clearIfActive(this.terminalId);
       TerminalPanel.panels.delete(this);
@@ -192,6 +196,11 @@ export class TerminalPanel {
         void new LrzszTransfer().start(start);
       }
     });
+    this.outputBatcher?.dispose();
+    const outputBatcher = new TerminalOutputBatcher({
+      emit: (payload) => this.postWebviewMessage({ type: 'outputBytes', payload })
+    });
+    this.outputBatcher = outputBatcher;
     return new SshSession(
       this.server,
       this.configManager,
@@ -199,7 +208,7 @@ export class TerminalPanel {
         output: (data) => {
           const inspected = lrzszDetector.inspect(data.toString('latin1'));
           if (inspected.passthrough) {
-            this.postWebviewMessage({ type: 'outputBytes', payload: [...data] });
+            outputBatcher.push(data);
           }
         },
         status: (message) => this.handleSessionStatus(message, generation),
@@ -214,6 +223,9 @@ export class TerminalPanel {
   }
 
   private postTerminalNotice(message: string): void {
+    // Notices are a separate message type, so buffered bytes must land first or the notice
+    // would be rendered in the middle of the output that preceded it.
+    this.outputBatcher?.flush();
     this.postWebviewMessage({ type: 'output', payload: formatTerminalNotice(message) });
   }
 

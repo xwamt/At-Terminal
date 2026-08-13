@@ -3,13 +3,33 @@ import { semanticHighlightText } from '../../webview/terminal/semanticHighlight'
 import { writeTerminalOutputMessage } from '../../webview/terminal/output';
 
 describe('terminal output messages', () => {
-  it('writes byte output to xterm as Uint8Array so ANSI control bytes stay raw', () => {
+  it('decodes base64 byte output to Uint8Array so ANSI control bytes stay raw', () => {
     const terminal = { write: vi.fn() };
     const bytes = [0x1b, 0x5b, 0x33, 0x31, 0x6d, 0x52, 0x45, 0x44, 0x1b, 0x5b, 0x30, 0x6d];
+    const payload = Buffer.from(bytes).toString('base64');
 
-    expect(writeTerminalOutputMessage({ type: 'outputBytes', payload: bytes }, terminal)).toBe(true);
+    expect(writeTerminalOutputMessage({ type: 'outputBytes', payload }, terminal)).toBe(true);
 
     expect(terminal.write).toHaveBeenCalledWith(Uint8Array.from(bytes));
+  });
+
+  it('decodes the full byte range including bytes that are not valid UTF-8', () => {
+    const terminal = { write: vi.fn() };
+    const bytes = Uint8Array.from([0x00, 0x7f, 0x80, 0xc3, 0xff]);
+
+    expect(
+      writeTerminalOutputMessage({ type: 'outputBytes', payload: Buffer.from(bytes).toString('base64') }, terminal)
+    ).toBe(true);
+
+    expect(terminal.write).toHaveBeenCalledWith(bytes);
+  });
+
+  it('ignores byte output that is not a base64 string', () => {
+    const terminal = { write: vi.fn() };
+
+    expect(writeTerminalOutputMessage({ type: 'outputBytes', payload: [65, 66] }, terminal)).toBe(false);
+
+    expect(terminal.write).not.toHaveBeenCalled();
   });
 
   it('keeps string output support for older webview messages', () => {
@@ -39,9 +59,9 @@ describe('terminal output messages', () => {
 
   it('writes highlighted byte output as text only when semantic highlighting changes plain output', () => {
     const terminal = { write: vi.fn() };
-    const bytes = [...Buffer.from('ERROR /var/log/app.log 500', 'utf8')];
+    const payload = Buffer.from('ERROR /var/log/app.log 500', 'utf8').toString('base64');
 
-    expect(writeTerminalOutputMessage({ type: 'outputBytes', payload: bytes }, terminal, { semanticHighlight: true })).toBe(true);
+    expect(writeTerminalOutputMessage({ type: 'outputBytes', payload }, terminal, { semanticHighlight: true })).toBe(true);
 
     expect(terminal.write).toHaveBeenCalledWith('\x1b[31mERROR\x1b[0m \x1b[34m/var/log/app.log\x1b[0m \x1b[32m500\x1b[0m');
   });
