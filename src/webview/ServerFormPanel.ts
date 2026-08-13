@@ -229,7 +229,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const agentCommandTrusted = server?.agentCommandAutoApprove === true;
   const backgroundConnectionAllowed = agentCommandTrusted && server?.backgroundConnectionAllowed === true;
   const agentCommandTrustSummary = agentCommandTrusted
-    ? 'Agent commands: read-only commands trusted'
+    ? 'Agent commands: state-changing commands still ask'
     : 'Agent commands: manual approval';
   const groupSuggestions = groupNames(servers);
   const groupValue = server ? server.group ?? '' : initialGroup ?? '';
@@ -268,7 +268,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
             <label class="trust-toggle-row" for="agentCommandAutoApprove">
               <span class="trust-toggle-copy">
                 <span class="trust-toggle-title">Trust agent remote commands</span>
-                <span class="field-help">Skip confirmation only for read-only commands (ls, cat, grep, ps, df, systemctl status, journalctl), and pipelines of them such as ps aux | grep java. Redirects, chaining and everything else still asks.</span>
+                <span class="field-help">Skip confirmation unless the command changes state (rm, chmod, systemctl restart, apt, docker, or an interpreter such as sh, python, awk, sed), or hides what it runs behind quotes, escapes, redirects or command substitution. Every stage of a pipeline or chain is checked. Commands the blocklist does not name run without asking.</span>
               </span>
               <input id="agentCommandAutoApprove" name="agentCommandAutoApprove" type="checkbox"${agentCommandTrusted ? ' checked' : ''}>
             </label>

@@ -4,7 +4,7 @@ import type { ServerConfig } from '../config/schema';
 import type { TerminalContextRegistry, TerminalContextSnapshot } from '../terminal/TerminalContext';
 import { formatRemoteCommandConfirmMessage } from '../utils/commandPreview';
 import type { RemoteCommandExecutor, RemoteCommandResult } from './RemoteCommandExecutor';
-import { isReadOnlyAllowlistedCommand, looksDestructive } from './remoteCommandPolicy';
+import { looksDestructive, requiresConfirmation } from './remoteCommandPolicy';
 import type { SftpAgentService } from './SftpAgentService';
 
 export interface AgentToolServiceDependencies {
@@ -51,7 +51,7 @@ export class AgentToolService {
     }
     const server = await this.resolveServer(input.serverId);
     const destructive = looksDestructive(command);
-    const autoApproved = server.agentCommandAutoApprove === true && isReadOnlyAllowlistedCommand(command);
+    const autoApproved = server.agentCommandAutoApprove === true && !requiresConfirmation(command);
     if (!autoApproved) {
       const answer = await vscode.window.showWarningMessage(
         formatRemoteCommandConfirmMessage({

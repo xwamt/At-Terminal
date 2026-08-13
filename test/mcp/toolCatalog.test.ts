@@ -38,19 +38,25 @@ describe('toolCatalog', () => {
     expect(byName.run_remote_command.description).toContain('truncated');
   });
 
-  it('tells the caller that run_remote_command only skips confirmation for read-only commands', () => {
+  it('tells the caller that run_remote_command confirms the commands on a blocklist', () => {
     const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((tool) => [tool.name, tool]));
 
-    expect(byName.run_remote_command.description).toContain('read-only');
+    expect(byName.run_remote_command.description).toContain('blocklist');
     expect(byName.run_remote_command.description).toContain('confirmation');
+    expect(byName.run_remote_command.description).not.toContain('allowlist');
   });
 
-  it('tells the caller what a pipeline has to look like to skip confirmation', () => {
+  it('tells the caller that every stage of a chained command is checked', () => {
     const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((tool) => [tool.name, tool]));
 
-    expect(byName.run_remote_command.description).toContain('pipeline');
-    expect(byName.run_remote_command.description).toContain('every one of its stages');
+    expect(byName.run_remote_command.description).toContain('stage');
     expect(byName.run_remote_command.description).not.toContain('no pipes');
+  });
+
+  it('admits to the caller that an unknown command is not gated', () => {
+    const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((tool) => [tool.name, tool]));
+
+    expect(byName.run_remote_command.description).toContain('Unknown commands');
   });
 
   it('tells the caller that write authorization is per directory, not per server', () => {

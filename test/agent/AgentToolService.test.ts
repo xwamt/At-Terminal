@@ -211,7 +211,7 @@ describe('AgentToolService', () => {
     expect(sftp.writeFile).toHaveBeenCalledWith({ path: '/x', content: 'next', overwrite: true });
   });
 
-  it('skips command confirmation for trusted read-only allowlisted remote commands', async () => {
+  it('skips command confirmation for trusted commands that miss the blocklist', async () => {
     const trusted = { ...server(), backgroundConnectionAllowed: true, agentCommandAutoApprove: true };
     const execute = vi.fn(async () => ({
       serverId: 'server-1',
@@ -253,6 +253,39 @@ describe('AgentToolService', () => {
       command,
       exitCode: 0,
       stdout: 'tcp 0 0 0.0.0.0:8080',
+      stderr: '',
+      durationMs: 1,
+      timedOut: false,
+      truncated: false
+    }));
+    const showWarningMessage = vi.spyOn(vscode.window, 'showWarningMessage');
+    const service = new AgentToolService({
+      configManager: { getServer: async () => trusted, listServers: async () => [trusted] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    await service.runRemoteCommand({ serverId: 'server-1', command });
+
+    expect(showWarningMessage).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(trusted, {
+      command,
+      cwd: undefined,
+      timeoutMs: undefined,
+      maxOutputBytes: undefined
+    });
+  });
+
+  it('skips confirmation for a trusted diagnostic command no allowlist would have listed', async () => {
+    const trusted = { ...server(), backgroundConnectionAllowed: true, agentCommandAutoApprove: true };
+    const command = 'top -bn1 | head -20';
+    const execute = vi.fn(async () => ({
+      serverId: 'server-1',
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command,
+      exitCode: 0,
+      stdout: 'load average: 0.00',
       stderr: '',
       durationMs: 1,
       timedOut: false,
@@ -319,7 +352,7 @@ describe('AgentToolService', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('confirms an allowlisted command as soon as it is chained with another one', async () => {
+  it('confirms a chained command as soon as one of its stages is blocklisted', async () => {
     const trusted = { ...server(), backgroundConnectionAllowed: true, agentCommandAutoApprove: true };
     const showWarningMessage = vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined);
     const execute = vi.fn();

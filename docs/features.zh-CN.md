@@ -63,7 +63,7 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 | --- | --- | --- |
 | `list_ssh_servers` | 只读 | 列出已允许后台连接的 SSH 服务器，不暴露密码或私钥。 |
 | `get_terminal_context` | 只读 | 返回当前聚焦、默认连接、已连接和已知的 AT Terminal SSH 终端上下文。 |
-| `run_remote_command` | 命令 | 执行经过确认的非交互 SSH 命令，并返回 stdout、stderr、exit code、timeout、duration 和截断信息。除非命中只读白名单且服务器已被信任，否则每条命令都要确认。stdout/stderr 各默认 64000 字节（硬顶 256000）。 |
+| `run_remote_command` | 命令 | 执行经过确认的非交互 SSH 命令，并返回 stdout、stderr、exit code、timeout、duration 和截断信息。除非服务器已被信任且命令未命中「会改变状态」的黑名单，否则每条命令都要确认。stdout/stderr 各默认 64000 字节（硬顶 256000）。 |
 | `sftp_list_directory` | 只读 | 通过已连接的 AT Terminal SFTP 会话列出远程目录。最多返回 `maxEntries` 条（默认 500，硬顶 5000），并带 `truncated`/`total`。 |
 | `sftp_stat_path` | 只读 | 返回远程文件或目录的元信息。 |
 | `sftp_read_file` | 只读 | 读取有限大小的 UTF-8 远程文本文件；默认 `maxBytes` 65536（硬顶 262144）；疑似二进制内容会被拒绝。 |
@@ -73,7 +73,7 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 
 ## 安全行为
 
-- `run_remote_command` 对每条命令都请求确认。`Trust agent remote commands` 只把免确认范围收窄到只读白名单（`ls`、`cat`、`grep`、`ps`、`df`、`systemctl status`、`journalctl` 等）。管道要**每一段都在白名单内**才留在免确认范围内（`netstat -tulnp | grep 8080` 免确认，`cat x | sh` 不免）；重定向、`&&`、`||`、`;`、后台 `&`、子 shell 或变量展开一律退出白名单并重新弹窗。
+- `run_remote_command` 对每条命令都请求确认。`Trust agent remote commands` 让**未命中黑名单**的命令免确认；黑名单收录 441 个会改变状态的命令名，分 19 组（文件写入、权限、归档、磁盘、进程与服务控制、解释器与执行包装、包管理、网络传输与配置、账号、容器、编辑器与分页器、追踪调试、数据库客户端、引导）。命令按 `|`、`;`、`&&`、`||`、`&` 分段，**每一段的命令名都要过黑名单**，任一段命中即弹窗：`ps aux | grep java | head -20` 免确认，`ls && rm -rf /` 弹窗。`systemctl`、`journalctl`、`ip`、`ss`、`find`、`dmesg`、`crontab`、`date`、`hostname`、`sysctl`、`git`、`ifconfig`、`route`、`ethtool`、`sort` 按参数判断，因此 `systemctl status nginx`、`git log` 免确认，`systemctl restart nginx`、`git checkout .` 弹窗。命令替换、重定向、反斜杠转义、命令名带引号或写成路径、多行脚本一律弹窗。**代价写在明面上：黑名单没点名的命令，在受信任服务器上不弹窗直接执行。**
 - 服务器信任开关只影响 `run_remote_command`，不会跳过 SFTP 写入授权或 SSH 主机指纹信任。
 - Bridge 发布到 AT Series 注册表 `~/.at-series/bridges/<hostApp>/`。
 - SFTP 写入按「目录」授权：弹窗提供 `Allow Once`（默认）、`Allow This Folder For 15 Minutes`、`Allow This Folder For The Session` 三档，任何一档都只覆盖用户当时看到的那个目录，不会覆盖整台服务器。
