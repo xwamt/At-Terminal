@@ -370,6 +370,27 @@ describe('TerminalPanel rendering helpers', () => {
     }
   });
 
+  it('passes zmodem sequences straight to xterm so rz and sz stay interruptible', async () => {
+    try {
+      vi.useFakeTimers();
+      const panelHost = createPanel();
+      vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+      const zmodemHeader = Buffer.from('rz waiting to receive.**\x18B0100000023be50\r\x8a\x11', 'latin1');
+
+      TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier);
+      await flushPromises();
+      sessionEvents.at(-1)!.output(zmodemHeader);
+      vi.advanceTimersByTime(TERMINAL_OUTPUT_FLUSH_MS);
+
+      expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({
+        type: 'outputBytes',
+        payload: zmodemHeader.toString('base64')
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('coalesces a burst of SSH packets into a single webview message', async () => {
     try {
       vi.useFakeTimers();

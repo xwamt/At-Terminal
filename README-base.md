@@ -67,10 +67,6 @@ AT Terminal 是一个面向 VS Code 系列 IDE 的 SSH 终端和 SFTP 工作区�
 - 表单有内联校验和保存状态。
 - 图标、侧边栏和表单颜色跟随 IDE 主题。
 
-#### lrzsz 检测
-
-当远程主机安装了 `lrzsz`，终端输出中出现 `rz` 或 `sz <file>` 的 ZMODEM 序列时，插件会进行保守检测并启动本地适配流程。完整传输能力取决于当前扩展宿主可用的协议路径。
-
 ### 截图
 
 ![Add server form](docs/images/%E6%96%B0%E5%A2%9E%E6%9C%8D%E5%8A%A1%E5%99%A8.png)
@@ -205,10 +201,6 @@ This works well for:
 - Private-key selection through the file picker.
 - Inline validation and saving state.
 - Icons, sidebars, and forms adapt to the active IDE theme.
-
-#### lrzsz Detection
-
-When the remote host has `lrzsz` installed, terminal output from `rz` or `sz <file>` is detected conservatively and starts the local adapter flow. Full transfer support depends on the compatible protocol path available in the extension host.
 
 ### Basic Usage
 
