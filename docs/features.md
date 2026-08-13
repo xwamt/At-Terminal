@@ -63,7 +63,7 @@ AT Terminal MCP publishes tools through the shared **AT Series** hub (`~/.at-ser
 | --- | --- | --- |
 | `list_ssh_servers` | read-only | Lists SSH servers authorized for background connections without exposing passwords or private keys. |
 | `get_terminal_context` | read-only | Returns focused, default connected, connected, and known AT Terminal SSH terminal context. |
-| `run_remote_command` | command | Runs a confirmed non-interactive SSH command and returns stdout, stderr, exit code, timeout, duration, and truncation metadata. stdout/stderr each default to 64000 bytes (hard cap 256000). |
+| `run_remote_command` | command | Runs a confirmed non-interactive SSH command and returns stdout, stderr, exit code, timeout, duration, and truncation metadata. Every command is confirmed unless it is on the read-only allowlist and the server is trusted. stdout/stderr each default to 64000 bytes (hard cap 256000). |
 | `sftp_list_directory` | read-only | Lists a remote directory through a connected AT Terminal SFTP session. Returns at most `maxEntries` (default 500, hard cap 5000) plus `truncated`/`total`. |
 | `sftp_stat_path` | read-only | Returns metadata for a remote file or directory. |
 | `sftp_read_file` | read-only | Reads bounded UTF-8 text from a remote file. Default `maxBytes` 65536 (hard cap 262144). Binary-looking content is rejected. |
@@ -77,7 +77,7 @@ AT Terminal MCP publishes tools through the shared **AT Series** hub (`~/.at-ser
 - All SSH and SFTP connect paths verify host keys (unknown hosts prompt; changed hosts are blocked).
 - Bridges publish into the AT Series registry under `~/.at-series/bridges/<hostApp>/`.
 - Bridge requests validate JSON schemas and enforce a maximum body size (2 MiB).
-- `run_remote_command` asks for confirmation before commands unless the target server has `Trust agent remote commands` enabled. Dangerous-looking commands still ask for confirmation.
+- `run_remote_command` asks for confirmation before every command. `Trust agent remote commands` narrows that to a read-only allowlist (`ls`, `cat`, `grep`, `ps`, `df`, `systemctl status`, `journalctl` and similar); a command leaves the allowlist as soon as it contains a pipe, a redirect, command chaining, a subshell or a variable expansion.
 - The server trust switch affects only `run_remote_command`. It does not bypass SFTP write authorization or SSH host key trust.
 - SFTP write tools ask for first-write authorization per server during the current extension host session.
 - Read tools do not return passwords, private keys, or SecretStorage values.

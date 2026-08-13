@@ -229,7 +229,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const agentCommandTrusted = server?.agentCommandAutoApprove === true;
   const backgroundConnectionAllowed = agentCommandTrusted && server?.backgroundConnectionAllowed === true;
   const agentCommandTrustSummary = agentCommandTrusted
-    ? 'Agent commands: trusted for non-destructive commands'
+    ? 'Agent commands: read-only commands trusted'
     : 'Agent commands: manual approval';
   const groupSuggestions = groupNames(servers);
   const groupValue = server ? server.group ?? '' : initialGroup ?? '';
@@ -268,7 +268,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
             <label class="trust-toggle-row" for="agentCommandAutoApprove">
               <span class="trust-toggle-copy">
                 <span class="trust-toggle-title">Trust agent remote commands</span>
-                <span class="field-help">Run non-destructive MCP remote commands without asking each time.</span>
+                <span class="field-help">Skip confirmation only for read-only commands (ls, cat, grep, ps, df, systemctl status, journalctl). Everything else, including pipes, redirects and chaining, still asks.</span>
               </span>
               <input id="agentCommandAutoApprove" name="agentCommandAutoApprove" type="checkbox"${agentCommandTrusted ? ' checked' : ''}>
             </label>

@@ -204,7 +204,10 @@ describe('ServerFormPanel markup', () => {
 
     expect(html).toContain('name="agentCommandAutoApprove"');
     expect(html).toContain('Trust agent remote commands');
-    expect(html).toContain('Run non-destructive MCP remote commands without asking each time.');
+    expect(html).toContain(
+      'Skip confirmation only for read-only commands (ls, cat, grep, ps, df, systemctl status, journalctl). Everything else, including pipes, redirects and chaining, still asks.'
+    );
+    expect(html).not.toContain('Run non-destructive MCP remote commands without asking each time.');
     expect(html).toContain('Agent commands: manual approval');
     expect(html).not.toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
   });
@@ -225,7 +228,7 @@ describe('ServerFormPanel markup', () => {
     });
 
     expect(html).toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
-    expect(html).toContain('Agent commands: trusted for non-destructive commands');
+    expect(html).toContain('Agent commands: read-only commands trusted');
   });
 
   it('nests the background connection switch under trust and hides it by default', () => {

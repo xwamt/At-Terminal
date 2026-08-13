@@ -4,6 +4,7 @@ import type { ServerConfig } from '../config/schema';
 import type { TerminalContextRegistry, TerminalContextSnapshot } from '../terminal/TerminalContext';
 import { formatRemoteCommandConfirmMessage } from '../utils/commandPreview';
 import type { RemoteCommandExecutor, RemoteCommandResult } from './RemoteCommandExecutor';
+import { isReadOnlyAllowlistedCommand, looksDestructive } from './remoteCommandPolicy';
 import type { SftpAgentService } from './SftpAgentService';
 
 export interface AgentToolServiceDependencies {
@@ -49,9 +50,9 @@ export class AgentToolService {
       throw new Error('Remote command cannot be empty.');
     }
     const server = await this.resolveServer(input.serverId);
-    const destructive = isObviouslyDestructive(command);
-    const needsConfirmation = server.agentCommandAutoApprove !== true || destructive;
-    if (needsConfirmation) {
+    const destructive = looksDestructive(command);
+    const autoApproved = server.agentCommandAutoApprove === true && isReadOnlyAllowlistedCommand(command);
+    if (!autoApproved) {
       const answer = await vscode.window.showWarningMessage(
         formatRemoteCommandConfirmMessage({
           serverLabel: server.label,
@@ -152,8 +153,4 @@ export class AgentToolService {
     }
     return this.dependencies.sftp;
   }
-}
-
-function isObviouslyDestructive(command: string): boolean {
-  return /\b(rm\s+-[^\n]*r|mkfs|shutdown|reboot|poweroff|dd\s+if=)/i.test(command);
 }

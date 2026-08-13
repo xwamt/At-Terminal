@@ -207,7 +207,7 @@ function updateSummary(): void {
   }
   if (summaryAgentCommands) {
     summaryAgentCommands.textContent = agentCommandAutoApproveEnabled()
-      ? 'Agent commands: trusted for non-destructive commands'
+      ? 'Agent commands: read-only commands trusted'
       : 'Agent commands: manual approval';
   }
 }

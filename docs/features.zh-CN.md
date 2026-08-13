@@ -63,7 +63,7 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 | --- | --- | --- |
 | `list_ssh_servers` | 只读 | 列出已允许后台连接的 SSH 服务器，不暴露密码或私钥。 |
 | `get_terminal_context` | 只读 | 返回当前聚焦、默认连接、已连接和已知的 AT Terminal SSH 终端上下文。 |
-| `run_remote_command` | 命令 | 执行经过确认的非交互 SSH 命令，并返回 stdout、stderr、exit code、timeout、duration 和截断信息。stdout/stderr 各默认 64000 字节（硬顶 256000）。 |
+| `run_remote_command` | 命令 | 执行经过确认的非交互 SSH 命令，并返回 stdout、stderr、exit code、timeout、duration 和截断信息。除非命中只读白名单且服务器已被信任，否则每条命令都要确认。stdout/stderr 各默认 64000 字节（硬顶 256000）。 |
 | `sftp_list_directory` | 只读 | 通过已连接的 AT Terminal SFTP 会话列出远程目录。最多返回 `maxEntries` 条（默认 500，硬顶 5000），并带 `truncated`/`total`。 |
 | `sftp_stat_path` | 只读 | 返回远程文件或目录的元信息。 |
 | `sftp_read_file` | 只读 | 读取有限大小的 UTF-8 远程文本文件；默认 `maxBytes` 65536（硬顶 262144）；疑似二进制内容会被拒绝。 |
@@ -73,7 +73,7 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 
 ## 安全行为
 
-- `run_remote_command` 在目标服务器启用 `Trust agent remote commands` 前会请求确认。疑似危险命令仍会请求确认。
+- `run_remote_command` 对每条命令都请求确认。`Trust agent remote commands` 只把免确认范围收窄到只读白名单（`ls`、`cat`、`grep`、`ps`、`df`、`systemctl status`、`journalctl` 等）；命令一旦含管道、重定向、命令串联、子 shell 或变量展开，就退出白名单并重新弹窗。
 - 服务器信任开关只影响 `run_remote_command`，不会跳过 SFTP 写入授权或 SSH 主机指纹信任。
 - Bridge 发布到 AT Series 注册表 `~/.at-series/bridges/<hostApp>/`。
 - SFTP 写入工具会在当前扩展宿主会话内，对每台服务器的首次写入请求确认。

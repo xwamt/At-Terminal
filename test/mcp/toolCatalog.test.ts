@@ -37,4 +37,11 @@ describe('toolCatalog', () => {
     expect(byName.run_remote_command.description).toContain('256000');
     expect(byName.run_remote_command.description).toContain('truncated');
   });
+
+  it('tells the caller that run_remote_command only skips confirmation for read-only commands', () => {
+    const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((tool) => [tool.name, tool]));
+
+    expect(byName.run_remote_command.description).toContain('read-only');
+    expect(byName.run_remote_command.description).toContain('confirmation');
+  });
 });
