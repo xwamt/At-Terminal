@@ -320,6 +320,51 @@ describe('SftpAgentService', () => {
     expect(session.writeFile).not.toHaveBeenCalled();
   });
 
+  it('tells the authorizer which directory the session started in', async () => {
+    const requireWrite = vi.fn(async () => undefined);
+    const session = {
+      connect: vi.fn(async () => undefined),
+      realpath: vi.fn(async (path = '.') => (path === '.' ? '/home/deploy/app' : path)),
+      listDirectory: vi.fn(),
+      stat: vi.fn(async () => {
+        throw missingPathError();
+      }),
+      readFile: vi.fn(),
+      writeFile: vi.fn(async () => undefined),
+      mkdir: vi.fn(async () => undefined),
+      createFile: vi.fn(async () => undefined),
+      dispose: vi.fn()
+    };
+    const service = new SftpAgentService({
+      terminalContext: connectedRegistry(),
+      createSession: () => session as never,
+      authorizer: { requireWrite }
+    });
+
+    await service.writeFile({ path: 'notes.txt', content: 'hello' });
+    await service.createFile({ path: '/etc/cron.d/task' });
+    await service.createDirectory({ path: '/var/www/html' });
+
+    expect(requireWrite).toHaveBeenNthCalledWith(1, expect.anything(), {
+      operation: 'write_file',
+      path: '/home/deploy/app/notes.txt',
+      overwrite: false,
+      workspaceRoot: '/home/deploy/app'
+    });
+    expect(requireWrite).toHaveBeenNthCalledWith(2, expect.anything(), {
+      operation: 'create_file',
+      path: '/etc/cron.d/task',
+      overwrite: false,
+      workspaceRoot: '/home/deploy/app'
+    });
+    expect(requireWrite).toHaveBeenNthCalledWith(3, expect.anything(), {
+      operation: 'create_directory',
+      path: '/var/www/html',
+      overwrite: false,
+      workspaceRoot: '/home/deploy/app'
+    });
+  });
+
   it('creates new directories by resolving the parent directory instead of the leaf path', async () => {
     const requireWrite = vi.fn(async () => undefined);
     const session = {

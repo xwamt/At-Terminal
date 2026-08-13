@@ -27,6 +27,13 @@ export interface SftpTargetInput {
   serverId?: string;
 }
 
+interface WritableTarget {
+  /** Server-resolved absolute path of the write target. */
+  path: string;
+  /** `realpath('.')` for this terminal's session, used as the write jail. */
+  workspaceRoot: string;
+}
+
 const DEFAULT_READ_BYTES = 64 * 1024;
 const MAX_READ_BYTES = 256 * 1024;
 const DEFAULT_MAX_ENTRIES = 500;
@@ -92,7 +99,11 @@ export class SftpAgentService {
   async writeFile(input: SftpTargetInput & { path: string; content: string; overwrite?: boolean }) {
     const target = await this.resolveTarget(input);
     const session = await this.ensureSession(target.context);
-    const path = await this.resolveWritablePath(target.context.terminalId, session, input.path);
+    const { path, workspaceRoot } = await this.resolveWritablePath(
+      target.context.terminalId,
+      session,
+      input.path
+    );
     const exists = await pathExists(session, path);
     if (exists && !input.overwrite) {
       throw new Error('Remote file already exists. Pass overwrite: true to replace it.');
@@ -101,7 +112,8 @@ export class SftpAgentService {
       this.options.authorizer.requireWrite(target.context.server, {
         operation: 'write_file',
         path,
-        overwrite: Boolean(exists)
+        overwrite: Boolean(exists),
+        workspaceRoot
       }),
       WRITE_TIMEOUT_MS,
       `Timed out waiting for SFTP write authorization for ${path}.`
@@ -120,7 +132,11 @@ export class SftpAgentService {
   async createFile(input: SftpTargetInput & { path: string; content?: string }) {
     const target = await this.resolveTarget(input);
     const session = await this.ensureSession(target.context);
-    const path = await this.resolveWritablePath(target.context.terminalId, session, input.path);
+    const { path, workspaceRoot } = await this.resolveWritablePath(
+      target.context.terminalId,
+      session,
+      input.path
+    );
     if (await pathExists(session, path)) {
       throw new Error('Remote file already exists.');
     }
@@ -128,7 +144,8 @@ export class SftpAgentService {
       this.options.authorizer.requireWrite(target.context.server, {
         operation: 'create_file',
         path,
-        overwrite: false
+        overwrite: false,
+        workspaceRoot
       }),
       WRITE_TIMEOUT_MS,
       `Timed out waiting for SFTP create authorization for ${path}.`
@@ -148,12 +165,17 @@ export class SftpAgentService {
   async createDirectory(input: SftpTargetInput & { path: string }) {
     const target = await this.resolveTarget(input);
     const session = await this.ensureSession(target.context);
-    const path = await this.resolveWritablePath(target.context.terminalId, session, input.path);
+    const { path, workspaceRoot } = await this.resolveWritablePath(
+      target.context.terminalId,
+      session,
+      input.path
+    );
     await withTimeout(
       this.options.authorizer.requireWrite(target.context.server, {
         operation: 'create_directory',
         path,
-        overwrite: false
+        overwrite: false,
+        workspaceRoot
       }),
       WRITE_TIMEOUT_MS,
       `Timed out waiting for SFTP create directory authorization for ${path}.`
@@ -209,12 +231,16 @@ export class SftpAgentService {
     return path.startsWith('/') ? await session.realpath(path) : await session.realpath(`${root}/${path}`);
   }
 
-  private async resolveWritablePath(terminalId: string, session: AgentSftpSession, path: string): Promise<string> {
+  private async resolveWritablePath(
+    terminalId: string,
+    session: AgentSftpSession,
+    path: string
+  ): Promise<WritableTarget> {
     if (!path.trim()) {
       throw new Error('Remote path cannot be empty.');
     }
-    const root = await this.rootFor(terminalId, session);
-    const candidate = path.startsWith('/') ? path : joinRemotePath(root, path);
+    const workspaceRoot = await this.rootFor(terminalId, session);
+    const candidate = path.startsWith('/') ? path : joinRemotePath(workspaceRoot, path);
     const normalized = candidate.replace(/\/+$/, '') || '/';
     if (normalized === '/') {
       throw new Error('Remote root path cannot be modified.');
@@ -224,7 +250,7 @@ export class SftpAgentService {
     if (resolved === '/') {
       throw new Error('Remote root path cannot be modified.');
     }
-    return resolved;
+    return { path: resolved, workspaceRoot };
   }
 
   private async rootFor(terminalId: string, session: AgentSftpSession): Promise<string> {
