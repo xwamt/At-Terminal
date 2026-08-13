@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { AT_SERIES_TOKEN_HEADER } from '@at-series/mcp-hub';
 import { createBridgeRequestHandler, readLimitedBody } from '../../src/mcp/BridgeServer';
@@ -63,6 +64,26 @@ describe('createBridgeRequestHandler', () => {
       status: 401,
       body: { error: { code: 'UNAUTHORIZED' } }
     });
+  });
+
+  it('never treats a blank token as a match on either header', async () => {
+    const handler = createHandler({ token: '' });
+
+    for (const header of [AT_SERIES_TOKEN_HEADER, BRIDGE_TOKEN_HEADER]) {
+      await expect(
+        handler({ method: 'GET', path: '/health', headers: { [header]: '' } })
+      ).resolves.toMatchObject({
+        status: 401,
+        body: { error: { code: 'UNAUTHORIZED' } }
+      });
+    }
+  });
+
+  it('compares both token headers in constant time', () => {
+    const source = readFileSync('src/mcp/BridgeServer.ts', 'utf8');
+
+    expect(source).toContain('timingSafeEqualToken');
+    expect(source).not.toMatch(/===\s*token\b/);
   });
 
   it('accepts legacy x-at-terminal-token during migration', async () => {

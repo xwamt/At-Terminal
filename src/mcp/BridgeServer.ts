@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { homedir } from 'node:os';
 import type { z } from 'zod';
@@ -7,7 +7,9 @@ import {
   AT_SERIES_TOKEN_HEADER,
   BRIDGE_HOST,
   BRIDGE_MAX_BODY_BYTES,
+  createBridgeToken,
   FsBridgePublisher,
+  timingSafeEqualToken,
   type HostApp
 } from '@at-series/mcp-hub';
 import type { AgentToolService } from '../agent/AgentToolService';
@@ -90,7 +92,7 @@ export class BridgeServer {
     if (this.server) {
       return;
     }
-    this.token = randomBytes(32).toString('hex');
+    this.token = createBridgeToken();
     this.server = createBridgeHttpServer({
       service: this.service,
       token: this.token,
@@ -407,16 +409,21 @@ export async function readLimitedBody(
   return { ok: true, body: Buffer.concat(chunks).toString('utf8') };
 }
 
+/**
+ * Protocol v1 §7.2 requires constant-time comparison, and `timingSafeEqualToken` also
+ * refuses to match a blank token — a bridge that failed to mint one must stay closed
+ * rather than accept an empty header.
+ */
 function isAuthorized(
   headers: Record<string, string | string[] | undefined>,
   token: string
 ): boolean {
   const series = headerValue(headers, AT_SERIES_TOKEN_HEADER);
-  if (series === token) {
+  if (timingSafeEqualToken(series ?? '', token)) {
     return true;
   }
   const legacy = headerValue(headers, BRIDGE_TOKEN_HEADER);
-  return legacy === token;
+  return timingSafeEqualToken(legacy ?? '', token);
 }
 
 function headerValue(
