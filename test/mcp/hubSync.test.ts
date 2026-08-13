@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -74,7 +75,13 @@ describe('syncPackagedHubAt', () => {
         writtenByPluginId: 'at.terminal',
         writtenByPluginVersion: '0.2.0',
         writtenAt: 1,
-        bundleSha256: 'abc'
+        // Must be the real digest of the active hub.js: syncHubBundle only
+        // defers to this record while it still describes the bytes on disk,
+        // so a placeholder here would make it repair the "tampered" bundle
+        // instead of exercising the semver skip this test is about.
+        bundleSha256: createHash('sha256')
+          .update(Buffer.from(activeContent, 'utf8'))
+          .digest('hex')
       }),
       'utf8'
     );
