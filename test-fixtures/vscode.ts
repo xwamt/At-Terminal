@@ -88,10 +88,16 @@ export enum ProgressLocation {
   Notification = 15
 }
 
+export interface Command {
+  command: string;
+  title: string;
+  arguments?: unknown[];
+}
+
 export class StatusBarItem {
   text = '';
   tooltip: string | undefined;
-  command: string | undefined;
+  command: string | Command | undefined;
   visible = false;
 
   show(): void {

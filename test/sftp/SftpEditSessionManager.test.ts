@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
@@ -126,6 +126,33 @@ describe('SftpEditSessionManager open flow', () => {
       vi.useRealTimers();
       vi.restoreAllMocks();
     }
+  });
+
+  it('leaves a clickable status bar entry that opens the kept local copy', () => {
+    const statusBarItem = vscode.window.createStatusBarItem();
+    const localUri = vscode.Uri.file('C:/tmp/sftp-edit/index.js');
+    const ui = createVscodeSftpEditUi(statusBarItem);
+
+    ui.showUnsyncedLocalCopy!('/srv/app/index.js', localUri);
+
+    expect(statusBarItem.text).toContain('Unsynchronized remote edit');
+    expect(statusBarItem.tooltip).toContain('/srv/app/index.js');
+    expect(statusBarItem.tooltip).toContain(localUri.fsPath);
+    expect(statusBarItem.command).toEqual({
+      command: 'vscode.open',
+      title: 'Open the unsynchronized local copy',
+      arguments: [localUri]
+    });
+  });
+
+  it('clears the recovery entry command once a later sync reports status', () => {
+    const statusBarItem = vscode.window.createStatusBarItem();
+    const ui = createVscodeSftpEditUi(statusBarItem);
+
+    ui.showUnsyncedLocalCopy!('/srv/app/index.js', vscode.Uri.file('C:/tmp/sftp-edit/index.js'));
+    ui.showStatus('uploading', 'Uploading remote file...');
+
+    expect(statusBarItem.command).toBeUndefined();
   });
 
   it('restores the language mode from the remote filename when VS Code opens a cache file as plaintext', async () => {
@@ -590,8 +617,9 @@ async function flushPromises(): Promise<void> {
 }
 
 describe('SftpEditSessionManager close cleanup', () => {
-  it('deletes cache and unregisters clean idle sessions on close', async () => {
+  it('deletes cache and unregisters clean idle sessions on close without asking', async () => {
     const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-clean-')));
+    const promptUnsyncedClose = vi.fn();
     const manager = new SftpEditSessionManager({
       storageUri: storage,
       sftp: {
@@ -606,7 +634,7 @@ describe('SftpEditSessionManager close cleanup', () => {
         confirmAutoSync: vi.fn(),
         resolveConflict: vi.fn(),
         showStatus: vi.fn(),
-        promptUnsyncedClose: vi.fn()
+        promptUnsyncedClose
       }
     });
 
@@ -616,6 +644,7 @@ describe('SftpEditSessionManager close cleanup', () => {
 
       await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
 
+      expect(promptUnsyncedClose).not.toHaveBeenCalled();
       expect(existsSync(session.localUri.fsPath)).toBe(false);
       expect(manager.getSessionByLocalPath(session.localUri.fsPath)).toBeUndefined();
     } finally {
@@ -624,9 +653,15 @@ describe('SftpEditSessionManager close cleanup', () => {
     }
   });
 
-  it('deletes cache and unregisters failed sessions on close without replacing the original error', async () => {
-    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-failed-')));
+  // Superseded the assertion that a failed session's cache is deleted on close. That
+  // assertion described the bug: an upload that failed on permissions, a dropped link, or a
+  // cancelled conflict left the only copy of the user's edits in the cache file, and close
+  // deleted it with rm(force). Closing an editor is not consent to discard unsaved work.
+  it('keeps the cached file and offers a recovery entry when the user keeps an unsynchronized edit', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-failed-keep-')));
     const showError = vi.fn();
+    const promptUnsyncedClose = vi.fn(async () => 'keep' as const);
+    const showUnsyncedLocalCopy = vi.fn();
     const manager = new SftpEditSessionManager({
       storageUri: storage,
       sftp: {
@@ -642,21 +677,103 @@ describe('SftpEditSessionManager close cleanup', () => {
         resolveConflict: vi.fn(),
         showStatus: vi.fn(),
         showError,
-        promptUnsyncedClose: vi.fn()
+        promptUnsyncedClose,
+        showUnsyncedLocalCopy
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await writeFile(session.localUri.fsPath, 'edits that never reached the server');
+      session.syncState = 'failed';
+      session.lastError = 'permission denied';
+
+      await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+
+      expect(promptUnsyncedClose).toHaveBeenCalledWith('/srv/app/index.js');
+      expect(existsSync(session.localUri.fsPath)).toBe(true);
+      expect(await readFile(session.localUri.fsPath, 'utf8')).toBe('edits that never reached the server');
+      expect(showUnsyncedLocalCopy).toHaveBeenCalledWith('/srv/app/index.js', session.localUri);
+      expect(showError).not.toHaveBeenCalled();
+      expect(session.lastError).toBe('permission denied');
+    } finally {
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('deletes the cached file when the user discards an unsynchronized edit', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-failed-discard-')));
+    const promptUnsyncedClose = vi.fn(async () => 'discard' as const);
+    const showUnsyncedLocalCopy = vi.fn();
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp: {
+        getActiveServerId: vi.fn(() => 'srv'),
+        stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+        downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+        uploadFile: vi.fn()
+      },
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose,
+        showUnsyncedLocalCopy
       }
     });
 
     try {
       const session = await manager.openRemoteFile('/srv/app/index.js');
       session.syncState = 'failed';
-      session.lastError = 'permission denied';
 
       await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
 
-      expect(showError).not.toHaveBeenCalled();
-      expect(session.lastError).toBe('permission denied');
+      expect(promptUnsyncedClose).toHaveBeenCalledWith('/srv/app/index.js');
       expect(existsSync(session.localUri.fsPath)).toBe(false);
+      expect(showUnsyncedLocalCopy).not.toHaveBeenCalled();
       expect(manager.getSessionByLocalPath(session.localUri.fsPath)).toBeUndefined();
+    } finally {
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('prompts for a conflicted session after recording why the close interrupted the sync', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-close-conflict-')));
+    const showError = vi.fn();
+    const promptUnsyncedClose = vi.fn(async () => 'keep' as const);
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp: {
+        getActiveServerId: vi.fn(() => 'srv'),
+        stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+        downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+        uploadFile: vi.fn()
+      },
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        showError,
+        promptUnsyncedClose,
+        showUnsyncedLocalCopy: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      session.syncState = 'conflict';
+
+      await manager.handleClosedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+
+      expect(session.lastError).toBe('Remote sync did not complete before the editor was closed.');
+      expect(promptUnsyncedClose).toHaveBeenCalledWith('/srv/app/index.js');
+      expect(existsSync(session.localUri.fsPath)).toBe(true);
     } finally {
       manager.dispose();
       await rm(storage.fsPath, { recursive: true, force: true });

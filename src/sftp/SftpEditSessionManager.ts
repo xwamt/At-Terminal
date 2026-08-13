@@ -33,6 +33,7 @@ export interface SftpEditUi {
   showSuccess?(remotePath: string, message: string): Promise<void>;
   showError?(remotePath: string, message: string): Promise<void>;
   promptUnsyncedClose(remotePath: string): Promise<SftpEditCloseChoice>;
+  showUnsyncedLocalCopy?(remotePath: string, localUri: vscode.Uri): void;
 }
 
 export interface SftpEditSession {
@@ -209,6 +210,16 @@ export class SftpEditSessionManager {
     await this.flushUploadBeforeClose(session);
     if (session.syncState === 'pending' || session.syncState === 'uploading' || session.syncState === 'conflict') {
       await this.failSync(session, new Error('Remote sync did not complete before the editor was closed.'));
+    }
+    if (this.hasUnsynchronizedState(session)) {
+      // The cache file holds the only copy of edits that never reached the server, so
+      // deleting it on close would destroy work the user never agreed to discard.
+      const choice = await this.options.ui.promptUnsyncedClose(session.remotePath);
+      if (choice === 'keep') {
+        this.unregisterSession(session);
+        this.options.ui.showUnsyncedLocalCopy?.(session.remotePath, session.localUri);
+        return;
+      }
     }
     this.unregisterSession(session);
     await this.deleteSessionCache(session);
@@ -392,6 +403,7 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
               ? '$(warning) Remote file changed'
               : '$(error) Remote sync failed';
       statusBarItem.tooltip = message;
+      statusBarItem.command = undefined;
       statusBarItem.show();
       if (state === 'idle') {
         setTimeout(() => statusBarItem.hide(), 2000);
@@ -425,6 +437,16 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
         'Discard Local Copy'
       );
       return answer === 'Discard Local Copy' ? 'discard' : 'keep';
+    },
+    showUnsyncedLocalCopy(remotePath, localUri) {
+      statusBarItem.text = '$(warning) Unsynchronized remote edit';
+      statusBarItem.tooltip = `${remotePath} was not synced. The local copy is kept at ${localUri.fsPath}.`;
+      statusBarItem.command = {
+        command: 'vscode.open',
+        title: 'Open the unsynchronized local copy',
+        arguments: [localUri]
+      };
+      statusBarItem.show();
     }
   };
 }
