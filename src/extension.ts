@@ -82,6 +82,7 @@ export function activate(context: vscode.ExtensionContext): void {
     sftp: sftpManager,
     ui: createVscodeSftpEditUi(sftpEditStatus)
   });
+  const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier);
   let disposed = false;
   const cleanup = {
     dispose(): void {
@@ -91,6 +92,7 @@ export function activate(context: vscode.ExtensionContext): void {
       disposed = true;
       TerminalPanel.disconnectAll();
       sftpManager.dispose();
+      remoteCommandExecutor.dispose();
       if (extensionCleanup === cleanup) {
         extensionCleanup = undefined;
       }
@@ -111,7 +113,6 @@ export function activate(context: vscode.ExtensionContext): void {
     sftpManager.removeTerminalContext(terminalId);
   });
 
-  const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier);
   let bridgeServer: BridgeServer | undefined;
   let sftpAgentService: SftpAgentService | undefined;
   let installMcpConfigCommand: vscode.Disposable | undefined;
