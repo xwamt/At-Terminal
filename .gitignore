@@ -53,3 +53,7 @@ ATmcp.json
 .kilo/
 ops/
 docs/reviews/
+
+# Scratch directory for the remote-file editor. Holds plaintext copies of files
+# pulled over SFTP, so it must never be committed. See SftpEditSessionManager.
+.ssh-terminal-manager/
