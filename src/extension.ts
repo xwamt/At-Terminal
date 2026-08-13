@@ -47,7 +47,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return true;
       }
       if (status === 'changed') {
-        await showTimedNotification(
+        showTimedNotification(
           `Host key for ${host}:${port} changed. Connection blocked. Fingerprint: ${fingerprint}`,
           'error'
         );
@@ -139,7 +139,7 @@ export function activate(context: vscode.ExtensionContext): void {
       })
       .catch((error) => {
         console.error('AT Terminal hub sync failed:', formatError(error));
-        void showTimedNotification(
+        showTimedNotification(
           `AT Series hub sync failed: ${formatError(error)}. MCP may not start until Repair succeeds.`,
           'warning'
         );
@@ -169,7 +169,7 @@ export function activate(context: vscode.ExtensionContext): void {
           : undefined
     });
     void bridgeServer.start().catch((error) => {
-      void showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');
+      showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');
     });
     void hubReady
       .then(() =>
@@ -179,13 +179,13 @@ export function activate(context: vscode.ExtensionContext): void {
         })
       )
       .catch((error) => {
-        void showTimedNotification(`AT Series MCP config could not be updated: ${formatError(error)}`, 'warning');
+        showTimedNotification(`AT Series MCP config could not be updated: ${formatError(error)}`, 'warning');
       });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
       try {
         await syncPackagedHub(context);
       } catch (error) {
-        await showTimedNotification(`AT Series hub sync failed: ${formatError(error)}`, 'error');
+        showTimedNotification(`AT Series hub sync failed: ${formatError(error)}`, 'error');
         return;
       }
       const result = await ensureAtSeriesConfigForCurrentIde({
@@ -193,12 +193,12 @@ export function activate(context: vscode.ExtensionContext): void {
         workspaceFolder: currentWorkspaceFolder()
       });
       if (result) {
-        await showTimedNotification(
+        showTimedNotification(
           result.updated ? 'AT Series MCP config installed/repaired.' : 'AT Series MCP config is already up to date.'
         );
         return;
       }
-      await showTimedNotification(
+      showTimedNotification(
         'No supported IDE MCP config target was detected. Open a workspace to install Continue config.',
         'warning'
       );
@@ -209,14 +209,14 @@ export function activate(context: vscode.ExtensionContext): void {
         workspaceFolder: currentWorkspaceFolder()
       });
       if (result?.removed) {
-        await showTimedNotification('AT Series MCP config uninstalled.');
+        showTimedNotification('AT Series MCP config uninstalled.');
         return;
       }
       if (result) {
-        await showTimedNotification('AT Series MCP config was not present.');
+        showTimedNotification('AT Series MCP config was not present.');
         return;
       }
-      await showTimedNotification(
+      showTimedNotification(
         'No supported IDE MCP config target was detected. Open a workspace to uninstall Continue config.',
         'warning'
       );
@@ -282,7 +282,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const references = await configManager.findJumpHostReferences(item.server.id);
       if (references.length > 0) {
-        await showTimedNotification(formatJumpHostDeleteBlockMessage(item.server, references), 'warning');
+        showTimedNotification(formatJumpHostDeleteBlockMessage(item.server, references), 'warning');
         return;
       }
       const answer = await vscode.window.showWarningMessage(
@@ -468,7 +468,7 @@ async function runSftpCommand(command: () => Promise<void>): Promise<void> {
   try {
     await command();
   } catch (error) {
-    await showTimedNotification(formatError(error), 'error');
+    showTimedNotification(formatError(error), 'error');
   }
 }
 

@@ -79,7 +79,7 @@ describe('SftpEditSessionManager open flow', () => {
     }
   });
 
-  it('keeps remote sync progress open until the upload job finishes and uses 8s failure toasts', async () => {
+  it('keeps remote sync progress open until the upload job finishes', async () => {
     try {
       vi.useFakeTimers();
       let resolveJob!: (value: string) => void;
@@ -103,18 +103,32 @@ describe('SftpEditSessionManager open flow', () => {
       resolveJob('ok');
       await expect(pending).resolves.toBe('ok');
       expect(progressTaskFinished).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
 
-      const failure = ui.showError!('/srv/app/index.js', 'permission denied');
-      let failureSettled = false;
-      void failure.then(() => {
-        failureSettled = true;
+  it('reports a sync failure as an 8s toast without stalling the save that failed', async () => {
+    try {
+      vi.useFakeTimers();
+      let toastDismissed = false;
+      vi.spyOn(vscode.window, 'withProgress').mockImplementation(async (_options, task) => {
+        await task({ report: vi.fn() }, {} as never);
+        toastDismissed = true;
+        return undefined as never;
       });
-      await vi.advanceTimersByTimeAsync(7999);
+      const ui = createVscodeSftpEditUi(vscode.window.createStatusBarItem());
+      let callerResumed = false;
+
+      void ui.showError!('/srv/app/index.js', 'permission denied').then(() => {
+        callerResumed = true;
+      });
       await Promise.resolve();
-      expect(failureSettled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await failure;
-      expect(failureSettled).toBe(true);
+      await Promise.resolve();
+
+      expect(callerResumed).toBe(true);
+      expect(toastDismissed).toBe(false);
       expect(vscode.window.withProgress).toHaveBeenCalledWith(
         {
           location: vscode.ProgressLocation.Notification,
@@ -123,6 +137,11 @@ describe('SftpEditSessionManager open flow', () => {
         },
         expect.any(Function)
       );
+
+      await vi.advanceTimersByTimeAsync(7999);
+      expect(toastDismissed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(toastDismissed).toBe(true);
     } finally {
       vi.useRealTimers();
       vi.restoreAllMocks();

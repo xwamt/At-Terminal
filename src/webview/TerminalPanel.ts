@@ -235,7 +235,7 @@ export class TerminalPanel {
     this.idleDisconnectTimer = setTimeout(() => {
       const message = `Disconnected after ${this.settings.idleDisconnectMinutes} minute(s) of inactivity.`;
       this.disconnectWithStatus(message, message);
-      void showTimedNotification(message, 'warning');
+      showTimedNotification(message, 'warning');
     }, this.settings.idleDisconnectMinutes * 60_000);
   }
 

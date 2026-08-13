@@ -441,10 +441,10 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
       );
     },
     async showSuccess(_remotePath, message) {
-      await showTimedNotification(message, 'info', TIMED_NOTIFICATION_MS);
+      showTimedNotification(message, 'info', TIMED_NOTIFICATION_MS);
     },
     async showError(remotePath, message) {
-      await showTimedNotification(
+      showTimedNotification(
         `Remote sync failed for ${remotePath}: ${message}`,
         'error',
         FAILED_NOTIFICATION_MS

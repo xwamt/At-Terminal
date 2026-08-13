@@ -53,38 +53,38 @@ describe('VscodeTransferReporter', () => {
     }
   });
 
-  it('shows success notices for 3 seconds and failure notices for 8 seconds', async () => {
+  it('posts a 3s success toast and an 8s failure toast without holding the transfer', async () => {
     try {
       vi.useFakeTimers();
-      const withProgress = vi.spyOn(vscode.window, 'withProgress').mockImplementation(async (_options, task) =>
-        task({ report: vi.fn() }, {} as never) as never
-      );
+      const dismissed: string[] = [];
+      const withProgress = vi.spyOn(vscode.window, 'withProgress').mockImplementation(async (options, task) => {
+        await task({ report: vi.fn() }, {} as never);
+        dismissed.push((options as { title: string }).title);
+        return undefined as never;
+      });
       const showInformationMessage = vi.spyOn(vscode.window, 'showInformationMessage');
       const reporter = new VscodeTransferReporter();
+      let resumed = 0;
 
-      const success = reporter.notifySuccess('Upload /etc/nginx/ng.sh completed.');
-      await vi.advanceTimersByTimeAsync(2999);
-      let successSettled = false;
-      void success.then(() => {
-        successSettled = true;
+      void reporter.notifySuccess('Upload /etc/nginx/ng.sh completed.').then(() => {
+        resumed += 1;
+      });
+      void reporter.notifyFailure('Upload /etc/nginx/ng.sh failed.').then(() => {
+        resumed += 1;
       });
       await Promise.resolve();
-      expect(successSettled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await success;
-      expect(successSettled).toBe(true);
-
-      const failure = reporter.notifyFailure('Upload /etc/nginx/ng.sh failed.');
-      let failureSettled = false;
-      void failure.then(() => {
-        failureSettled = true;
-      });
-      await vi.advanceTimersByTimeAsync(7999);
       await Promise.resolve();
-      expect(failureSettled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await failure;
-      expect(failureSettled).toBe(true);
+
+      expect(resumed).toBe(2);
+      expect(dismissed).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(dismissed).toEqual(['$(info) Upload /etc/nginx/ng.sh completed.']);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(dismissed).toEqual([
+        '$(info) Upload /etc/nginx/ng.sh completed.',
+        '$(error) Upload /etc/nginx/ng.sh failed.'
+      ]);
 
       expect(showInformationMessage).not.toHaveBeenCalled();
       expect(withProgress).toHaveBeenCalledWith(

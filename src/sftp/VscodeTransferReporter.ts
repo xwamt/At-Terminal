@@ -41,10 +41,10 @@ export class VscodeTransferReporter implements TransferReporter {
   }
 
   async notifySuccess(message: string): Promise<void> {
-    await showTimedNotification(message, 'info', this.successDurationMs);
+    showTimedNotification(message, 'info', this.successDurationMs);
   }
 
   async notifyFailure(message: string): Promise<void> {
-    await showTimedNotification(message, 'error', this.failureDurationMs);
+    showTimedNotification(message, 'error', this.failureDurationMs);
   }
 }
