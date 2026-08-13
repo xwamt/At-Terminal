@@ -9,6 +9,15 @@ import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './S
 const SFTP_WRITE_STEP_TIMEOUT_MS = 55_000;
 const REMOTE_TEMP_CLEANUP_TIMEOUT_MS = 2_000;
 
+export interface SftpSessionOptions {
+  /**
+   * Retry a permission-denied write through `sudo -n`. Only user-driven UI flows may enable
+   * this: the escalation turns "the agent may write where the login user can" into "the agent
+   * may write anywhere", and it does so without a second prompt.
+   */
+  allowSudoFallback: boolean;
+}
+
 export class SftpSession {
   private client: Client | undefined;
   private sftp: SFTPWrapper | undefined;
@@ -17,7 +26,8 @@ export class SftpSession {
   constructor(
     private readonly server: ServerConfig,
     private readonly passwords: PasswordSource,
-    private readonly hostKeyVerifier: HostKeyVerifier
+    private readonly hostKeyVerifier: HostKeyVerifier,
+    private readonly options: SftpSessionOptions
   ) {}
 
   async connect(): Promise<void> {
@@ -153,6 +163,9 @@ export class SftpSession {
       if (!isPermissionDeniedError(error)) {
         throw error;
       }
+      if (!this.options.allowSudoFallback) {
+        throw new Error(escalationDisabledMessage('upload', remotePath, error));
+      }
       await this.uploadFileWithSudo(localPath, remotePath, progress, error);
     }
   }
@@ -265,6 +278,9 @@ export class SftpSession {
       if (!isPermissionDeniedError(error)) {
         throw error;
       }
+      if (!this.options.allowSudoFallback) {
+        throw new Error(escalationDisabledMessage('write', path, error));
+      }
       const tempPath = `/tmp/at-terminal-write-${randomUUID()}-${safePreviewName(path)}`;
       try {
         await writeBuffer(sftp, tempPath, content);
@@ -317,6 +333,14 @@ function collectExecResult(
     }
     resolve(stderr);
   });
+}
+
+function escalationDisabledMessage(operation: 'write' | 'upload', remotePath: string, error: unknown): string {
+  return (
+    `SFTP ${operation} to ${remotePath} failed with permission denied. ` +
+    'Privilege escalation is disabled for agent SFTP sessions. ' +
+    `Use the AT Terminal SFTP view if this really has to be written as root. Original error: ${errorMessage(error)}`
+  );
 }
 
 function isPermissionDeniedError(error: unknown): boolean {

@@ -66,7 +66,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
   const sftpManager = new SftpManager({
-    createSession: (terminal) => new SftpSession(terminal.server, configManager, hostKeyVerifier),
+    // The SFTP view is driven by the user, so a denied write may retry under sudo.
+    createSession: (terminal) =>
+      new SftpSession(terminal.server, configManager, hostKeyVerifier, { allowSudoFallback: true }),
     reporter: new VscodeTransferReporter()
   });
   const sftpTreeProvider = new SftpTreeProvider({
@@ -146,7 +148,10 @@ export function activate(context: vscode.ExtensionContext): void {
     const sftpWriteAuthorizer = createProductionSftpWriteAuthorizer();
     sftpAgentService = new SftpAgentService({
       terminalContext,
-      createSession: (terminal) => new SftpSession(terminal.server, configManager, hostKeyVerifier),
+      // Agent writes never escalate: a denied write stays denied instead of silently
+      // becoming a root write through the sudo fallback.
+      createSession: (terminal) =>
+        new SftpSession(terminal.server, configManager, hostKeyVerifier, { allowSudoFallback: false }),
       authorizer: sftpWriteAuthorizer
     });
     const agentToolService = new AgentToolService({

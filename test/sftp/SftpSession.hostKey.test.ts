@@ -56,7 +56,7 @@ describe('SftpSession host key verification', () => {
   it('passes hostKeyVerifier into buildSshConnectionHandle', async () => {
     const verifier = { verify: vi.fn(async () => true) };
     const passwords = { getPassword: async () => 'secret' };
-    const session = new SftpSession(server(), passwords, verifier);
+    const session = new SftpSession(server(), passwords, verifier, { allowSudoFallback: true });
 
     await session.connect();
 

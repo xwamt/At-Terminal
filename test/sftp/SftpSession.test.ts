@@ -49,7 +49,15 @@ function server(authType: 'password' | 'privateKey'): ServerConfig {
 const hostKeyVerifier = { verify: async () => true };
 
 function passwordSession(): SftpSession {
-  return new SftpSession(server('password'), { getPassword: async () => 'secret' }, hostKeyVerifier);
+  return new SftpSession(server('password'), { getPassword: async () => 'secret' }, hostKeyVerifier, {
+    allowSudoFallback: true
+  });
+}
+
+function agentSession(): SftpSession {
+  return new SftpSession(server('password'), { getPassword: async () => 'secret' }, hostKeyVerifier, {
+    allowSudoFallback: false
+  });
 }
 
 beforeEach(() => {
@@ -82,7 +90,8 @@ describe('SftpSession jump host lifecycle', () => {
         getPassword: async () => 'secret',
         getServer: async (id: string) => (id === 'jump-1' ? jump : undefined)
       } as never,
-      hostKeyVerifier
+      hostKeyVerifier,
+      { allowSudoFallback: true }
     );
 
     await session.connect();
@@ -324,6 +333,63 @@ describe('SftpSession writeFile sudo fallback', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('SftpSession with sudo fallback disabled', () => {
+  it('surfaces the permission error instead of escalating a denied write', async () => {
+    const permissionDenied = new Error('Permission denied') as Error & { code: number };
+    permissionDenied.code = 3;
+    const open = vi.fn((_remotePath, _flags, callback) => callback(permissionDenied));
+    const write = vi.fn();
+    const close = vi.fn();
+    const unlink = vi.fn((_remotePath, callback) => callback());
+    const exec = vi.fn();
+    const session = agentSession();
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
+    (session as unknown as { sftp: unknown; client: unknown }).client = { exec };
+
+    await expect(session.writeFile('/etc/cron.d/task', Buffer.from('hello', 'utf8'))).rejects.toThrow(
+      'Privilege escalation is disabled for agent SFTP sessions.'
+    );
+    expect(exec).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(unlink).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the permission error instead of escalating a denied upload', async () => {
+    const permissionDenied = new Error('Permission denied') as Error & { code: number };
+    permissionDenied.code = 3;
+    const fastPut = vi.fn((_localPath, _remotePath, _options, callback) => callback(permissionDenied));
+    const unlink = vi.fn((_remotePath, callback) => callback());
+    const exec = vi.fn();
+    const session = agentSession();
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink };
+    (session as unknown as { sftp: unknown; client: unknown }).client = { exec };
+
+    await expect(session.uploadFile('C:/tmp/app.conf', '/etc/app.conf')).rejects.toThrow(
+      'Privilege escalation is disabled for agent SFTP sessions.'
+    );
+    expect(exec).not.toHaveBeenCalled();
+    expect(fastPut).toHaveBeenCalledTimes(1);
+  });
+
+  it('never writes the payload to /tmp when escalation is off', async () => {
+    const permissionDenied = new Error('Permission denied') as Error & { code: number };
+    permissionDenied.code = 3;
+    const open = vi.fn((_remotePath, _flags, callback) => callback(permissionDenied));
+    const session = agentSession();
+    (session as unknown as { sftp: unknown }).sftp = {
+      open,
+      write: vi.fn(),
+      close: vi.fn(),
+      unlink: vi.fn((_remotePath, callback) => callback())
+    };
+
+    await expect(
+      session.writeFile('/etc/cron.d/task', Buffer.from('hello', 'utf8'))
+    ).rejects.toThrow();
+    expect(open.mock.calls.map((call) => call[0])).toEqual(['/etc/cron.d/task']);
   });
 });
 
