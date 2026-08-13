@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # This plugin resolves @at-series/mcp-hub through a file: path to a
+      # sibling directory, so both repos must be on disk in that exact layout.
+      - name: Check out plugin
+        uses: actions/checkout@v4
+        with:
+          path: at-terminal-series
+
+      - name: Check out the hub
+        uses: actions/checkout@v4
+        with:
+          repository: xwamt/at-series-mcp-hub
+          path: at-series-mcp-hub
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # dist/ is gitignored, so the hub has to be built before the plugin can
+      # resolve the dependency.
+      - name: Build the hub
+        working-directory: at-series-mcp-hub
+        run: |
+          npm ci
+          npm run build
+          npm run build:hub
+
+      - name: Install plugin dependencies
+        working-directory: at-terminal-series
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: at-terminal-series
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: at-terminal-series
+        run: npm test
+
+      - name: Audit production dependencies
+        working-directory: at-terminal-series
+        run: npm audit --omit=dev --audit-level=high
