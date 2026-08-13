@@ -61,6 +61,8 @@ async function flushPromises(): Promise<void> {
   await Promise.resolve();
 }
 
+const hostKeyVerifier = { verify: async () => true };
+
 beforeEach(() => {
   vi.useRealTimers();
   connect.mockReset();
@@ -75,7 +77,7 @@ describe('RemoteCommandExecutor', () => {
   it('executes a remote command and returns structured output', async () => {
     const stream = createExecStream();
     exec.mockImplementation((_command: string, callback: Function) => callback(undefined, stream));
-    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never);
+    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never, hostKeyVerifier);
 
     const promise = executor.execute(server(), {
       command: 'uname -a',
@@ -108,7 +110,7 @@ describe('RemoteCommandExecutor', () => {
   it('wraps cwd with a POSIX cd before command execution', async () => {
     const stream = createExecStream();
     exec.mockImplementation((_command: string, callback: Function) => callback(undefined, stream));
-    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never);
+    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never, hostKeyVerifier);
 
     const promise = executor.execute(server(), {
       command: 'npm test',
@@ -129,7 +131,7 @@ describe('RemoteCommandExecutor', () => {
     vi.useFakeTimers();
     const stream = createExecStream();
     exec.mockImplementation((_command: string, callback: Function) => callback(undefined, stream));
-    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never);
+    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never, hostKeyVerifier);
 
     const promise = executor.execute(server(), {
       command: 'sleep 60',
@@ -153,7 +155,7 @@ describe('RemoteCommandExecutor', () => {
   it('truncates stdout and stderr independently', async () => {
     const stream = createExecStream();
     exec.mockImplementation((_command: string, callback: Function) => callback(undefined, stream));
-    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never);
+    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never, hostKeyVerifier);
 
     const promise = executor.execute(server(), {
       command: 'cat big.log',

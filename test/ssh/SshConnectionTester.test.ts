@@ -60,7 +60,7 @@ beforeEach(() => {
 
 describe('testSshConnection', () => {
   it('resolves when ssh2 reports ready and closes the temporary client', async () => {
-    const promise = testSshConnection(server(), { getPassword: async () => 'secret' }, undefined, 5_000);
+    const promise = testSshConnection(server(), { getPassword: async () => 'secret' }, { verify: async () => true }, 5_000);
 
     await flushPromises();
     clients[0].emit('ready');
@@ -72,7 +72,7 @@ describe('testSshConnection', () => {
   });
 
   it('rejects connection errors and closes the temporary client', async () => {
-    const promise = testSshConnection(server(), { getPassword: async () => 'secret' }, undefined, 5_000);
+    const promise = testSshConnection(server(), { getPassword: async () => 'secret' }, { verify: async () => true }, 5_000);
     const error = new Error('Authentication failed');
 
     await flushPromises();

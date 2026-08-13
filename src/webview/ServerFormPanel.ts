@@ -4,7 +4,7 @@ import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { parseServerConfig } from '../config/schema';
 import { testSshConnection } from '../ssh/SshConnectionTester';
-import type { HostKeyVerifier } from '../ssh/SshConnectionConfig';
+import { requireHostKeyVerifier, type HostKeyVerifier } from '../ssh/SshConnectionConfig';
 import { formatError } from '../utils/errors';
 import { renderWebviewHtml } from './html';
 
@@ -31,8 +31,8 @@ export class ServerFormPanel {
     context: vscode.ExtensionContext,
     configManager: ConfigManager,
     onSaved: () => void,
-    existing?: ServerConfig,
-    hostKeyVerifier?: HostKeyVerifier,
+    existing: ServerConfig | undefined,
+    hostKeyVerifier: HostKeyVerifier,
     initialGroup?: string
   ): Promise<void> {
     const panel = vscode.window.createWebviewPanel(
@@ -145,7 +145,7 @@ async function handleConnectionTest(
             getPassword: async () => candidatePassword,
             getServer: (id) => configManager.getServer(id)
           },
-          options.hostKeyVerifier
+          requireHostKeyVerifier(options.hostKeyVerifier)
         ));
 
     await runTest(server, password);

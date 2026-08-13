@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildSshConnectConfig, buildSshConnectionHandle } from '../../src/ssh/SshConnectionConfig';
+import {
+  buildSshConnectConfig,
+  buildSshConnectionHandle,
+  requireHostKeyVerifier
+} from '../../src/ssh/SshConnectionConfig';
 import type { ServerConfig } from '../../src/config/schema';
 
 const sshMocks = vi.hoisted(() => ({
@@ -65,7 +69,38 @@ beforeEach(() => {
   });
 });
 
+describe('requireHostKeyVerifier', () => {
+  it('throws instead of silently accepting any host key when no verifier is supplied', () => {
+    expect(() => requireHostKeyVerifier(undefined)).toThrow(
+      'A host key verifier is required. Refusing to open an SSH connection that would accept any host key.'
+    );
+  });
+
+  it('returns the verifier unchanged when one is supplied', () => {
+    const verifier = { verify: async () => true };
+
+    expect(requireHostKeyVerifier(verifier)).toBe(verifier);
+  });
+});
+
 describe('buildSshConnectConfig', () => {
+  it('always installs a host verifier so ssh2 can never fall back to accepting any key', async () => {
+    const passwordConfig = await buildSshConnectConfig(
+      server(),
+      { getPassword: async () => 'secret' },
+      { verify: async () => true }
+    );
+    vi.mocked(readFile).mockResolvedValueOnce('PRIVATE KEY');
+    const keyConfig = await buildSshConnectConfig(
+      server({ authType: 'privateKey', privateKeyPath: 'C:/keys/prod.pem' }),
+      { getPassword: async () => undefined },
+      { verify: async () => true }
+    );
+
+    expect(passwordConfig.hostVerifier).toEqual(expect.any(Function));
+    expect(keyConfig.hostVerifier).toEqual(expect.any(Function));
+  });
+
   it('builds password auth config with keepalive and host verifier', async () => {
     const verifier = { verify: vi.fn(async () => true) };
 
@@ -88,7 +123,7 @@ describe('buildSshConnectConfig', () => {
 
   it('throws a clear error when password auth has no stored password', async () => {
     await expect(
-      buildSshConnectConfig(server(), { getPassword: async () => undefined })
+      buildSshConnectConfig(server(), { getPassword: async () => undefined }, { verify: async () => true })
     ).rejects.toThrow('Missing password. Edit the server configuration and enter a password.');
   });
 
@@ -97,7 +132,8 @@ describe('buildSshConnectConfig', () => {
 
     const config = await buildSshConnectConfig(
       server({ authType: 'privateKey', privateKeyPath: 'C:/keys/prod.pem' }),
-      { getPassword: async () => undefined }
+      { getPassword: async () => undefined },
+      { verify: async () => true }
     );
 
     expect(readFile).toHaveBeenCalledWith('C:/keys/prod.pem', 'utf8');
@@ -111,7 +147,8 @@ describe('buildSshConnectConfig', () => {
     await expect(
       buildSshConnectConfig(
         server({ authType: 'privateKey', privateKeyPath: undefined }),
-        { getPassword: async () => undefined }
+        { getPassword: async () => undefined },
+        { verify: async () => true }
       )
     ).rejects.toThrow('Missing private key path.');
   });
@@ -160,11 +197,14 @@ describe('buildSshConnectionHandle', () => {
         getPassword: async () => 'secret',
         getServer: async (id) => (id === 'jump-1' ? jump : undefined)
       },
-      undefined
+      { verify: async () => true }
     );
 
     expect(sshMocks.connect).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'bastion.example.com', username: 'ops' })
+    );
+    expect(sshMocks.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ hostVerifier: expect.any(Function) })
     );
     expect(sshMocks.forwardOut).toHaveBeenCalledWith('127.0.0.1', 0, '10.0.0.20', 22, expect.any(Function));
     expect(handle.config).toMatchObject({ host: '10.0.0.20', sock: fakeSock });
@@ -181,7 +221,8 @@ describe('buildSshConnectionHandle', () => {
         {
           getPassword: async () => 'secret',
           getServer: async () => undefined
-        }
+        },
+        { verify: async () => true }
       )
     ).rejects.toThrow('Jump host "missing-jump" was not found.');
   });

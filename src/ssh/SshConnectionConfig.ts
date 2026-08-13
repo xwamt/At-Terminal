@@ -21,10 +21,24 @@ export interface HostKeyVerifier {
   verify(host: string, port: number, hashedKey: string): Promise<boolean>;
 }
 
+/**
+ * ssh2 accepts any host key when `hostVerifier` is absent, so a missing verifier is a silent
+ * MITM opening rather than a degraded mode. Callers are typed to always supply one; this guards
+ * the untyped edges (JS callers, structurally-typed injection) by failing closed.
+ */
+export function requireHostKeyVerifier(hostKeyVerifier: HostKeyVerifier | undefined): HostKeyVerifier {
+  if (!hostKeyVerifier) {
+    throw new Error(
+      'A host key verifier is required. Refusing to open an SSH connection that would accept any host key.'
+    );
+  }
+  return hostKeyVerifier;
+}
+
 export async function buildSshConnectConfig(
   server: ServerConfig,
   passwordProvider: PasswordProvider,
-  hostKeyVerifier?: HostKeyVerifier
+  hostKeyVerifier: HostKeyVerifier
 ): Promise<ConnectConfig> {
   const base: ConnectConfig = {
     host: server.host,
@@ -32,7 +46,7 @@ export async function buildSshConnectConfig(
     username: server.username,
     keepaliveInterval: server.keepAliveInterval * 1000,
     hostHash: 'sha256',
-    hostVerifier: createHostVerifier(server, hostKeyVerifier)
+    hostVerifier: createHostVerifier(server, requireHostKeyVerifier(hostKeyVerifier))
   };
 
   if (server.authType === 'password') {
@@ -56,8 +70,9 @@ export async function buildSshConnectConfig(
 export async function buildSshConnectionHandle(
   server: ServerConfig,
   provider: SshConnectionProvider,
-  hostKeyVerifier?: HostKeyVerifier
+  hostKeyVerifier: HostKeyVerifier
 ): Promise<SshConnectionHandle> {
+  requireHostKeyVerifier(hostKeyVerifier);
   if (!server.jumpHostId) {
     return {
       config: await buildSshConnectConfig(server, provider, hostKeyVerifier),
@@ -111,12 +126,8 @@ export async function buildSshConnectionHandle(
 
 function createHostVerifier(
   server: ServerConfig,
-  hostKeyVerifier: HostKeyVerifier | undefined
+  hostKeyVerifier: HostKeyVerifier
 ): ConnectConfig['hostVerifier'] {
-  if (!hostKeyVerifier) {
-    return undefined;
-  }
-
   const verifyHost = (fingerprint: string, verify: VerifyCallback): void => {
     void hostKeyVerifier.verify(server.host, server.port, fingerprint).then(
       verify,

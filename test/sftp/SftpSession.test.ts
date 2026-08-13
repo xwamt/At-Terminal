@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildSftpConnectConfig } from '../../src/sftp/SftpSession';
+import * as sftpSessionModule from '../../src/sftp/SftpSession';
 import { SftpSession } from '../../src/sftp/SftpSession';
 import type { ServerConfig } from '../../src/config/schema';
 
@@ -46,33 +46,21 @@ function server(authType: 'password' | 'privateKey'): ServerConfig {
   };
 }
 
+const hostKeyVerifier = { verify: async () => true };
+
+function passwordSession(): SftpSession {
+  return new SftpSession(server('password'), { getPassword: async () => 'secret' }, hostKeyVerifier);
+}
+
 beforeEach(() => {
   sshMocks.end.mockClear();
   sshMocks.connect.mockClear();
   sshMocks.forwardOut.mockClear();
 });
 
-describe('buildSftpConnectConfig', () => {
-  it('uses the stored password for password auth', async () => {
-    const config = await buildSftpConnectConfig(server('password'), {
-      getPassword: async () => 'secret'
-    });
-
-    expect(config).toMatchObject({
-      host: 'example.com',
-      port: 2222,
-      username: 'deploy',
-      password: 'secret',
-      keepaliveInterval: 15000
-    });
-  });
-
-  it('rejects missing passwords', async () => {
-    await expect(
-      buildSftpConnectConfig(server('password'), {
-        getPassword: async () => undefined
-      })
-    ).rejects.toThrow('Missing password');
+describe('SftpSession module surface', () => {
+  it('exports no connect-config builder that bypasses host key verification', () => {
+    expect(Object.keys(sftpSessionModule)).not.toContain('buildSftpConnectConfig');
   });
 });
 
@@ -88,10 +76,14 @@ describe('SftpSession jump host lifecycle', () => {
       id: 'jump-1',
       host: 'bastion.example.com'
     };
-    const session = new SftpSession(target, {
-      getPassword: async () => 'secret',
-      getServer: async (id: string) => (id === 'jump-1' ? jump : undefined)
-    } as never);
+    const session = new SftpSession(
+      target,
+      {
+        getPassword: async () => 'secret',
+        getServer: async (id: string) => (id === 'jump-1' ? jump : undefined)
+      } as never,
+      hostKeyVerifier
+    );
 
     await session.connect();
     session.dispose();
@@ -119,7 +111,7 @@ describe('SftpSession uploadFile sudo fallback', () => {
         queueMicrotask(() => stream.emit('close', 0));
       })
     };
-    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    const session = passwordSession();
     (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink };
     (session as unknown as { sftp: unknown; client: unknown }).client = client;
 
@@ -152,7 +144,7 @@ describe('SftpSession uploadFile sudo fallback', () => {
         });
       })
     };
-    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    const session = passwordSession();
     (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink };
     (session as unknown as { sftp: unknown; client: unknown }).client = client;
 
@@ -170,7 +162,7 @@ describe('SftpSession writeFile sudo fallback', () => {
     const write = vi.fn();
     const close = vi.fn();
     const unlink = vi.fn((_remotePath, callback) => callback());
-    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    const session = passwordSession();
     (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
 
     try {
@@ -200,7 +192,7 @@ describe('SftpSession writeFile sudo fallback', () => {
     const write = vi.fn();
     const close = vi.fn();
     const unlink = vi.fn((_remotePath, callback) => callback());
-    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    const session = passwordSession();
     (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
 
     try {
@@ -242,7 +234,7 @@ describe('SftpSession writeFile sudo fallback', () => {
         queueMicrotask(() => stream.emit('close', 0));
       })
     };
-    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    const session = passwordSession();
     (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
     (session as unknown as { sftp: unknown; client: unknown }).client = client;
 
@@ -280,7 +272,7 @@ describe('SftpSession writeFile sudo fallback', () => {
         });
       })
     };
-    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    const session = passwordSession();
     (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
     (session as unknown as { sftp: unknown; client: unknown }).client = client;
 
@@ -307,7 +299,7 @@ describe('SftpSession writeFile sudo fallback', () => {
         callback(undefined, new FakeExecStream());
       })
     };
-    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    const session = passwordSession();
     (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
     (session as unknown as { sftp: unknown; client: unknown }).client = client;
 
@@ -357,7 +349,7 @@ describe('SftpSession createFile sudo fallback', () => {
         queueMicrotask(() => stream.emit('close', 0));
       })
     };
-    const session = new SftpSession(server('password'), { getPassword: async () => 'secret' });
+    const session = passwordSession();
     (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, write, close, unlink };
     (session as unknown as { sftp: unknown; client: unknown }).client = client;
 

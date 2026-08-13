@@ -21,7 +21,7 @@ export class SshSession {
     private readonly server: ServerConfig,
     private readonly configManager: ConfigManager,
     private readonly events: SshSessionEvents,
-    private readonly hostKeyVerifier?: HostKeyVerifier
+    private readonly hostKeyVerifier: HostKeyVerifier
   ) {}
 
   async connect(): Promise<void> {

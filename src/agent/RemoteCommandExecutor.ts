@@ -34,7 +34,7 @@ const MAX_OUTPUT_BYTES = 256_000;
 export class RemoteCommandExecutor {
   constructor(
     private readonly configManager: ConfigManager,
-    private readonly hostKeyVerifier?: HostKeyVerifier
+    private readonly hostKeyVerifier: HostKeyVerifier
   ) {}
 
   async execute(server: ServerConfig, request: RemoteCommandRequest): Promise<RemoteCommandResult> {

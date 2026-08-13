@@ -58,6 +58,8 @@ function extensionContext(): vscode.ExtensionContext {
   } as vscode.ExtensionContext;
 }
 
+const hostKeyVerifier = { verify: async () => true };
+
 function createPanel() {
   const messageListeners: Array<(message: unknown) => void> = [];
   const viewStateListeners: Array<(event: { webviewPanel: { active: boolean } }) => void> = [];
@@ -209,7 +211,7 @@ describe('TerminalPanel rendering helpers', () => {
     const listener = vi.fn();
     registry.onDidChangeActiveContext(listener);
 
-    TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
 
     expect(registry.getActive()?.connected).toBe(false);
     await flushPromises();
@@ -223,7 +225,7 @@ describe('TerminalPanel rendering helpers', () => {
     connect.mockRejectedValueOnce(new Error('connect failed'));
     const registry = new TerminalContextRegistry();
 
-    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
 
     await flushPromises();
     expect(registry.getActive()?.connected).toBe(false);
@@ -239,7 +241,7 @@ describe('TerminalPanel rendering helpers', () => {
     const panelHost = createPanel();
     vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
 
-    TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
     await flushPromises();
     listener.mockClear();
 
@@ -256,7 +258,7 @@ describe('TerminalPanel rendering helpers', () => {
     connect.mockReturnValueOnce(pendingConnect.promise);
     const registry = new TerminalContextRegistry();
 
-    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
     terminal.disconnect();
 
     expect(registry.getActive()?.connected).toBe(false);
@@ -271,7 +273,7 @@ describe('TerminalPanel rendering helpers', () => {
     const panelHost = createPanel();
     vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
 
-    TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
     await flushPromises();
     expect(registry.getActive()?.connected).toBe(true);
 
@@ -301,7 +303,7 @@ describe('TerminalPanel rendering helpers', () => {
       } as never);
       const registry = new TerminalContextRegistry();
 
-      TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+      TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
       await flushPromises();
 
       vi.advanceTimersByTime(60_000);
@@ -328,8 +330,8 @@ describe('TerminalPanel rendering helpers', () => {
       .mockReturnValueOnce(firstPanelHost.panel)
       .mockReturnValueOnce(secondPanelHost.panel);
 
-    TerminalPanel.open(extensionContext(), server('first-server'), configManager());
-    TerminalPanel.open(extensionContext(), server('second-server'), configManager());
+    TerminalPanel.open(extensionContext(), server('first-server'), configManager(), hostKeyVerifier);
+    TerminalPanel.open(extensionContext(), server('second-server'), configManager(), hostKeyVerifier);
     await flushPromises();
 
     deactivate();
@@ -343,7 +345,7 @@ describe('TerminalPanel rendering helpers', () => {
     vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
     const rawOutput = Buffer.from('\x1b[31mred\x1b[0m\r\n\x1b[32mgreen\x1b[0m', 'utf8');
 
-    TerminalPanel.open(extensionContext(), server(), configManager());
+    TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier);
     await flushPromises();
     sessionEvents.at(-1)!.output(rawOutput);
 
@@ -358,7 +360,7 @@ describe('TerminalPanel rendering helpers', () => {
     const panelHost = createPanel();
     vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
 
-    TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
     await flushPromises();
     panelHost.fireDispose();
     sessionEvents.at(-1)!.output(Buffer.from('late output', 'utf8'));
@@ -372,7 +374,7 @@ describe('TerminalPanel rendering helpers', () => {
     const panelHost = createPanel();
     vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
 
-    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), undefined, registry);
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
     await flushPromises();
     const oldSessionEvents = sessionEvents[0];
 

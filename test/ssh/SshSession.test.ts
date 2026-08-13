@@ -68,7 +68,8 @@ describe('SshSession host key verification', () => {
     const session = new SshSession(
       server(),
       { getPassword: async () => 'secret' } as never,
-      { output: vi.fn(), status: vi.fn(), error: vi.fn() }
+      { output: vi.fn(), status: vi.fn(), error: vi.fn() },
+      { verify: async () => true }
     );
 
     expect(session.isConnected()).toBe(false);
@@ -80,7 +81,8 @@ describe('SshSession host key verification', () => {
     const session = new SshSession(
       server(),
       { getPassword: async () => 'secret' } as never,
-      { output: vi.fn(), status: vi.fn(), error: vi.fn() }
+      { output: vi.fn(), status: vi.fn(), error: vi.fn() },
+      { verify: async () => true }
     );
 
     await session.connect();

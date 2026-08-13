@@ -7,7 +7,7 @@ const DEFAULT_TEST_TIMEOUT_MS = 10_000;
 export async function testSshConnection(
   server: ServerConfig,
   passwordProvider: SshConnectionProvider,
-  hostKeyVerifier?: HostKeyVerifier,
+  hostKeyVerifier: HostKeyVerifier,
   timeoutMs = DEFAULT_TEST_TIMEOUT_MS
 ): Promise<void> {
   const handle = await buildSshConnectionHandle(server, passwordProvider, hostKeyVerifier);

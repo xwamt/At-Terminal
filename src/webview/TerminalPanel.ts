@@ -48,7 +48,7 @@ export class TerminalPanel {
     private readonly server: ServerConfig,
     private readonly configManager: ConfigManager,
     private readonly settings: TerminalSettings,
-    private readonly hostKeyVerifier?: HostKeyVerifier,
+    private readonly hostKeyVerifier: HostKeyVerifier,
     private readonly terminalContext?: TerminalContextRegistry
   ) {
     this.session = this.createSession(this.connectionGeneration);
@@ -59,7 +59,7 @@ export class TerminalPanel {
     context: vscode.ExtensionContext,
     server: ServerConfig,
     configManager: ConfigManager,
-    hostKeyVerifier?: HostKeyVerifier,
+    hostKeyVerifier: HostKeyVerifier,
     terminalContext?: TerminalContextRegistry
   ): TerminalPanel {
     const panel = vscode.window.createWebviewPanel(

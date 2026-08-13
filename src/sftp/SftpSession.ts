@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { Client, type ClientChannel, type ConnectConfig, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
+import { Client, type ClientChannel, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
 import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionHandle } from '../ssh/SshConnectionConfig';
 import { quotePosixShellPath, safePreviewName } from './RemotePath';
@@ -10,32 +9,6 @@ import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './S
 const SFTP_WRITE_STEP_TIMEOUT_MS = 55_000;
 const REMOTE_TEMP_CLEANUP_TIMEOUT_MS = 2_000;
 
-export async function buildSftpConnectConfig(server: ServerConfig, passwords: PasswordSource): Promise<ConnectConfig> {
-  const base: ConnectConfig = {
-    host: server.host,
-    port: server.port,
-    username: server.username,
-    keepaliveInterval: server.keepAliveInterval * 1000
-  };
-
-  if (server.authType === 'password') {
-    const password = await passwords.getPassword(server.id);
-    if (!password) {
-      throw new Error('Missing password. Edit the server configuration and enter a password.');
-    }
-    return { ...base, password };
-  }
-
-  if (!server.privateKeyPath) {
-    throw new Error('Missing private key path.');
-  }
-
-  return {
-    ...base,
-    privateKey: await readFile(server.privateKeyPath, 'utf8')
-  };
-}
-
 export class SftpSession {
   private client: Client | undefined;
   private sftp: SFTPWrapper | undefined;
@@ -44,7 +17,7 @@ export class SftpSession {
   constructor(
     private readonly server: ServerConfig,
     private readonly passwords: PasswordSource,
-    private readonly hostKeyVerifier?: HostKeyVerifier
+    private readonly hostKeyVerifier: HostKeyVerifier
   ) {}
 
   async connect(): Promise<void> {

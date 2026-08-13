@@ -396,10 +396,11 @@ describe('ServerFormPanel message handling', () => {
     });
   });
 
-  it('provides jump host lookup to the default connection tester', async () => {
+  it('provides jump host lookup and the host key verifier to the default connection tester', async () => {
     vi.mocked(testSshConnection).mockClear();
     const postMessage = vi.fn();
     const getServer = vi.fn(async (id: string) => server({ id, label: 'Bastion' }));
+    const hostKeyVerifier = { verify: async () => true };
 
     const handled = await handleServerFormMessage(
       {
@@ -419,17 +420,53 @@ describe('ServerFormPanel message handling', () => {
       undefined,
       { saveServer: vi.fn(), getPassword: vi.fn(), getServer } as never,
       vi.fn(),
-      { dispose: vi.fn(), webview: { postMessage } } as never
+      { dispose: vi.fn(), webview: { postMessage } } as never,
+      { hostKeyVerifier }
     );
 
     expect(handled).toBe(true);
     expect(testSshConnection).toHaveBeenCalledWith(
       expect.objectContaining({ jumpHostId: 'jump-1' }),
       expect.objectContaining({ getServer: expect.any(Function) }),
-      undefined
+      hostKeyVerifier
     );
     const provider = vi.mocked(testSshConnection).mock.calls[0][1] as { getServer(id: string): Promise<ServerConfig | undefined> };
     await expect(provider.getServer('jump-1')).resolves.toMatchObject({ id: 'jump-1', label: 'Bastion' });
     expect(getServer).toHaveBeenCalledWith('jump-1');
+  });
+
+  it('fails the connection test instead of connecting when no host key verifier is wired in', async () => {
+    vi.mocked(testSshConnection).mockClear();
+    const postMessage = vi.fn();
+
+    await handleServerFormMessage(
+      {
+        type: 'testConnection',
+        payload: {
+          label: 'Production',
+          group: 'prod',
+          host: 'example.com',
+          port: 22,
+          username: 'deploy',
+          authType: 'password',
+          password: 'secret',
+          keepAliveInterval: 30
+        }
+      },
+      undefined,
+      { saveServer: vi.fn(), getPassword: vi.fn(), getServer: vi.fn() } as never,
+      vi.fn(),
+      { dispose: vi.fn(), webview: { postMessage } } as never
+    );
+
+    expect(testSshConnection).not.toHaveBeenCalled();
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'connectionTestResult',
+      payload: {
+        ok: false,
+        message:
+          'A host key verifier is required. Refusing to open an SSH connection that would accept any host key.'
+      }
+    });
   });
 });
