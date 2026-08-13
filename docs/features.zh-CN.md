@@ -76,7 +76,10 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 - `run_remote_command` 对每条命令都请求确认。`Trust agent remote commands` 只把免确认范围收窄到只读白名单（`ls`、`cat`、`grep`、`ps`、`df`、`systemctl status`、`journalctl` 等）；命令一旦含管道、重定向、命令串联、子 shell 或变量展开，就退出白名单并重新弹窗。
 - 服务器信任开关只影响 `run_remote_command`，不会跳过 SFTP 写入授权或 SSH 主机指纹信任。
 - Bridge 发布到 AT Series 注册表 `~/.at-series/bridges/<hostApp>/`。
-- SFTP 写入工具会在当前扩展宿主会话内，对每台服务器的首次写入请求确认。
+- SFTP 写入按「目录」授权：弹窗提供 `Allow Once`（默认）、`Allow This Folder For 15 Minutes`、`Allow This Folder For The Session` 三档，任何一档都只覆盖用户当时看到的那个目录，不会覆盖整台服务器。
+- 写入目标越出 SFTP 会话初始工作目录时，弹窗会明确高亮，并且不提供「本会话」这一档。
+- 敏感路径（`~/.ssh`、`/etc`、`/usr`、`/root`、`*.service`、`authorized_keys`、`sudoers*`、`crontab`）一律二次确认，且永不记忆。
+- Agent 的 SFTP 会话不做提权：权限不足即失败，`sudo -n` 回退只存在于用户手动操作的 SFTP 视图。
 - 只读工具不会返回密码、私钥或 SecretStorage 内容。
 - SFTP 读取有大小限制，避免把大文件直接灌入 Agent 上下文。
 - 写入工具会解析远程路径，不允许修改远程根路径。

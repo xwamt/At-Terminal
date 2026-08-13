@@ -44,4 +44,15 @@ describe('toolCatalog', () => {
     expect(byName.run_remote_command.description).toContain('read-only');
     expect(byName.run_remote_command.description).toContain('confirmation');
   });
+
+  it('tells the caller that write authorization is per directory, not per server', () => {
+    const writeTools = AT_TERMINAL_TOOL_CATALOG.filter((tool) => tool.risk === 'write');
+
+    expect(writeTools).toHaveLength(3);
+    for (const tool of writeTools) {
+      expect(tool.description).toContain('directory');
+      expect(tool.description).toContain('sensitive');
+      expect(tool.description).not.toContain('per server');
+    }
+  });
 });

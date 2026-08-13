@@ -13,6 +13,12 @@ const sftpTargetProperties = {
   }
 } as const;
 
+const WRITE_AUTHORIZATION_NOTE =
+  'The user approves one directory at a time, so expect a dialog whenever the target directory changes; ' +
+  'an approval never covers the whole server. Writes outside the directory the SFTP session was opened in ' +
+  'are called out as such, sensitive paths (SSH keys, /etc, /usr, service units, sudoers, cron) always ask ' +
+  'twice and are never remembered, and a permission-denied write is never retried with sudo.';
+
 const pathProperties = {
   ...sftpTargetProperties,
   path: {
@@ -134,7 +140,8 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
   {
     name: 'sftp_write_file',
     title: 'SFTP Write File',
-    description: 'Write UTF-8 text to a remote file after AT Terminal write authorization.',
+    description:
+      `Write UTF-8 text to a remote file after AT Terminal write authorization. ${WRITE_AUTHORIZATION_NOTE}`,
     risk: 'write',
     inputSchema: {
       type: 'object',
@@ -155,7 +162,7 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
   {
     name: 'sftp_create_file',
     title: 'SFTP Create File',
-    description: 'Create a new remote file through AT Terminal SFTP.',
+    description: `Create a new remote file through AT Terminal SFTP. ${WRITE_AUTHORIZATION_NOTE}`,
     risk: 'write',
     inputSchema: {
       type: 'object',
@@ -172,7 +179,7 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
   {
     name: 'sftp_create_directory',
     title: 'SFTP Create Directory',
-    description: 'Create a new remote directory through AT Terminal SFTP.',
+    description: `Create a new remote directory through AT Terminal SFTP. ${WRITE_AUTHORIZATION_NOTE}`,
     risk: 'write',
     inputSchema: {
       type: 'object',
