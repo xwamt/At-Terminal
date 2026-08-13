@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -9,7 +9,8 @@ import {
   createEditCacheUri,
   createVscodeSftpEditUi,
   resolveEditStorageUri,
-  SftpEditSessionManager
+  SftpEditSessionManager,
+  VERIFY_FULL_CONTENT_MAX_BYTES
 } from '../../src/sftp/SftpEditSessionManager';
 
 describe('SftpEditSessionManager open flow', () => {
@@ -296,11 +297,11 @@ describe('SftpEditSessionManager save synchronization', () => {
       const session = await manager.openRemoteFile('/srv/app/index.js');
       await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
       await vi.advanceTimersByTimeAsync(25);
-      await flushPromises();
+      await settleUpload(session);
 
       await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
       await vi.advanceTimersByTimeAsync(25);
-      await flushPromises();
+      await settleUpload(session);
 
       expect(confirmAutoSync).toHaveBeenCalledTimes(1);
       expect(sftp.uploadFile).toHaveBeenCalledTimes(2);
@@ -349,7 +350,7 @@ describe('SftpEditSessionManager save synchronization', () => {
 
       await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
       await vi.advanceTimersByTimeAsync(10);
-      await flushPromises();
+      await settleUpload(session);
 
       expect(sftp.stat).toHaveBeenCalledWith('/srv/app/index.js', 'server-a');
       expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'server-a');
@@ -430,7 +431,7 @@ describe('SftpEditSessionManager conflicts and failures', () => {
       await writeFile(session.localUri.fsPath, 'changed!!');
       await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
       await vi.advanceTimersByTimeAsync(10);
-      await flushPromises();
+      await settleUpload(session);
 
       expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
       expect(session.baseRemoteStat).toEqual({ size: 9, modifiedAt: 12 });
@@ -555,7 +556,7 @@ describe('SftpEditSessionManager conflicts and failures', () => {
       await writeFile(session.localUri.fsPath, 'changed');
       await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
       await vi.advanceTimersByTimeAsync(10);
-      await flushPromises();
+      await settleUpload(session);
 
       expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
       expect(sftp.readFile).toHaveBeenCalledWith('/srv/app/index.js', 7, 'srv');
@@ -611,9 +612,154 @@ describe('SftpEditSessionManager conflicts and failures', () => {
   });
 });
 
+describe('SftpEditSessionManager upload verification', () => {
+  it('skips the verification download when the upload moved the remote mtime forward', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-verify-mtime-')));
+    const readRemote = vi.fn(async () => Buffer.from('changed'));
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi
+        .fn()
+        .mockResolvedValueOnce({ size: 7, modifiedAt: 10 })
+        .mockResolvedValueOnce({ size: 7, modifiedAt: 10 })
+        .mockResolvedValueOnce({ size: 7, modifiedAt: 11 }),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn(),
+      readFile: readRemote
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await writeFile(session.localUri.fsPath, 'changed');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+      await settleUpload(session);
+
+      expect(readRemote).not.toHaveBeenCalled();
+      expect(session.syncState).toBe('idle');
+      expect(session.baseRemoteStat).toEqual({ size: 7, modifiedAt: 11 });
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('skips the verification download for files larger than the full compare limit', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-verify-large-')));
+    const large = 'x'.repeat(VERIFY_FULL_CONTENT_MAX_BYTES + 1);
+    const readRemote = vi.fn(async () => Buffer.from(large));
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi.fn(async () => ({ size: large.length, modifiedAt: 10 })),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, large)),
+      uploadFile: vi.fn(),
+      readFile: readRemote
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+      await settleUpload(session);
+
+      expect(readRemote).not.toHaveBeenCalled();
+      expect(session.syncState).toBe('idle');
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('still compares bytes for a small file whose remote mtime did not move', async () => {
+    vi.useFakeTimers();
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-verify-bytes-')));
+    const readRemote = vi.fn(async () => Buffer.from('changed'));
+    const sftp = {
+      getActiveServerId: vi.fn(() => 'srv'),
+      stat: vi.fn(async () => ({ size: 7, modifiedAt: 10 })),
+      downloadFile: vi.fn(async (_remotePath: string, localPath: string) => writeFile(localPath, 'initial')),
+      uploadFile: vi.fn(),
+      readFile: readRemote
+    };
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp,
+      debounceMs: 10,
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(async () => true),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn()
+      }
+    });
+
+    try {
+      const session = await manager.openRemoteFile('/srv/app/index.js');
+      await writeFile(session.localUri.fsPath, 'changed');
+      await manager.handleSavedDocument({ uri: session.localUri, fileName: session.localUri.fsPath });
+      await vi.advanceTimersByTimeAsync(10);
+      await settleUpload(session);
+
+      expect(readRemote).toHaveBeenCalledWith('/srv/app/index.js', 7, 'srv');
+      expect(session.syncState).toBe('idle');
+    } finally {
+      vi.useRealTimers();
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('never reads the cache file synchronously, because that blocks the extension host', () => {
+    const source = readFileSync('src/sftp/SftpEditSessionManager.ts', 'utf8');
+
+    expect(source).not.toContain('readFileSync');
+    expect(source).toContain("from 'node:fs/promises'");
+  });
+});
+
+// The upload path awaits real filesystem reads, so settling it needs event loop turns and
+// not just microtask drains. advanceTimersByTimeAsync yields through the unfaked timer.
 async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let turn = 0; turn < 4; turn += 1) {
+    await vi.advanceTimersByTimeAsync(0);
+  }
+}
+
+// Waits for the whole upload drain instead of guessing how many ticks it needs.
+async function settleUpload(session: { uploadTask: Promise<void> | undefined }): Promise<void> {
+  for (let turn = 0; turn < 20 && session.uploadTask; turn += 1) {
+    await session.uploadTask;
+    await vi.advanceTimersByTimeAsync(0);
+  }
 }
 
 describe('SftpEditSessionManager close cleanup', () => {

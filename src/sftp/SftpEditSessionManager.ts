@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import * as vscode from 'vscode';
 import { formatError } from '../utils/errors';
@@ -11,6 +10,12 @@ import {
 } from '../utils/notifications';
 import { safePreviewName } from './RemotePath';
 import type { SftpFileStat } from './SftpTypes';
+
+/**
+ * Byte-for-byte verification re-downloads the file that was just uploaded, so it is only
+ * affordable while the file is small enough for the round trip to be noise.
+ */
+export const VERIFY_FULL_CONTENT_MAX_BYTES = 256 * 1024;
 
 export type SftpEditSyncState = 'idle' | 'pending' | 'uploading' | 'conflict' | 'failed';
 export type SftpEditConflictChoice = 'overwrite' | 'cancel';
@@ -319,13 +324,17 @@ export class SftpEditSessionManager {
     }
     await this.options.sftp.uploadFile(session.localUri.fsPath, session.remotePath, session.serverId);
     const uploadedRemoteStat = await this.options.sftp.stat(session.remotePath, session.serverId);
-    await this.verifyUploadedContent(session, uploadedRemoteStat);
+    await this.verifyUploadedContent(session, currentRemoteStat, uploadedRemoteStat);
     session.baseRemoteStat = uploadedRemoteStat;
     return true;
   }
 
-  private async verifyUploadedContent(session: SftpEditSession, remoteStat: SftpFileStat): Promise<void> {
-    const localContent = readFileSync(session.localUri.fsPath);
+  private async verifyUploadedContent(
+    session: SftpEditSession,
+    preUploadStat: SftpFileStat,
+    remoteStat: SftpFileStat
+  ): Promise<void> {
+    const localContent = await readFile(session.localUri.fsPath);
     if (remoteStat.size !== localContent.byteLength) {
       throw new Error(
         `Remote sync verification failed for ${session.remotePath}: remote size is ${remoteStat.size} bytes, expected ${localContent.byteLength} bytes.`
@@ -333,6 +342,18 @@ export class SftpEditSessionManager {
     }
 
     if (!this.options.sftp.readFile) {
+      return;
+    }
+
+    // The failure this guards against is a server that accepts the write and leaves the file
+    // alone, which also leaves the mtime alone. A size match plus an mtime that moved past the
+    // stat taken just before the upload is already proof the write landed, so re-downloading
+    // the file would only double the cost of every save.
+    if (remoteStat.modifiedAt > preUploadStat.modifiedAt) {
+      return;
+    }
+
+    if (localContent.byteLength > VERIFY_FULL_CONTENT_MAX_BYTES) {
       return;
     }
 
