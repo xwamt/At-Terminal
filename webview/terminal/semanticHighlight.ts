@@ -1,11 +1,16 @@
 const RESET = '\x1b[0m';
 
+/** Above this the chunk is a firehose, not something a human reads line by line. */
+export const MAX_HIGHLIGHT_TEXT_LENGTH = 8 * 1024;
+/** A CSV or numeric log can produce thousands of matches per chunk; colouring them all costs more than it is worth. */
+export const MAX_HIGHLIGHT_MATCHES = 200;
+
 interface HighlightRule {
   readonly pattern: RegExp;
   readonly color: string;
 }
 
-interface HighlightMatch {
+export interface HighlightMatch {
   readonly start: number;
   readonly end: number;
   readonly color: string;
@@ -30,7 +35,7 @@ export function semanticHighlightText(text: string): string {
   }
 
   const matches = collectMatches(text);
-  if (matches.length === 0) {
+  if (matches.length === 0 || matches.length > MAX_HIGHLIGHT_MATCHES) {
     return text;
   }
 
@@ -45,31 +50,69 @@ export function semanticHighlightText(text: string): string {
   return highlighted;
 }
 
+/**
+ * Folds one rule's matches into the matches kept so far. Both inputs must be sorted by
+ * `start` and be internally non-overlapping, which is what a single global regex scan gives
+ * you. A candidate is dropped when it overlaps anything already accepted, so earlier rules
+ * keep winning over later ones exactly as a first-come-first-served scan would decide - but
+ * each fold is a single linear pass instead of a scan of the whole accepted set per candidate.
+ */
+export function mergeNonOverlappingMatches(
+  accepted: readonly HighlightMatch[],
+  candidates: readonly HighlightMatch[]
+): HighlightMatch[] {
+  if (accepted.length === 0) {
+    return candidates.slice();
+  }
+  if (candidates.length === 0) {
+    return accepted.slice();
+  }
+
+  const merged: HighlightMatch[] = [];
+  let acceptedIndex = 0;
+  for (const candidate of candidates) {
+    while (acceptedIndex < accepted.length && accepted[acceptedIndex].end <= candidate.start) {
+      merged.push(accepted[acceptedIndex]);
+      acceptedIndex += 1;
+    }
+    const blocker = accepted[acceptedIndex];
+    if (blocker !== undefined && blocker.start < candidate.end) {
+      continue;
+    }
+    merged.push(candidate);
+  }
+  while (acceptedIndex < accepted.length) {
+    merged.push(accepted[acceptedIndex]);
+    acceptedIndex += 1;
+  }
+  return merged;
+}
+
 function isHighlightableText(text: string): boolean {
-  return text.length > 0 && !ansiEscapePattern.test(text) && !unsafeControlPattern.test(text);
+  return (
+    text.length > 0 &&
+    text.length <= MAX_HIGHLIGHT_TEXT_LENGTH &&
+    !ansiEscapePattern.test(text) &&
+    !unsafeControlPattern.test(text)
+  );
 }
 
 function collectMatches(text: string): HighlightMatch[] {
-  const matches: HighlightMatch[] = [];
+  let matches: HighlightMatch[] = [];
   for (const rule of rules) {
-    rule.pattern.lastIndex = 0;
-    for (const match of text.matchAll(rule.pattern)) {
-      if (match.index === undefined || match[0].length === 0) {
-        continue;
-      }
-      const candidate = {
-        start: match.index,
-        end: match.index + match[0].length,
-        color: rule.color
-      };
-      if (!overlapsExistingMatch(candidate, matches)) {
-        matches.push(candidate);
-      }
-    }
+    matches = mergeNonOverlappingMatches(matches, matchRule(text, rule));
   }
-  return matches.sort((left, right) => left.start - right.start);
+  return matches;
 }
 
-function overlapsExistingMatch(candidate: HighlightMatch, matches: HighlightMatch[]): boolean {
-  return matches.some((match) => candidate.start < match.end && candidate.end > match.start);
+function matchRule(text: string, rule: HighlightRule): HighlightMatch[] {
+  rule.pattern.lastIndex = 0;
+  const found: HighlightMatch[] = [];
+  for (const match of text.matchAll(rule.pattern)) {
+    if (match.index === undefined || match[0].length === 0) {
+      continue;
+    }
+    found.push({ start: match.index, end: match.index + match[0].length, color: rule.color });
+  }
+  return found;
 }
