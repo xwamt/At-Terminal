@@ -1,11 +1,11 @@
 import {
+  detectHostApp,
   ensureAtSeriesMcpConfig,
   hubJsPath,
   uninstallAtSeriesMcpConfig,
   type HostApp,
   type McpInstallerTarget
 } from '@at-series/mcp-hub';
-import { detectHostApp } from './hostApp';
 
 export interface AtSeriesIdeMcpConfigOptions {
   appName?: string;

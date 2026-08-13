@@ -8,12 +8,12 @@ import { MCP_ENABLED } from './buildFlags';
 import { ConfigManager } from './config/ConfigManager';
 import type { ServerConfig } from './config/schema';
 import { BridgeServer } from './mcp/BridgeServer';
-import { detectHostApp } from './mcp/hostApp';
 import { syncPackagedHub } from './mcp/hubSync';
 import {
   ensureAtSeriesConfigForCurrentIde,
   uninstallAtSeriesConfigForCurrentIde
 } from './mcp/McpConfigInstaller';
+import { detectHostApp } from '@at-series/mcp-hub';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
