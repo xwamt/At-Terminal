@@ -24,6 +24,45 @@ const common = {
 const HOST_TARGET = 'node18';
 const WEBVIEW_TARGET = 'chrome114';
 
+/**
+ * Cut `@at-series/mcp-hub` out of the base bundle.
+ *
+ * Every call into it sits behind `if (MCP_ENABLED)`, so the base variant already
+ * drops the call sites — but the package is CommonJS, and esbuild cannot
+ * tree-shake into a CJS module. A single surviving `import` statement therefore
+ * drags in the whole thing plus js-yaml and semver.
+ *
+ * The stub is generated from the real module's own export list rather than
+ * hand-maintained, so adding an export to the hub cannot silently desync it.
+ * Every binding is `undefined`; that is safe precisely because the base variant
+ * has no reachable path to any of them, and the assertions in
+ * test/package.baseBundle.test.ts fail if that ever stops being true.
+ */
+function stubMcpHubPlugin() {
+  return {
+    name: 'stub-mcp-hub',
+    setup(build) {
+      build.onResolve({ filter: /^@at-series\/mcp-hub$/ }, () => ({
+        path: '@at-series/mcp-hub',
+        namespace: 'stub-mcp-hub'
+      }));
+      build.onLoad({ filter: /.*/, namespace: 'stub-mcp-hub' }, async () => {
+        const real = await import('@at-series/mcp-hub');
+        // Importing a CommonJS module yields interop keys such as
+        // `module.exports` alongside the real ones; only identifiers can be
+        // re-declared as exports.
+        const names = Object.keys(real).filter(
+          (name) => name !== 'default' && /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
+        );
+        return {
+          contents: names.map((name) => `export const ${name} = undefined;`).join('\n'),
+          loader: 'js'
+        };
+      });
+    }
+  };
+}
+
 const contextConfigs = [
   esbuild.context({
     ...common,
@@ -32,7 +71,8 @@ const contextConfigs = [
     platform: 'node',
     target: HOST_TARGET,
     format: 'cjs',
-    external: ['vscode', 'ssh2']
+    external: ['vscode', 'ssh2'],
+    plugins: mcpEnabled ? [] : [stubMcpHubPlugin()]
   }),
   esbuild.context({
     ...common,

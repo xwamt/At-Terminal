@@ -43,6 +43,17 @@ describe('base variant bundle', () => {
     expect(baseBundle).not.toContain('sshManager.uninstallAtSeriesMcpConfig');
   });
 
+  it('drops the hub package, and js-yaml and semver along with it', () => {
+    // The hub is CommonJS, so esbuild cannot tree-shake into it: one surviving
+    // import statement is enough to drag in the whole package and both of its
+    // dependencies, even with every call site already eliminated. These are
+    // runtime strings from js-yaml and semver, which minification preserves.
+    expect(mcpBundle).toContain('unacceptable kind of an object');
+    expect(mcpBundle).toContain('Invalid comparator');
+    expect(baseBundle).not.toContain('unacceptable kind of an object');
+    expect(baseBundle).not.toContain('Invalid comparator');
+  });
+
   it('is meaningfully smaller than the MCP variant', () => {
     expect(baseBundle.length).toBeLessThan(mcpBundle.length * 0.95);
   });
