@@ -29,6 +29,14 @@ import { AT_TERMINAL_PLUGIN_ID, AT_TERMINAL_TOOL_CATALOG } from './toolCatalog';
 /** Heartbeat cadence for `~/.at-series` registry freshness (protocol: ≤30s). */
 const BRIDGE_HEARTBEAT_INTERVAL_MS = 30_000;
 
+/**
+ * Node defaults these to 60s/300s, which is a long time to let an unidentified local
+ * process hold a socket against the extension host. Every legitimate peer is on
+ * loopback, so seconds are generous.
+ */
+const BRIDGE_HEADERS_TIMEOUT_MS = 10_000;
+const BRIDGE_REQUEST_TIMEOUT_MS = 30_000;
+
 export interface BridgeServerOptions {
   service: AgentToolService;
   home?: string;
@@ -83,15 +91,12 @@ export class BridgeServer {
       return;
     }
     this.token = randomBytes(32).toString('hex');
-    const handler = createBridgeRequestHandler({
+    this.server = createBridgeHttpServer({
       service: this.service,
       token: this.token,
       bridgeId: this.bridgeId,
       hostApp: this.hostApp,
       pluginVersion: this.pluginVersion
-    });
-    this.server = createServer((request, response) => {
-      void handleNodeRequest(handler, request, response);
     });
     await new Promise<void>((resolve, reject) => {
       this.server!.once('error', reject);
@@ -448,12 +453,42 @@ function bridgeError(
   };
 }
 
+/**
+ * Builds the loopback HTTP server for a bridge. Kept separate from `BridgeServer` so the
+ * transport-level guarantees (reject before buffering, bounded socket lifetime) are
+ * reachable without publishing a registry record.
+ */
+export function createBridgeHttpServer(dependencies: BridgeHandlerDependencies): Server {
+  const handler = createBridgeRequestHandler(dependencies);
+  const server = createServer((request, response) => {
+    void handleNodeRequest(handler, request, response, dependencies.token);
+  });
+  server.headersTimeout = BRIDGE_HEADERS_TIMEOUT_MS;
+  server.requestTimeout = BRIDGE_REQUEST_TIMEOUT_MS;
+  return server;
+}
+
 async function handleNodeRequest(
   handler: ReturnType<typeof createBridgeRequestHandler>,
   request: IncomingMessage,
-  response: ServerResponse
+  response: ServerResponse,
+  token: string
 ): Promise<void> {
   try {
+    // Headers are enough to authenticate, so answering here keeps an unauthenticated
+    // caller from making the extension host buffer BRIDGE_MAX_BODY_BYTES per socket.
+    // The remaining upload is discarded by Node rather than accumulated, and
+    // `requestTimeout` bounds how long the caller can keep dribbling it.
+    if (!isAuthorized(request.headers, token)) {
+      response.statusCode = 401;
+      response.setHeader('content-type', 'application/json; charset=utf-8');
+      response.end(
+        JSON.stringify({
+          error: { code: 'UNAUTHORIZED', message: 'Unauthorized MCP bridge request.' }
+        })
+      );
+      return;
+    }
     const limited = await readLimitedBody(request, BRIDGE_MAX_BODY_BYTES);
     if (!limited.ok) {
       response.statusCode = limited.status;
