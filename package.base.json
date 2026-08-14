@@ -2,7 +2,7 @@
   "name": "at-terminal",
   "displayName": "AT Terminal",
   "description": "Agentless SSH terminal and SFTP workspace for VS Code.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "local",
   "icon": "media/at-terminal-icon.png",
   "engines": {
@@ -275,7 +275,7 @@
           "default": true,
           "description": "Enable frontend semantic highlighting for plain SSH terminal output that does not already contain ANSI colors."
         },
-                "sshManager.idleDisconnectMinutes": {
+        "sshManager.idleDisconnectMinutes": {
           "type": "number",
           "default": 60,
           "minimum": 0,
