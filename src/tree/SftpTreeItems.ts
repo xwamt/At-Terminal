@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { formatFileSize } from '../sftp/FileSize';
 import type { SftpEntry } from '../sftp/SftpTypes';
+import { t } from '../i18n/t';
 
 export class SftpPlaceholderTreeItem extends vscode.TreeItem {
   constructor(label: string) {
@@ -15,10 +16,11 @@ export class SftpParentDirectoryTreeItem extends vscode.TreeItem {
     this.contextValue = 'sftpParentDirectory';
     this.command = {
       command: 'sshManager.sftp.goUp',
-      title: 'Go Up'
+      title: t('Go Up')
     };
   }
 }
+
 
 export class SftpDirectoryTreeItem extends vscode.TreeItem {
   constructor(

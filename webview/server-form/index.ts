@@ -30,6 +30,23 @@ const summaryGroup = document.querySelector<HTMLElement>('[data-summary="group"]
 const summaryRoute = document.querySelector<HTMLElement>('[data-summary="route"]');
 const summaryAgentCommands = document.querySelector<HTMLElement>('[data-summary="agentCommands"]');
 
+function getStrings(): Record<string, string> {
+  const script = document.querySelector<HTMLScriptElement>('#serverFormStrings');
+  if (!script?.textContent) {
+    return {};
+  }
+  try {
+    return JSON.parse(script.textContent);
+  } catch {
+    return {};
+  }
+}
+
+const i18n = getStrings();
+function i18nText(key: string, fallback: string): string {
+  return i18n[key] ?? fallback;
+}
+
 function field(name: string): HTMLInputElement | HTMLSelectElement | null {
   const element = form?.elements.namedItem(name);
   return element instanceof HTMLInputElement || element instanceof HTMLSelectElement ? element : null;
@@ -62,16 +79,19 @@ function setSaving(isSaving: boolean): void {
   submitButton?.toggleAttribute('disabled', isSaving);
   submitButton?.classList.toggle('is-loading', isSaving);
   if (submitLabel) {
-    submitLabel.textContent = isSaving ? 'Saving...' : defaultSubmitLabel;
+    submitLabel.textContent = isSaving ? i18nText('saving', 'Saving...') : defaultSubmitLabel;
   }
 }
 
 function setTesting(isTesting: boolean): void {
   testConnectionButton?.toggleAttribute('disabled', isTesting);
   if (testConnectionButton) {
-    testConnectionButton.textContent = isTesting ? 'Testing...' : 'Test Connection';
+    testConnectionButton.textContent = isTesting
+      ? i18nText('testing', 'Testing...')
+      : i18nText('testConnection', 'Test Connection');
   }
 }
+
 
 function selectedAuth(): string {
   return authType?.value === 'privateKey' ? 'privateKey' : 'password';
@@ -189,26 +209,33 @@ function updateSummary(): void {
   const username = field('username')?.value.trim() ?? '';
   const host = field('host')?.value.trim() ?? '';
   const port = field('port')?.value.trim() || '22';
-  const group = field('group')?.value.trim() || 'Default';
-  const jumpHostLabel = jumpHost?.selectedOptions[0]?.textContent?.trim() ?? 'Direct connection';
+  const group = field('group')?.value.trim() || i18nText('default', 'Default');
+  const jumpHostLabel = jumpHost?.selectedOptions[0]?.textContent?.trim() ?? i18nText('directConnection', 'Direct connection');
 
   if (summaryTarget) {
-    summaryTarget.textContent = username && host ? `${username}@${host}:${port}` : 'Enter host and username';
+    summaryTarget.textContent = username && host ? `${username}@${host}:${port}` : i18nText('summaryEnterHostUser', 'Enter host and username');
   }
   if (summaryAuth) {
-    summaryAuth.textContent = `Authentication: ${selectedAuth() === 'privateKey' ? 'Private Key' : 'Password'}`;
+    const authLabel = selectedAuth() === 'privateKey'
+      ? i18nText('privateKey', 'Private Key')
+      : i18nText('password', 'Password');
+    summaryAuth.textContent = i18nText('summaryAuthPrefix', `Authentication: ${authLabel}`).replace('{auth}', authLabel);
   }
   if (summaryGroup) {
-    summaryGroup.textContent = `Group: ${group}`;
+    summaryGroup.textContent = i18nText('summaryGroupPrefix', `Group: ${group}`).replace('{group}', group);
   }
   if (summaryRoute) {
-    summaryRoute.textContent =
-      jumpHost?.value && jumpHostLabel ? `Route: via ${jumpHostLabel.split(' - ')[0]}` : 'Route: Direct connection';
+    if (jumpHost?.value && jumpHostLabel) {
+      const targetHost = jumpHostLabel.split(' - ')[0];
+      summaryRoute.textContent = i18nText('summaryRouteVia', `Route: via ${targetHost}`).replace('{host}', targetHost);
+    } else {
+      summaryRoute.textContent = i18nText('summaryRouteDirect', 'Route: Direct connection');
+    }
   }
   if (summaryAgentCommands) {
     summaryAgentCommands.textContent = agentCommandAutoApproveEnabled()
-      ? 'Agent commands: read-only commands trusted'
-      : 'Agent commands: manual approval';
+      ? i18nText('summaryAgentReadOnly', 'Agent commands: read-only commands trusted')
+      : i18nText('summaryAgentManual', 'Agent commands: manual approval');
   }
 }
 
@@ -230,10 +257,14 @@ passwordToggle?.addEventListener('click', () => {
   }
   const nextVisible = password.type === 'password';
   password.type = nextVisible ? 'text' : 'password';
-  passwordToggle.textContent = nextVisible ? 'Hide' : 'Show';
-  passwordToggle.setAttribute('aria-label', nextVisible ? 'Hide password' : 'Show password');
+  passwordToggle.textContent = nextVisible ? i18nText('hide', 'Hide') : i18nText('show', 'Show');
+  passwordToggle.setAttribute(
+    'aria-label',
+    nextVisible ? i18nText('hidePassword', 'Hide password') : i18nText('showPassword', 'Show password')
+  );
   passwordToggle.setAttribute('aria-pressed', String(nextVisible));
 });
+
 
 groupInput?.addEventListener('input', () => {
   openGroupMenu(false);
@@ -323,21 +354,21 @@ function validatePayload(payload: Record<string, FormDataEntryValue>): boolean {
     setSaving(false);
     setTesting(false);
     clearTestStatus();
-    setError('Label, host, and username are required.');
+    setError(i18nText('errorRequired', 'Label, host, and username are required.'));
     return false;
   }
   if (selectedAuth() === 'privateKey' && !String(payload.privateKeyPath ?? '').trim()) {
     setSaving(false);
     setTesting(false);
     clearTestStatus();
-    setError('Select or enter a private key path.');
+    setError(i18nText('errorPrivateKey', 'Select or enter a private key path.'));
     return false;
   }
   if (jumpHostGroup?.value && !jumpHost?.value) {
     setSaving(false);
     setTesting(false);
     clearTestStatus();
-    setError('Select a jump host server or choose Direct connection.');
+    setError(i18nText('errorJumpHost', 'Select a jump host server or choose Direct connection.'));
     return false;
   }
   return true;
@@ -346,9 +377,14 @@ function validatePayload(payload: Record<string, FormDataEntryValue>): boolean {
 testConnectionButton?.addEventListener('click', () => {
   clearError();
   const jumpHostLabel = jumpHost?.selectedOptions[0]?.textContent?.trim();
-  setTestStatus(
-    jumpHost?.value && jumpHostLabel ? `Testing connection via ${jumpHostLabel.split(' - ')[0]}...` : 'Testing connection...'
-  );
+  if (jumpHost?.value && jumpHostLabel) {
+    const targetHost = jumpHostLabel.split(' - ')[0];
+    setTestStatus(
+      i18nText('testingVia', `Testing connection via ${targetHost}...`).replace('{name}', targetHost)
+    );
+  } else {
+    setTestStatus(i18nText('testingDirect', 'Testing connection...'));
+  }
   const payload = currentPayload();
   if (!payload || !validatePayload(payload)) {
     return;
@@ -356,6 +392,7 @@ testConnectionButton?.addEventListener('click', () => {
   setTesting(true);
   vscode.postMessage({ type: 'testConnection', payload });
 });
+
 
 form?.addEventListener('submit', (event) => {
   event.preventDefault();

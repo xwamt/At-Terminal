@@ -7,6 +7,7 @@ import { testSshConnection } from '../ssh/SshConnectionTester';
 import { requireHostKeyVerifier, type HostKeyVerifier } from '../ssh/SshConnectionConfig';
 import { formatError } from '../utils/errors';
 import { renderWebviewHtml } from './html';
+import { buildWebviewStrings, t } from '../i18n/t';
 
 type SubmitPayload = Record<string, unknown>;
 
@@ -37,7 +38,9 @@ export class ServerFormPanel {
   ): Promise<void> {
     const panel = vscode.window.createWebviewPanel(
       'sshServerForm',
-      existing ? `Edit SSH Server: ${existing.label}` : 'Add SSH Server',
+      existing
+        ? t('Edit SSH Server: {label}', { label: existing.label })
+        : t('Add SSH Server'),
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -52,7 +55,34 @@ export class ServerFormPanel {
         script: vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview', 'server-form.js'),
         style: vscode.Uri.joinPath(context.extensionUri, 'webview', 'server-form', 'index.css')
       },
-      renderServerForm(existing, servers, initialGroup)
+      renderServerForm(existing, servers, initialGroup),
+      {
+        serverFormStrings: buildWebviewStrings({
+          saving: 'Saving...',
+          testing: 'Testing...',
+          testConnection: 'Test Connection',
+          errorRequired: 'Label, host, and username are required.',
+          errorPrivateKey: 'Select or enter a private key path.',
+          errorJumpHost: 'Select a jump host server or choose Direct connection.',
+          testingVia: 'Testing connection via {name}...',
+          testingDirect: 'Testing connection...',
+          summaryEnterHostUser: 'Enter host and username',
+          summaryAuthPrefix: 'Authentication: {auth}',
+          summaryGroupPrefix: 'Group: {group}',
+          summaryRouteVia: 'Route: via {host}',
+          summaryRouteDirect: 'Route: Direct connection',
+          summaryAgentReadOnly: 'Agent commands: read-only commands trusted',
+          summaryAgentManual: 'Agent commands: manual approval',
+          hide: 'Hide',
+          show: 'Show',
+          hidePassword: 'Hide password',
+          showPassword: 'Show password',
+          privateKey: 'Private Key',
+          password: 'Password',
+          default: 'Default',
+          directConnection: 'Direct connection'
+        })
+      }
     );
 
     panel.webview.onDidReceiveMessage(async (message: ServerFormMessage) => {
@@ -63,12 +93,13 @@ export class ServerFormPanel {
             canSelectFiles: true,
             canSelectFolders: false,
             canSelectMany: false,
-            title: 'Select SSH private key'
+            title: t('Select SSH private key')
           })
       });
     });
   }
 }
+
 
 export async function handleServerFormMessage(
   message: ServerFormMessage,
@@ -112,7 +143,10 @@ export async function handleServerFormMessage(
     const password = authType === 'password' ? optionalString(message.payload.password) : undefined;
     const server = serverFromPayload(message.payload, existing);
     if (!existing && authType === 'password' && !password) {
-      await panel.webview.postMessage({ type: 'error', payload: 'Password is required for new password-auth servers.' });
+      await panel.webview.postMessage({
+        type: 'error',
+        payload: t('Password is required for new password-auth servers.')
+      });
       return true;
     }
 
@@ -151,7 +185,7 @@ async function handleConnectionTest(
     await runTest(server, password);
     await panel.webview.postMessage({
       type: 'connectionTestResult',
-      payload: { ok: true, message: 'Connection test succeeded.' }
+      payload: { ok: true, message: t('Connection test succeeded.') }
     });
   } catch (error) {
     await panel.webview.postMessage({
@@ -178,7 +212,7 @@ async function passwordForConnectionTest(
   if (existing) {
     return configManager.getPassword(existing.id);
   }
-  throw new Error('Password is required for new password-auth servers.');
+  throw new Error(t('Password is required for new password-auth servers.'));
 }
 
 function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | undefined): ServerConfig {
@@ -213,15 +247,17 @@ function optionalString(value: unknown): string | undefined {
 
 function optionalGroup(value: unknown): string | undefined {
   const group = optionalString(value);
-  return group === 'Default' ? undefined : group;
+  return group === 'Default' || group === t('Default') ? undefined : group;
 }
 
 export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] = [], initialGroup?: string): string {
   const authType = server?.authType ?? 'password';
   const isPassword = authType === 'password';
   const isPrivateKey = authType === 'privateKey';
-  const submitText = server ? 'Save Server' : 'Add Server';
-  const passwordHelp = server ? 'Leave blank to keep the saved password.' : 'Stored securely in VS Code SecretStorage.';
+  const submitText = server ? t('Save Server') : t('Add Server');
+  const passwordHelp = server
+    ? t('Leave blank to keep the saved password.')
+    : t('Stored securely in VS Code SecretStorage.');
   const jumpHostOptions = servers.filter((candidate) => candidate.id !== server?.id);
   const selectedJumpHost = jumpHostOptions.find((candidate) => candidate.id === server?.jumpHostId);
   const selectedJumpHostGroup = selectedJumpHost ? displayGroupName(selectedJumpHost.group) : '';
@@ -229,46 +265,46 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const agentCommandTrusted = server?.agentCommandAutoApprove === true;
   const backgroundConnectionAllowed = agentCommandTrusted && server?.backgroundConnectionAllowed === true;
   const agentCommandTrustSummary = agentCommandTrusted
-    ? 'Agent commands: state-changing commands still ask'
-    : 'Agent commands: manual approval';
+    ? t('Agent commands: state-changing commands still ask')
+    : t('Agent commands: manual approval');
   const groupSuggestions = groupNames(servers);
   const groupValue = server ? server.group ?? '' : initialGroup ?? '';
 
   return `<main class="server-form-shell">
   <header class="form-header">
     <div>
-      <h1>${server ? 'Edit SSH Server' : 'Add SSH Server'}</h1>
-      <p>Configure a direct SSH terminal connection.</p>
+      <h1>${escapeHtml(server ? t('Edit SSH Server') : t('Add SSH Server'))}</h1>
+      <p>${escapeHtml(t('Configure a direct SSH terminal connection.'))}</p>
     </div>
-    <div id="form-status" class="form-status">Manual setup</div>
+    <div id="form-status" class="form-status">${escapeHtml(t('Manual setup'))}</div>
   </header>
   <form id="server-form" class="server-form">
     <div class="form-section-grid">
       <section class="form-panel form-panel-connection">
         <div class="form-panel-header">
-          <h2>Connection</h2>
-          <span>Target</span>
+          <h2>${escapeHtml(t('Connection'))}</h2>
+          <span>${escapeHtml(t('Target'))}</span>
         </div>
         <div class="field-grid">
-          <label class="field-stack">Label <input name="label" value="${escapeAttr(server?.label ?? '')}" required autocomplete="off"></label>
-          <label class="field-stack">Group
+          <label class="field-stack">${escapeHtml(t('Label'))} <input name="label" value="${escapeAttr(server?.label ?? '')}" required autocomplete="off"></label>
+          <label class="field-stack">${escapeHtml(t('Group'))}
             <div class="group-combobox">
               <input name="group" value="${escapeAttr(displayGroupName(groupValue))}" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="serverGroupSuggestions">
-              <button class="group-combobox-toggle" type="button" aria-label="Show all groups" aria-controls="serverGroupSuggestions">v</button>
+              <button class="group-combobox-toggle" type="button" aria-label="${escapeAttr(t('Show all groups'))}" aria-controls="serverGroupSuggestions">v</button>
               <div id="serverGroupSuggestions" class="group-combobox-menu" role="listbox" hidden>
                 ${groupSuggestionOptions(groupSuggestions, groupValue)}
               </div>
             </div>
           </label>
-          <label class="field-stack field-wide">Host <input name="host" value="${escapeAttr(server?.host ?? '')}" required autocomplete="off"></label>
-          <label class="field-stack">Port <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
-          <label class="field-stack">Username <input name="username" value="${escapeAttr(server?.username ?? '')}" required autocomplete="off"></label>
-          <label class="field-stack">Keepalive <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
+          <label class="field-stack field-wide">${escapeHtml(t('Host'))} <input name="host" value="${escapeAttr(server?.host ?? '')}" required autocomplete="off"></label>
+          <label class="field-stack">${escapeHtml(t('Port'))} <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
+          <label class="field-stack">${escapeHtml(t('Username'))} <input name="username" value="${escapeAttr(server?.username ?? '')}" required autocomplete="off"></label>
+          <label class="field-stack">${escapeHtml(t('Keepalive'))} <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
           <div class="trust-block field-wide">
             <label class="trust-toggle-row" for="agentCommandAutoApprove">
               <span class="trust-toggle-copy">
-                <span class="trust-toggle-title">Trust agent remote commands</span>
-                <span class="field-help">Skip confirmation unless the command changes state (rm, chmod, systemctl restart, apt, docker, or an interpreter such as sh, python, awk, sed), or hides what it runs behind quotes, escapes, redirects or command substitution. Every stage of a pipeline or chain is checked. Commands the blocklist does not name run without asking.</span>
+                <span class="trust-toggle-title">${escapeHtml(t('Trust agent remote commands'))}</span>
+                <span class="field-help">${escapeHtml(t('Skip confirmation unless the command changes state (rm, chmod, systemctl restart, apt, docker, or an interpreter such as sh, python, awk, sed), or hides what it runs behind quotes, escapes, redirects or command substitution. Every stage of a pipeline or chain is checked. Commands the blocklist does not name run without asking.'))}</span>
               </span>
               <input id="agentCommandAutoApprove" name="agentCommandAutoApprove" type="checkbox"${agentCommandTrusted ? ' checked' : ''}>
             </label>
@@ -276,8 +312,8 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
               <div class="trust-sub-inner">
                 <label class="trust-toggle-row" for="backgroundConnectionAllowed">
                   <span class="trust-toggle-copy">
-                    <span class="trust-toggle-title">Allow background connections</span>
-                    <span class="field-help">Allow MCP to connect to this server in the background. Only applies to the MCP build.</span>
+                    <span class="trust-toggle-title">${escapeHtml(t('Allow background connections'))}</span>
+                    <span class="field-help">${escapeHtml(t('Allow MCP to connect to this server in the background. Only applies to the MCP build.'))}</span>
                   </span>
                   <input id="backgroundConnectionAllowed" name="backgroundConnectionAllowed" type="checkbox"${backgroundConnectionAllowed ? ' checked' : ''}${agentCommandTrusted ? '' : ' disabled'}>
                 </label>
@@ -290,47 +326,47 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
       <div class="form-right-col">
         <section class="form-panel form-panel-auth">
           <div class="form-panel-header">
-            <h2>Authentication</h2>
-            <span>Credentials</span>
+            <h2>${escapeHtml(t('Authentication'))}</h2>
+            <span>${escapeHtml(t('Credentials'))}</span>
           </div>
           <input id="authType" name="authType" type="hidden" value="${authType}">
-          <div class="auth-card-grid" role="radiogroup" aria-label="Authentication method">
+          <div class="auth-card-grid" role="radiogroup" aria-label="${escapeAttr(t('Authentication method'))}">
             <button class="auth-card${isPassword ? ' is-selected' : ''}" type="button" data-auth-option="password" role="radio" aria-checked="${isPassword}">
-              <span class="auth-card-title">Password</span>
-              <span class="auth-card-copy">Use a password saved in VS Code SecretStorage.</span>
+              <span class="auth-card-title">${escapeHtml(t('Password'))}</span>
+              <span class="auth-card-copy">${escapeHtml(t('Use a password saved in VS Code SecretStorage.'))}</span>
             </button>
             <button class="auth-card${isPrivateKey ? ' is-selected' : ''}" type="button" data-auth-option="privateKey" role="radio" aria-checked="${isPrivateKey}">
-              <span class="auth-card-title">Private Key</span>
-              <span class="auth-card-copy">Save a local key path and read the key only when connecting.</span>
+              <span class="auth-card-title">${escapeHtml(t('Private Key'))}</span>
+              <span class="auth-card-copy">${escapeHtml(t('Save a local key path and read the key only when connecting.'))}</span>
             </button>
           </div>
           <div class="auth-fields">
-            <label class="field-stack auth-password-field">Password
+            <label class="field-stack auth-password-field">${escapeHtml(t('Password'))}
               <div class="password-input-row">
                 <input id="password" name="password" type="password" autocomplete="new-password">
-                <button id="passwordToggle" class="secondary-action password-toggle" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+                <button id="passwordToggle" class="secondary-action password-toggle" type="button" aria-label="${escapeAttr(t('Show password'))}" aria-pressed="false">${escapeHtml(t('Show'))}</button>
               </div>
-              <span class="field-help">${passwordHelp}</span>
+              <span class="field-help">${escapeHtml(passwordHelp)}</span>
             </label>
-            <label class="field-stack auth-key-field">Private key
+            <label class="field-stack auth-key-field">${escapeHtml(t('Private key'))}
               <div class="file-picker-row">
-                <input id="privateKeyPath" name="privateKeyPath" value="${escapeAttr(server?.privateKeyPath ?? '')}" placeholder="Select a private key file">
-                <button id="privateKeyBrowse" class="secondary-action" type="button">Browse...</button>
+                <input id="privateKeyPath" name="privateKeyPath" value="${escapeAttr(server?.privateKeyPath ?? '')}" placeholder="${escapeAttr(t('Select a private key file'))}">
+                <button id="privateKeyBrowse" class="secondary-action" type="button">${escapeHtml(t('Browse...'))}</button>
               </div>
-              <span class="field-help">Only the local path is saved. Key contents are not copied into settings.</span>
+              <span class="field-help">${escapeHtml(t('Only the local path is saved. Key contents are not copied into settings.'))}</span>
             </label>
           </div>
         </section>
 
         <section class="form-panel form-panel-jump">
           <div class="form-panel-header">
-            <h2>Jump Host</h2>
-            <span>Bastion route</span>
+            <h2>${escapeHtml(t('Jump Host'))}</h2>
+            <span>${escapeHtml(t('Bastion route'))}</span>
           </div>
           <div class="field-grid">
-            <label class="field-stack">Jump Host Group
+            <label class="field-stack">${escapeHtml(t('Jump Host Group'))}
               <select name="jumpHostGroup">
-                <option value="">Direct connection</option>
+                <option value="">${escapeHtml(t('Direct connection'))}</option>
                 ${jumpHostGroups
                   .map((group) => {
                     const selected = group === selectedJumpHostGroup ? ' selected' : '';
@@ -339,9 +375,9 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
                   .join('')}
               </select>
             </label>
-            <label class="field-stack jump-host-server-field">Jump Host Server
+            <label class="field-stack jump-host-server-field">${escapeHtml(t('Jump Host Server'))}
               <select name="jumpHostId"${selectedJumpHost ? '' : ' disabled'}>
-                <option value="">Select a server</option>
+                <option value="">${escapeHtml(t('Select a server'))}</option>
                 ${jumpHostOptions
                   .map((candidate) => {
                     const group = displayGroupName(candidate.group);
@@ -359,30 +395,32 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
 
       <section class="form-panel form-panel-summary">
         <div class="form-panel-header">
-          <h2>Summary</h2>
-          <span>Review</span>
+          <h2>${escapeHtml(t('Summary'))}</h2>
+          <span>${escapeHtml(t('Review'))}</span>
         </div>
         <div id="connectionSummary" class="connection-summary">
-          <div class="summary-line" data-summary="target">Enter host and username</div>
-          <div class="summary-line" data-summary="auth">Authentication: ${isPrivateKey ? 'Private Key' : 'Password'}</div>
-          <div class="summary-line" data-summary="group">Group: ${escapeHtml(server?.group?.trim() || 'Default')}</div>
-          <div class="summary-line" data-summary="route">Route: ${
-            selectedJumpHost ? `via ${escapeHtml(selectedJumpHost.label)}` : 'Direct connection'
-          }</div>
-          <div class="summary-line" data-summary="agentCommands">${agentCommandTrustSummary}</div>
+          <div class="summary-line" data-summary="target">${escapeHtml(t('Enter host and username'))}</div>
+          <div class="summary-line" data-summary="auth">${escapeHtml(t('Authentication: {auth}', { auth: isPrivateKey ? t('Private Key') : t('Password') }))}</div>
+          <div class="summary-line" data-summary="group">${escapeHtml(t('Group: {group}', { group: server?.group?.trim() || t('Default') }))}</div>
+          <div class="summary-line" data-summary="route">${escapeHtml(
+            selectedJumpHost
+              ? t('Route: via {host}', { host: selectedJumpHost.label })
+              : t('Route: Direct connection')
+          )}</div>
+          <div class="summary-line" data-summary="agentCommands">${escapeHtml(agentCommandTrustSummary)}</div>
         </div>
       </section>
-    </div>    </div>
+    </div>
     <footer class="form-footer">
       <div class="form-feedback">
         <div id="form-error" class="form-error" role="status" aria-live="polite"></div>
         <div id="testStatus" class="test-status" role="status" aria-live="polite"></div>
       </div>
       <div class="form-actions">
-        <button id="testConnectionButton" class="secondary-action" type="button">Test Connection</button>
+        <button id="testConnectionButton" class="secondary-action" type="button">${escapeHtml(t('Test Connection'))}</button>
         <button id="submitButton" class="primary-action" type="submit">
           <span id="submitSpinner" class="submit-spinner" aria-hidden="true"></span>
-          <span id="submitLabel">${submitText}</span>
+          <span id="submitLabel">${escapeHtml(submitText)}</span>
         </button>
       </div>
     </footer>
@@ -403,7 +441,7 @@ function formatJumpHostOption(server: ServerConfig): string {
 }
 
 function groupNames(servers: ServerConfig[]): string[] {
-  return Array.from(new Set(['Default', ...servers.map((server) => displayGroupName(server.group))])).sort((a, b) =>
+  return Array.from(new Set([t('Default'), ...servers.map((server) => displayGroupName(server.group))])).sort((a, b) =>
     a.localeCompare(b)
   );
 }
@@ -422,5 +460,6 @@ function groupSuggestionOptions(groups: string[], selectedGroup: string): string
 
 function displayGroupName(group: string | undefined): string {
   const trimmed = group?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : 'Default';
+  return trimmed && trimmed.length > 0 ? trimmed : t('Default');
 }
+

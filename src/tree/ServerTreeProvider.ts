@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { ServerConfig } from '../config/schema';
 import { GroupTreeItem, ServerTreeItem } from './TreeItems';
+import { t } from '../i18n/t';
 
 export interface ServerListSource {
   listServers(): Promise<ServerConfig[]>;
@@ -38,6 +39,7 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<GroupTreeItem
 
   private groupName(server: ServerConfig): string {
     const group = server.group?.trim();
-    return group && group.length > 0 ? group : 'Default';
+    return group && group.length > 0 ? group : t('Default');
   }
 }
+

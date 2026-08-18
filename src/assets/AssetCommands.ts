@@ -8,6 +8,7 @@ import { decryptAssetPayload, encryptAssetPayload } from './AssetCrypto';
 import { ASSET_PACKAGE_EXTENSION, parseAssetPackageEnvelope } from './AssetPackage';
 import { createAssetExportPayload } from './AssetExportService';
 import { applyAssetImport, type AssetConflictStrategy } from './AssetImportService';
+import { t } from '../i18n/t';
 
 export interface ExportAssetsCommandOptions {
   configManager: Pick<ConfigManager, 'listServers' | 'getPassword'>;
@@ -24,21 +25,24 @@ export interface ImportAssetsCommandOptions {
 export async function exportAssetsCommand(options: ExportAssetsCommandOptions): Promise<void> {
   const target = await vscode.window.showSaveDialog({
     defaultUri: vscode.Uri.file(`at-terminal-assets${ASSET_PACKAGE_EXTENSION}`),
-    filters: { 'AT Terminal Assets': [ASSET_PACKAGE_EXTENSION.slice(1)] }
+    filters: { [t('AT Terminal Assets')]: [ASSET_PACKAGE_EXTENSION.slice(1)] }
   });
   if (!target) {
     return;
   }
 
-  const picked = await vscode.window.showQuickPick(['Server configuration', 'Passwords', 'Private key files'], {
+  const serverConfigLabel = t('Server configuration');
+  const passwordsLabel = t('Passwords');
+  const privateKeysLabel = t('Private key files');
+  const picked = await vscode.window.showQuickPick([serverConfigLabel, passwordsLabel, privateKeysLabel], {
     canPickMany: true,
-    title: 'Choose assets to export'
+    title: t('Choose assets to export')
   });
   if (!picked) {
     return;
   }
 
-  const password = await askForConfirmedPassword('Asset package password');
+  const password = await askForConfirmedPassword(t('Asset package password'));
   if (!password) {
     return;
   }
@@ -46,15 +50,17 @@ export async function exportAssetsCommand(options: ExportAssetsCommandOptions): 
   try {
     const payload = await createAssetExportPayload({
       servers: await options.configManager.listServers(),
-      includePasswords: picked.includes('Passwords'),
-      includePrivateKeys: picked.includes('Private key files'),
+      includePasswords: picked.includes(passwordsLabel),
+      includePrivateKeys: picked.includes(privateKeysLabel),
       extensionName: options.extensionName,
       extensionVersion: options.extensionVersion,
       getPassword: (id) => options.configManager.getPassword(id)
     });
     const envelope = await encryptAssetPayload(payload, password);
     await writeFile(target.fsPath, JSON.stringify(envelope, null, 2), 'utf8');
-    await vscode.window.showInformationMessage(`Exported ${payload.servers.length} AT Terminal server assets.`);
+    await vscode.window.showInformationMessage(
+      t('Exported {count} AT Terminal server assets.', { count: payload.servers.length })
+    );
   } catch (error) {
     await vscode.window.showErrorMessage(formatError(error));
   }
@@ -65,20 +71,23 @@ export async function importAssetsCommand(options: ImportAssetsCommandOptions): 
     canSelectFiles: true,
     canSelectFolders: false,
     canSelectMany: false,
-    filters: { 'AT Terminal Assets': [ASSET_PACKAGE_EXTENSION.slice(1)] }
+    filters: { [t('AT Terminal Assets')]: [ASSET_PACKAGE_EXTENSION.slice(1)] }
   });
   const source = selected?.[0];
   if (!source) {
     return;
   }
-  const password = await vscode.window.showInputBox({ prompt: 'Asset package password', password: true });
+  const password = await vscode.window.showInputBox({ prompt: t('Asset package password'), password: true });
   if (!password) {
     return;
   }
+  const skipLabel = t('Skip existing servers');
+  const overwriteLabel = t('Overwrite existing servers');
+  const renameLabel = t('Keep both and rename imports');
   const strategyLabel = await vscode.window.showQuickPick(
-    ['Skip existing servers', 'Overwrite existing servers', 'Keep both and rename imports'],
+    [skipLabel, overwriteLabel, renameLabel],
     {
-      title: 'Choose import conflict handling'
+      title: t('Choose import conflict handling')
     }
   );
   if (!strategyLabel) {
@@ -91,14 +100,16 @@ export async function importAssetsCommand(options: ImportAssetsCommandOptions): 
     await mkdir(options.privateKeyDirectory, { recursive: true });
     const summary = await applyAssetImport({
       payload,
-      conflictStrategy: conflictStrategyFromLabel(strategyLabel),
+      conflictStrategy: conflictStrategyFromLabel(strategyLabel, { overwriteLabel, renameLabel }),
       privateKeyDirectory: options.privateKeyDirectory,
       store: options.configManager,
       generateId: randomUUID
     });
     options.refreshServers();
     await vscode.window.showInformationMessage(
-      `Imported ${summary.imported + summary.overwritten + summary.renamed} AT Terminal server assets.`
+      t('Imported {count} AT Terminal server assets.', {
+        count: summary.imported + summary.overwritten + summary.renamed
+      })
     );
   } catch (error) {
     await vscode.window.showErrorMessage(formatError(error));
@@ -114,16 +125,20 @@ async function askForConfirmedPassword(prompt: string): Promise<string | undefin
   if (!password) {
     return undefined;
   }
-  const confirmation = await vscode.window.showInputBox({ prompt: 'Confirm asset package password', password: true });
+  const confirmation = await vscode.window.showInputBox({ prompt: t('Confirm asset package password'), password: true });
   return confirmation === password ? password : undefined;
 }
 
-function conflictStrategyFromLabel(label: string): AssetConflictStrategy {
-  if (label === 'Overwrite existing servers') {
+function conflictStrategyFromLabel(
+  label: string,
+  labels: { overwriteLabel: string; renameLabel: string }
+): AssetConflictStrategy {
+  if (label === labels.overwriteLabel) {
     return 'overwrite';
   }
-  if (label === 'Keep both and rename imports') {
+  if (label === labels.renameLabel) {
     return 'rename';
   }
   return 'skip';
 }
+

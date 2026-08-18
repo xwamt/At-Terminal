@@ -31,6 +31,7 @@ import { formatError } from './utils/errors';
 import { showTimedNotification } from './utils/notifications';
 import { ServerFormPanel } from './webview/ServerFormPanel';
 import { TerminalPanel } from './webview/TerminalPanel';
+import { t } from './i18n/t';
 
 let extensionCleanup: { dispose(): void } | undefined;
 
@@ -47,17 +48,22 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (status === 'changed') {
         showTimedNotification(
-          `Host key for ${host}:${port} changed. Connection blocked. Fingerprint: ${fingerprint}`,
+          t('Host key for {host}:{port} changed. Connection blocked. Fingerprint: {fingerprint}', {
+            host,
+            port,
+            fingerprint
+          }),
           'error'
         );
         return false;
       }
+      const trustAction = t('Trust and Connect');
       const answer = await vscode.window.showWarningMessage(
-        `Trust SSH host ${host}:${port}? Fingerprint: ${fingerprint}`,
+        t('Trust SSH host {host}:{port}? Fingerprint: {fingerprint}', { host, port, fingerprint }),
         { modal: true },
-        'Trust and Connect'
+        trustAction
       );
-      if (answer === 'Trust and Connect') {
+      if (answer === trustAction) {
         await hostKeyStore.trust(host, port, fingerprint);
         return true;
       }
@@ -140,7 +146,9 @@ export function activate(context: vscode.ExtensionContext): void {
       .catch((error) => {
         console.error('AT Terminal hub sync failed:', formatError(error));
         showTimedNotification(
-          `AT Series hub sync failed: ${formatError(error)}. MCP may not start until Repair succeeds.`,
+          t('AT Series hub sync failed: {message}. MCP may not start until Repair succeeds.', {
+            message: formatError(error)
+          }),
           'warning'
         );
         throw error;
@@ -169,7 +177,10 @@ export function activate(context: vscode.ExtensionContext): void {
           : undefined
     });
     void bridgeServer.start().catch((error) => {
-      showTimedNotification(`AT Terminal MCP bridge failed to start: ${formatError(error)}`, 'warning');
+      showTimedNotification(
+        t('AT Terminal MCP bridge failed to start: {message}', { message: formatError(error) }),
+        'warning'
+      );
     });
     void hubReady
       .then(() =>
@@ -179,13 +190,19 @@ export function activate(context: vscode.ExtensionContext): void {
         })
       )
       .catch((error) => {
-        showTimedNotification(`AT Series MCP config could not be updated: ${formatError(error)}`, 'warning');
+        showTimedNotification(
+          t('AT Series MCP config could not be updated: {message}', { message: formatError(error) }),
+          'warning'
+        );
       });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
       try {
         await syncPackagedHub(context);
       } catch (error) {
-        showTimedNotification(`AT Series hub sync failed: ${formatError(error)}`, 'error');
+        showTimedNotification(
+          t('AT Series hub sync failed: {message}', { message: formatError(error) }),
+          'error'
+        );
         return;
       }
       const result = await ensureAtSeriesConfigForCurrentIde({
@@ -194,12 +211,14 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       if (result) {
         showTimedNotification(
-          result.updated ? 'AT Series MCP config installed/repaired.' : 'AT Series MCP config is already up to date.'
+          result.updated
+            ? t('AT Series MCP config installed/repaired.')
+            : t('AT Series MCP config is already up to date.')
         );
         return;
       }
       showTimedNotification(
-        'No supported IDE MCP config target was detected. Open a workspace to install Continue config.',
+        t('No supported IDE MCP config target was detected. Open a workspace to install Continue config.'),
         'warning'
       );
     });
@@ -209,19 +228,20 @@ export function activate(context: vscode.ExtensionContext): void {
         workspaceFolder: currentWorkspaceFolder()
       });
       if (result?.removed) {
-        showTimedNotification('AT Series MCP config uninstalled.');
+        showTimedNotification(t('AT Series MCP config uninstalled.'));
         return;
       }
       if (result) {
-        showTimedNotification('AT Series MCP config was not present.');
+        showTimedNotification(t('AT Series MCP config was not present.'));
         return;
       }
       showTimedNotification(
-        'No supported IDE MCP config target was detected. Open a workspace to uninstall Continue config.',
+        t('No supported IDE MCP config target was detected. Open a workspace to uninstall Continue config.'),
         'warning'
       );
     });
   }
+
 
   context.subscriptions.push(
     ...(bridgeServer ? [bridgeServer] : []),
@@ -285,12 +305,13 @@ export function activate(context: vscode.ExtensionContext): void {
         showTimedNotification(formatJumpHostDeleteBlockMessage(item.server, references), 'warning');
         return;
       }
+      const deleteAction = t('Delete');
       const answer = await vscode.window.showWarningMessage(
-        `Delete SSH server "${item.server.label}"?`,
+        t('Delete SSH server "{label}"?', { label: item.server.label }),
         { modal: true },
-        'Delete'
+        deleteAction
       );
-      if (answer === 'Delete') {
+      if (answer === deleteAction) {
         await deleteServerAndTrust.remove(item.server, { configManager, hostKeyStore });
         treeProvider.refresh();
       }
@@ -324,7 +345,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const state = sftpManager.getState();
         const currentPath = state.kind === 'active' ? state.rootPath : '';
         const nextPath = await vscode.window.showInputBox({
-          prompt: 'Remote path',
+          prompt: t('Remote path'),
           value: currentPath
         });
         if (!nextPath?.trim()) {
@@ -371,12 +392,13 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!item) {
           return;
         }
+        const deleteAction = t('Delete');
         const answer = await vscode.window.showWarningMessage(
-          `Delete remote ${item.entry.type} "${item.entry.path}"?`,
+          t('Delete remote {type} "{path}"?', { type: item.entry.type, path: item.entry.path }),
           { modal: true },
-          'Delete'
+          deleteAction
         );
-        if (answer === 'Delete') {
+        if (answer === deleteAction) {
           await sftpManager.deleteEntry(item.entry);
           sftpTreeProvider.refresh();
         }
@@ -387,7 +409,10 @@ export function activate(context: vscode.ExtensionContext): void {
         if (!item) {
           return;
         }
-        const nextName = await vscode.window.showInputBox({ prompt: 'New remote name', value: item.entry.name });
+        const nextName = await vscode.window.showInputBox({
+          prompt: t('New remote name'),
+          value: item.entry.name
+        });
         if (!nextName || nextName === item.entry.name) {
           return;
         }
@@ -401,7 +426,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await createRemoteFileForEditing({
           entry: item?.entry,
           rootPath: state.kind === 'active' ? state.rootPath : '.',
-          promptName: async () => vscode.window.showInputBox({ prompt: 'New remote file name' }),
+          promptName: async () => vscode.window.showInputBox({ prompt: t('New remote file name') }),
           createFile: (remotePath) => sftpManager.createFile(remotePath),
           openRemoteFile: async (remotePath) => {
             await sftpEditManager.openRemoteFile(remotePath);
@@ -412,7 +437,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('sshManager.sftp.newFolder', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
       await runSftpCommand(async () => {
-        const folderName = await vscode.window.showInputBox({ prompt: 'New remote folder name' });
+        const folderName = await vscode.window.showInputBox({ prompt: t('New remote folder name') });
         if (!folderName) {
           return;
         }
@@ -483,9 +508,10 @@ function getTargetDirectory(
 }
 
 export function formatJumpHostDeleteBlockMessage(server: ServerConfig, references: ServerConfig[]): string {
-  return `Cannot delete "${server.label}" because it is used as a jump host by: ${references
-    .map((reference) => reference.label)
-    .join(', ')}`;
+  return t('Cannot delete "{label}" because it is used as a jump host by: {references}', {
+    label: server.label,
+    references: references.map((reference) => reference.label).join(', ')
+  });
 }
 
 export const deleteServerAndTrust = {
@@ -501,3 +527,4 @@ export const deleteServerAndTrust = {
     await dependencies.hostKeyStore.forget(server.host, server.port);
   }
 };
+

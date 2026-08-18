@@ -13,14 +13,14 @@ const manifests = [baseManifest, mcpManifest, JSON.parse(readFileSync('package.j
 
 describe('package variants', () => {
   it('keeps the base manifest free of agent and MCP contributions', () => {
-    expect(baseManifest.displayName).toBe('AT Terminal');
+    expect(baseManifest.displayName).toBe('%atTerminal.displayName%');
     expect(baseManifest.activationEvents).not.toContain('onLanguageModelTool:list_ssh_servers');
     expect(JSON.stringify(baseManifest.contributes)).not.toContain('languageModelTools');
     expect(baseManifest.dependencies['@modelcontextprotocol/sdk']).toBeUndefined();
   });
 
   it('keeps the MCP manifest free of languageModelTools while retaining MCP activation', () => {
-    expect(mcpManifest.displayName).toBe('AT Terminal MCP');
+    expect(mcpManifest.displayName).toBe('%atTerminal.displayName%');
     expect(mcpManifest.activationEvents).toContain('onStartupFinished');
     expect(mcpManifest.activationEvents.every((event: string) => !event.startsWith('onLanguageModelTool:'))).toBe(
       true
@@ -40,8 +40,14 @@ describe('package variants', () => {
   it('keeps Connect available without showing it as an inline server action', () => {
     for (const manifest of manifests) {
       expect(manifest.contributes.commands).toEqual(
-        expect.arrayContaining([expect.objectContaining({ command: 'sshManager.connect', title: 'SSH: Connect' })])
+        expect.arrayContaining([
+          expect.objectContaining({
+            command: 'sshManager.connect',
+            title: '%atTerminal.command.connect.title%'
+          })
+        ])
       );
+
       expect(manifest.contributes.menus['view/item/context']).not.toEqual(
         expect.arrayContaining([
           expect.objectContaining({

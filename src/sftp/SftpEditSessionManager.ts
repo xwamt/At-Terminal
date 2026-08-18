@@ -10,6 +10,7 @@ import {
 } from '../utils/notifications';
 import { safePreviewName } from './RemotePath';
 import type { SftpFileStat } from './SftpTypes';
+import { t } from '../i18n/t';
 
 /**
  * Byte-for-byte verification re-downloads the file that was just uploaded, so it is only
@@ -108,8 +109,9 @@ export class SftpEditSessionManager {
   async openRemoteFile(remotePath: string): Promise<SftpEditSession> {
     const serverId = this.options.sftp.getActiveServerId();
     if (!serverId) {
-      throw new Error('No connected SSH terminal is active.');
+      throw new Error(t('No connected SSH terminal is active.'));
     }
+
 
     const key = buildEditSessionKey(serverId, remotePath);
     const existing = this.sessionsByKey.get(key);
@@ -398,31 +400,34 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
       await vscode.window.showTextDocument(visibleDocument, { preview: false });
     },
     async confirmAutoSync(remotePath) {
+      const enableAction = t('Enable Sync');
       const answer = await vscode.window.showWarningMessage(
-        `Enable automatic sync to ${remotePath} for this edit session?`,
+        t('Enable automatic sync to {remotePath} for this edit session?', { remotePath }),
         { modal: true },
-        'Enable Sync'
+        enableAction
       );
-      return answer === 'Enable Sync';
+      return answer === enableAction;
     },
     async resolveConflict(remotePath) {
+      const overwriteAction = t('Overwrite Remote');
+      const cancelAction = t('Cancel Upload');
       const answer = await vscode.window.showWarningMessage(
-        `Remote file changed: ${remotePath}`,
+        t('Remote file changed: {remotePath}', { remotePath }),
         { modal: true },
-        'Overwrite Remote',
-        'Cancel Upload'
+        overwriteAction,
+        cancelAction
       );
-      return answer === 'Overwrite Remote' ? 'overwrite' : 'cancel';
+      return answer === overwriteAction ? 'overwrite' : 'cancel';
     },
     showStatus(state, message) {
       statusBarItem.text =
         state === 'uploading'
-          ? '$(sync~spin) Uploading remote file...'
+          ? t('$(sync~spin) Uploading remote file...')
           : state === 'idle'
-            ? '$(check) Remote file synced'
+            ? t('$(check) Remote file synced')
             : state === 'conflict'
-              ? '$(warning) Remote file changed'
-              : '$(error) Remote sync failed';
+              ? t('$(warning) Remote file changed')
+              : t('$(error) Remote sync failed');
       statusBarItem.tooltip = message;
       statusBarItem.command = undefined;
       statusBarItem.show();
@@ -434,7 +439,7 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
       return await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Sync ${remotePath}`,
+          title: t('Sync {remotePath}', { remotePath }),
           cancellable: false
         },
         async () => await job()
@@ -445,32 +450,38 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
     },
     async showError(remotePath, message) {
       showTimedNotification(
-        `Remote sync failed for ${remotePath}: ${message}`,
+        t('Remote sync failed for {remotePath}: {message}', { remotePath, message }),
         'error',
         FAILED_NOTIFICATION_MS
       );
     },
     async promptUnsyncedClose(remotePath) {
+      const keepAction = t('Keep Local Copy');
+      const discardAction = t('Discard Local Copy');
       const answer = await vscode.window.showWarningMessage(
-        `Remote edit has unsynchronized changes: ${remotePath}`,
+        t('Remote edit has unsynchronized changes: {remotePath}', { remotePath }),
         { modal: true },
-        'Keep Local Copy',
-        'Discard Local Copy'
+        keepAction,
+        discardAction
       );
-      return answer === 'Discard Local Copy' ? 'discard' : 'keep';
+      return answer === discardAction ? 'discard' : 'keep';
     },
     showUnsyncedLocalCopy(remotePath, localUri) {
-      statusBarItem.text = '$(warning) Unsynchronized remote edit';
-      statusBarItem.tooltip = `${remotePath} was not synced. The local copy is kept at ${localUri.fsPath}.`;
+      statusBarItem.text = t('$(warning) Unsynchronized remote edit');
+      statusBarItem.tooltip = t('{remotePath} was not synced. The local copy is kept at {path}.', {
+        remotePath,
+        path: localUri.fsPath
+      });
       statusBarItem.command = {
         command: 'vscode.open',
-        title: 'Open the unsynchronized local copy',
+        title: t('Open the unsynchronized local copy'),
         arguments: [localUri]
       };
       statusBarItem.show();
     }
   };
 }
+
 
 function inferLanguageId(remotePath: string): string | undefined {
   const lowerName = safePreviewName(remotePath).toLowerCase();

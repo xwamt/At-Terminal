@@ -58,9 +58,13 @@ await cp(join(root, 'docs', 'usage.zh-CN.md'), join(stage, 'docs', 'usage.zh-CN.
 await cp(join(root, 'docs', 'README.zh-CN.md'), join(stage, 'docs', 'README.zh-CN.md'));
 await cp(join(root, 'docs', 'mcp'), join(stage, 'docs', 'mcp'), { recursive: true });
 await cp(join(root, 'webview'), join(stage, 'webview'), { recursive: true });
+await cp(join(root, 'l10n'), join(stage, 'l10n'), { recursive: true }).catch(() => {});
+await cp(join(root, 'package.nls.json'), join(stage, 'package.nls.json')).catch(() => {});
+await cp(join(root, 'package.nls.zh-cn.json'), join(stage, 'package.nls.zh-cn.json')).catch(() => {});
 await cp(join(root, '.vscodeignore'), join(stage, '.vscodeignore'));
 await writeFile(join(stage, 'package.json'), `${JSON.stringify(createPackagedManifest(manifest), null, 2)}\n`, 'utf8');
 await cp(join(root, readmeName), join(stage, 'README.md'));
+
 
 const install = spawnSync(
   process.platform === 'win32' ? 'cmd' : 'npm',

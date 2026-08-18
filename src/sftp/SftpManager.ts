@@ -3,6 +3,7 @@ import type { SftpTreeState } from '../tree/SftpTreeProvider';
 import { dirname } from './RemotePath';
 import type { SftpEntry, SftpFileStat } from './SftpTypes';
 import { TransferService, type TransferProgress, type TransferReporter } from './TransferService';
+import { t } from '../i18n/t';
 
 export interface SftpSessionLike {
   connect(): Promise<void>;
@@ -173,7 +174,7 @@ export class SftpManager {
 
   async uploadFile(localPath: string, remotePath: string, serverId?: string): Promise<void> {
     await this.runConnected(
-      `Upload ${remotePath}`,
+      t('Upload {path}', { path: remotePath }),
       async (session, progress) => session.uploadFile(localPath, remotePath, progress),
       serverId
     );
@@ -181,7 +182,7 @@ export class SftpManager {
 
   async downloadFile(remotePath: string, localPath: string, serverId?: string): Promise<void> {
     await this.runConnected(
-      `Download ${remotePath}`,
+      t('Download {path}', { path: remotePath }),
       async (session, progress) => session.downloadFile(remotePath, localPath, progress),
       serverId
     );
@@ -193,7 +194,7 @@ export class SftpManager {
   }
 
   async createFile(path: string): Promise<void> {
-    await this.runConnected(`New file ${path}`, async (session) => session.createFile(path));
+    await this.runConnected(t('New file {path}', { path }), async (session) => session.createFile(path));
   }
 
   async stat(path: string, serverId?: string): Promise<SftpFileStat> {
@@ -211,7 +212,7 @@ export class SftpManager {
   private async ensureSession(connection: ManagedSftpConnection): Promise<SftpSessionLike> {
     const context = connection.context;
     if (!context.connected) {
-      throw new Error('No connected SSH terminal is active.');
+      throw new Error(t('No connected SSH terminal is active.'));
     }
     if (connection.session) {
       return connection.session;
@@ -234,7 +235,7 @@ export class SftpManager {
           connection.context.terminalId !== terminalId ||
           !connection.context.connected
         ) {
-          throw new Error('SFTP connection was superseded by another active terminal.');
+          throw new Error(t('SFTP connection was superseded by another active terminal.'));
         }
         connection.session = session;
         return session;
@@ -275,7 +276,7 @@ export class SftpManager {
       return;
     }
     connection.connectingSessionInvalidation = undefined;
-    invalidation.reject(new Error('SFTP connection was superseded by another active terminal.'));
+    invalidation.reject(new Error(t('SFTP connection was superseded by another active terminal.')));
   }
 
   private async runConnected<T>(
@@ -320,7 +321,7 @@ export class SftpManager {
   private requireConnection(serverId?: string): ManagedSftpConnection {
     const connection = this.resolveConnection(serverId);
     if (!connection?.context.connected) {
-      throw new Error('No connected SSH terminal is active.');
+      throw new Error(t('No connected SSH terminal is active.'));
     }
     return connection;
   }

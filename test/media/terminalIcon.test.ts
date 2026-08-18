@@ -14,12 +14,13 @@ describe('AT Terminal package branding', () => {
     const iconPath = manifest.icon;
 
     expect(manifest.name).toBe('at-terminal');
-    expect(manifest.displayName).toBe('AT Terminal');
-    expect(manifest.description).toBe('Agentless SSH terminal and SFTP workspace for VS Code.');
-    expect(manifest.contributes.configuration.title).toBe('AT Terminal');
+    expect(manifest.displayName).toBe('%atTerminal.displayName%');
+    expect(manifest.description).toBe('%atTerminal.description%');
+    expect(manifest.contributes.configuration.title).toBe('%atTerminal.configuration.title%');
     expect(iconPath).toBe('media/at-terminal-icon.png');
     expect(existsSync(join(process.cwd(), iconPath))).toBe(true);
   });
+
 
   it('uses a currentColor template icon for VS Code activity bar theming', () => {
     const manifest = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')) as {

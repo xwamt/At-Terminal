@@ -6,6 +6,7 @@ import {
   SftpParentDirectoryTreeItem,
   SftpPlaceholderTreeItem
 } from './SftpTreeItems';
+import { t } from '../i18n/t';
 
 export type SftpTreeState =
   | { kind: 'none' }
@@ -40,8 +41,9 @@ export class SftpTreeProvider implements vscode.TreeDataProvider<SftpTreeNode> {
   async getChildren(element?: SftpTreeNode): Promise<SftpTreeNode[]> {
     const state = this.source.getState();
     if (state.kind === 'none') {
-      return element ? [] : [new SftpPlaceholderTreeItem('No active SSH terminal')];
+      return element ? [] : [new SftpPlaceholderTreeItem(t('No active SSH terminal'))];
     }
+
     if (state.kind === 'disconnected') {
       return element ? [] : state.entries.map((entry) => this.toTreeItem(entry, true));
     }

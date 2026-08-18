@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { ServerConfig } from '../config/schema';
+import { t } from '../i18n/t';
 
 export class GroupTreeItem extends vscode.TreeItem {
   constructor(public readonly groupName: string) {
@@ -16,17 +17,20 @@ export class ServerTreeItem extends vscode.TreeItem {
     this.description = `${server.username}@${server.host}:${server.port}`;
     this.tooltip = [
       server.label,
-      `Group: ${server.group?.trim() || 'Default'}`,
-      `Host: ${server.host}`,
-      `Port: ${server.port}`,
-      `Username: ${server.username}`,
-      `Authentication: ${server.authType === 'privateKey' ? 'Private Key' : 'Password'}`,
-      `Keepalive: ${server.keepAliveInterval}s`
+      t('Group: {group}', { group: server.group?.trim() || t('Default') }),
+      t('Host: {host}', { host: server.host }),
+      t('Port: {port}', { port: server.port }),
+      t('Username: {username}', { username: server.username }),
+      t('Authentication: {auth}', {
+        auth: server.authType === 'privateKey' ? t('Private Key') : t('Password')
+      }),
+      t('Keepalive: {interval}s', { interval: server.keepAliveInterval })
     ].join('\n');
     this.command = {
       command: 'sshManager.connect',
-      title: 'Connect',
+      title: t('Connect'),
       arguments: [this]
     };
   }
 }
+

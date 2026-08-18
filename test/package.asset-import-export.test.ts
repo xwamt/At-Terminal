@@ -12,12 +12,19 @@ describe('asset import/export package contributions', () => {
     for (const manifest of manifests) {
       expect(manifest.contributes.commands).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ command: 'sshManager.exportAssets', title: 'AT Terminal: Export Assets' }),
-          expect.objectContaining({ command: 'sshManager.importAssets', title: 'AT Terminal: Import Assets' })
+          expect.objectContaining({
+            command: 'sshManager.exportAssets',
+            title: '%atTerminal.command.exportAssets.title%'
+          }),
+          expect.objectContaining({
+            command: 'sshManager.importAssets',
+            title: '%atTerminal.command.importAssets.title%'
+          })
         ])
       );
     }
   });
+
 
   it('shows asset import/export actions in the Servers view title in all variants', () => {
     for (const manifest of manifests) {

@@ -1,6 +1,7 @@
 import { Client } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
 import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionProvider } from './SshConnectionConfig';
+import { t } from '../i18n/t';
 
 const DEFAULT_TEST_TIMEOUT_MS = 10_000;
 
@@ -16,8 +17,9 @@ export async function testSshConnection(
   await new Promise<void>((resolve, reject) => {
     let settled = false;
     const timeout = setTimeout(() => {
-      rejectOnce(new Error(`Connection test timed out after ${timeoutMs}ms.`));
+      rejectOnce(new Error(t('Connection test timed out after {timeoutMs}ms.', { timeoutMs })));
     }, timeoutMs);
+
 
     const cleanup = (): void => {
       clearTimeout(timeout);

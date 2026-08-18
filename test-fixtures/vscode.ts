@@ -227,3 +227,20 @@ export enum ViewColumn {
   Active = -1,
   Beside = -2
 }
+
+export const l10n = {
+  t(
+    message: string,
+    ...args: Array<string | number | boolean | Record<string, string | number | boolean>>
+  ): string {
+    const values: Record<string, unknown> =
+      args.length === 1 && typeof args[0] === 'object' && args[0] !== null ? args[0] : { ...args };
+
+    if (Object.keys(values).length === 0) {
+      return message;
+    }
+
+    return message.replace(/{([^}]+)}/g, (match, key: string) => String(values[key] ?? match));
+  }
+};
+
