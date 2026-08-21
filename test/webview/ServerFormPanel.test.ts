@@ -230,7 +230,7 @@ describe('ServerFormPanel message handling', () => {
     expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ jumpHostId: 'jump-1' }), 'secret');
   });
 
-  it('persists agent command auto approval from the form payload', async () => {
+  it('persists limited trust from the form payload', async () => {
     const saveServer = vi.fn();
 
     await handleServerFormMessage(
@@ -244,7 +244,7 @@ describe('ServerFormPanel message handling', () => {
           username: 'deploy',
           authType: 'password',
           password: 'secret',
-          agentCommandAutoApprove: 'on',
+          agentCommandTrust: 'policy',
           keepAliveInterval: 30
         }
       },
@@ -254,10 +254,17 @@ describe('ServerFormPanel message handling', () => {
       { dispose: vi.fn(), webview: { postMessage: vi.fn() } } as never
     );
 
-    expect(saveServer).toHaveBeenCalledWith(expect.objectContaining({ agentCommandAutoApprove: true }), 'secret');
+    expect(saveServer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentCommandTrust: 'policy',
+        agentCommandAutoApprove: true,
+        backgroundConnectionAllowed: false
+      }),
+      'secret'
+    );
   });
 
-  it('persists background connection authorization when trust is also enabled', async () => {
+  it('persists full trust with background connection authorization', async () => {
     const saveServer = vi.fn();
 
     await handleServerFormMessage(
@@ -271,7 +278,7 @@ describe('ServerFormPanel message handling', () => {
           username: 'deploy',
           authType: 'password',
           password: 'secret',
-          agentCommandAutoApprove: 'on',
+          agentCommandTrust: 'full',
           backgroundConnectionAllowed: 'on',
           keepAliveInterval: 30
         }
@@ -284,6 +291,7 @@ describe('ServerFormPanel message handling', () => {
 
     expect(saveServer).toHaveBeenCalledWith(
       expect.objectContaining({
+        agentCommandTrust: 'full',
         agentCommandAutoApprove: true,
         backgroundConnectionAllowed: true
       }),
@@ -291,7 +299,7 @@ describe('ServerFormPanel message handling', () => {
     );
   });
 
-  it('clears background connection authorization when trust is disabled', async () => {
+  it('clears background connection authorization when trust is untrusted', async () => {
     const saveServer = vi.fn();
 
     await handleServerFormMessage(
@@ -305,6 +313,7 @@ describe('ServerFormPanel message handling', () => {
           username: 'deploy',
           authType: 'password',
           password: 'secret',
+          agentCommandTrust: 'none',
           backgroundConnectionAllowed: 'on',
           keepAliveInterval: 30
         }
@@ -317,6 +326,7 @@ describe('ServerFormPanel message handling', () => {
 
     expect(saveServer).toHaveBeenCalledWith(
       expect.objectContaining({
+        agentCommandTrust: 'none',
         agentCommandAutoApprove: false,
         backgroundConnectionAllowed: false
       }),

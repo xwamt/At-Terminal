@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { ServerConfig } from '../config/schema';
 import { dirname } from '../sftp/RemotePath';
+import { shouldAutoApproveSftpWrite } from './agentCommandTrust';
 import { isSensitiveRemotePath, isWithinRemoteDirectory, normalizeRemoteDirectory } from './remoteWritePolicy';
 
 export type SftpWriteScope = 'once' | 'directory' | 'session';
@@ -53,6 +54,9 @@ export class SftpWriteAuthorizer {
   }
 
   async requireWrite(server: ServerConfig, request: SftpWriteRequest): Promise<void> {
+    if (shouldAutoApproveSftpWrite(server)) {
+      return;
+    }
     const parentDirectory = normalizeRemoteDirectory(dirname(request.path));
     const sensitive = isSensitiveRemotePath(request.path);
     const outsideWorkspace = !isWithinRemoteDirectory(request.workspaceRoot, request.path);

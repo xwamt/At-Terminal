@@ -27,6 +27,22 @@ describe('requiresConfirmation', () => {
   });
 
   it.each([
+    'hostname; uname -a; cat /etc/os-release | head -5; uptime',
+    'df -hT -x tmpfs -x devtmpfs; echo ---; df -i -x tmpfs -x devtmpfs',
+    "free -h; echo ---; nproc; lscpu | grep -E 'Model name|CPU\\(s\\)|MHz' | head -5",
+    'ps aux --sort=-%mem | head -12; echo ---CPU---; ps aux --sort=-%cpu | head -8',
+    'systemctl --failed --no-pager; echo ---; systemctl list-units --type=service --state=running --no-pager --no-legend | wc -l; systemctl list-units --type=service --state=running --no-pager --no-legend | head -30',
+    "docker ps --format 'table {{.Names}}\\t{{.Image}}\\t{{.Status}}\\t{{.Ports}}' 2>/dev/null | head -25; echo ---; docker ps -a --filter status=exited --format '{{.Names}} {{.Status}}' 2>/dev/null | head -10",
+    'lastb 2>/dev/null | head -5; echo ---COUNT---; lastb 2>/dev/null | wc -l; echo ---LAST---; last -5 2>/dev/null | head -6',
+    "ss -tlnp | awk 'NR>1 {print $4}' | sed 's/.*://' | sort -n | uniq | tr '\\n' ' '; echo; echo ---CONN---; ss -s; echo ---VM---; virsh list --all 2>/dev/null",
+    "grep -iE 'error|fail|oom|out of memory' /var/log/messages | tail -15; echo ---DMESG---; dmesg -T 2>/dev/null | grep -iE 'oom|error|fail' | tail -10",
+    'systemctl is-active firewalld; iptables -L INPUT -n 2>/dev/null | head -5; echo ---SELINUX---; getenforce; echo ---CRON---; crontab -l 2>/dev/null | head -10; ls /etc/cron.d/ 2>/dev/null',
+    'for f in /proc/*/status; do awk \'/^Name|^Pid|^VmSwap/{printf "%s ", $2} END{print ""}\' $f 2>/dev/null; done | grep -v \' $\' | sort -k6 -n -r | head -8; echo ---IO---; iostat -x 1 2 2>/dev/null | tail -20 || vmstat 1 2'
+  ])('auto-approves the host inspection command %j', (command) => {
+    expect(requiresConfirmation(command)).toBe(false);
+  });
+
+  it.each([
     'top -bn1 | head -20',
     'last -n 10',
     'systemctl list-units --type=service --state=running | head -30',
@@ -119,8 +135,6 @@ describe('requiresConfirmation', () => {
       'python3 /tmp/x.py',
       'perl -e print',
       'node -e 1',
-      'awk BEGIN',
-      'sed -n 1p /etc/hosts',
       'xargs -I{} echo',
       'env FOO=bar ls',
       'sudo ls',
@@ -160,8 +174,8 @@ describe('requiresConfirmation', () => {
       }
     );
 
-    it.each(['docker ps', 'kubectl get pods', 'podman rm -f app', 'helm upgrade app .', 'virsh destroy vm'])(
-      'confirms the container tool %j, including its read subcommands',
+    it.each(['docker exec -it app sh', 'podman rm -f app', 'helm upgrade app .', 'virsh destroy vm', 'kubectl delete pod x'])(
+      'confirms the container write %j',
       (command) => {
         expect(requiresConfirmation(command)).toBe(true);
       }
@@ -253,10 +267,11 @@ describe('requiresConfirmation', () => {
       expect(requiresConfirmation('/sbin/MKFS.ext4 /dev/sdb1')).toBe(true);
     });
 
-    it('rejects a quoted command name but accepts quoted arguments', () => {
+    it('strips quotes around a command name and still blocks a quoted rm', () => {
       expect(requiresConfirmation('grep "a b" /etc/hosts')).toBe(false);
       expect(requiresConfirmation("grep 'systemctl restart nginx' /var/log/syslog")).toBe(false);
-      expect(requiresConfirmation('"grep" a /etc/hosts')).toBe(true);
+      expect(requiresConfirmation('"grep" a /etc/hosts')).toBe(false);
+      expect(requiresConfirmation('"rm" -rf /tmp/x')).toBe(true);
     });
 
     it('treats an unparsable or empty command as blocklisted', () => {
@@ -389,6 +404,54 @@ describe('requiresConfirmation', () => {
       expect(requiresConfirmation('command -V nginx')).toBe(false);
       expect(requiresConfirmation('command rm -rf /')).toBe(true);
       expect(requiresConfirmation('command ls')).toBe(true);
+    });
+
+    it('treats systemctl flag-only listing as list-units', () => {
+      expect(requiresConfirmation('systemctl --failed --no-pager')).toBe(false);
+      expect(requiresConfirmation('systemctl --type=service --state=running')).toBe(false);
+      expect(requiresConfirmation('systemctl')).toBe(true);
+      expect(requiresConfirmation('systemctl restart nginx')).toBe(true);
+    });
+
+    it('allows read-only docker, kubectl and virsh subcommands', () => {
+      expect(requiresConfirmation('docker ps')).toBe(false);
+      expect(requiresConfirmation('docker images')).toBe(false);
+      expect(requiresConfirmation('docker compose ps')).toBe(false);
+      expect(requiresConfirmation('kubectl get pods')).toBe(false);
+      expect(requiresConfirmation('kubectl describe node')).toBe(false);
+      expect(requiresConfirmation('virsh list --all')).toBe(false);
+      expect(requiresConfirmation('docker run -d nginx')).toBe(true);
+      expect(requiresConfirmation('docker exec -it app sh')).toBe(true);
+      expect(requiresConfirmation('docker compose up -d')).toBe(true);
+      expect(requiresConfirmation('kubectl apply -f x.yaml')).toBe(true);
+      expect(requiresConfirmation('virsh destroy vm')).toBe(true);
+    });
+
+    it('allows iptables list forms and firewall status, and confirms writes', () => {
+      expect(requiresConfirmation('iptables -L INPUT -n')).toBe(false);
+      expect(requiresConfirmation('iptables -nvL')).toBe(false);
+      expect(requiresConfirmation('firewall-cmd --state')).toBe(false);
+      expect(requiresConfirmation('firewall-cmd --list-all')).toBe(false);
+      expect(requiresConfirmation('ufw status')).toBe(false);
+      expect(requiresConfirmation('iptables -F')).toBe(true);
+      expect(requiresConfirmation('iptables -A INPUT -j DROP')).toBe(true);
+      expect(requiresConfirmation('iptables -FL')).toBe(true);
+      expect(requiresConfirmation('firewall-cmd --reload')).toBe(true);
+      expect(requiresConfirmation('ufw disable')).toBe(true);
+    });
+
+    it('allows awk and sed filters and confirms in-place or system() forms', () => {
+      expect(requiresConfirmation("awk 'NR>1 {print $4}'")).toBe(false);
+      expect(requiresConfirmation("sed 's/.*://'")).toBe(false);
+      expect(requiresConfirmation('sed -n 1p /etc/hosts')).toBe(false);
+      expect(requiresConfirmation('awk BEGIN')).toBe(false);
+      expect(requiresConfirmation('sed -i s/a/b/ /etc/passwd')).toBe(true);
+      expect(requiresConfirmation("awk 'BEGIN{system(\"rm -rf /\")}'")).toBe(true);
+    });
+
+    it('does not treat quoted grep alternation or escaped regex as unreadable', () => {
+      expect(requiresConfirmation("grep -iE 'error|fail|oom' /var/log/messages")).toBe(false);
+      expect(requiresConfirmation("lscpu | grep -E 'Model name|CPU\\(s\\)|MHz' | head -5")).toBe(false);
     });
   });
 

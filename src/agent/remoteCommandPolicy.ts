@@ -3,30 +3,15 @@
  *
  * The gate is a blocklist: on a trusted server a command runs unprompted unless one of its stages
  * names a program that changes state, or unless it is written in a shape whose command names
- * cannot be read at all. An allowlist of read-only binaries was tried first and failed in use —
- * no such list keeps up with a real machine, so `top -bn1` and `last -n 10` were prompting.
+ * cannot be read at all. Stages come from a quote-aware lexer, so `|` `>` `\` inside quotes are
+ * not operators. Families that are usually queries (`docker ps`, `iptables -L`, `awk` filters)
+ * have argument rules; wrappers and interpreters (`sh`, `python`, `sudo`, `xargs`) still always
+ * confirm.
  *
- * The cost of the reversal is not hidden: a program nobody thought to list runs without asking.
- * What keeps that from meaning "anything runs" is the interpreter and wrapper group below plus the
- * refusal to guess at unreadable shapes — `sh`, `python`, `awk`, `sed`, `xargs`, `env`, `sudo`,
- * `$(…)`, a redirect or a quoted name are exactly how an unknown command name becomes an
- * arbitrary one, and every one of them confirms.
- *
- * `looksDestructive` stays a separate, narrower signal for the dialog's warning banner. It answers
- * "would this destroy data", not "does this change state"; `mkdir /tmp/x` is gated here and not
- * flagged there, which is the intended difference.
+ * `looksDestructive` stays a separate, narrower signal for the dialog's warning banner.
  */
 
-/**
- * Shapes that make the command names in a line unreadable, so no per-stage check of them can be
- * trusted. `$(` and a backtick run a command inside this one; `>` and `<` (so also `>>`, `2>`,
- * `<<` and process substitution) redirect into or out of files; a newline starts a second line; a
- * backslash escapes a character out of a name, which is all `\rm` is.
- */
-const UNREADABLE_COMMAND = /[`<>\n\r\\]|\$\(/;
-
-/** `|`, `;` and `&` each begin another command — and so do `&&` and `||`. Every one is checked. */
-const STAGE_SEPARATOR = /[|;&]/;
+import { tokenizeShellCommand } from './shellCommandLexer';
 
 /**
  * What a command name may look like once normalized. Anything else is confirmed instead of looked
@@ -88,14 +73,13 @@ const SERVICE_AND_KERNEL_COMMANDS = [
 /**
  * Interpreters and execution wrappers. This is the group that keeps a blocklist meaningful: an
  * unlisted binary can only be reached by name, but every entry here turns an argument into a
- * program. `awk` and `sed` are here despite reading well — `sed -i` edits in place and `awk` has
- * `system()` and `print > file`.
+ * program. `awk` and `sed` have their own script rules below.
  */
 const INTERPRETER_AND_WRAPPER_COMMANDS = [
   'sh', 'bash', 'zsh', 'ksh', 'dash', 'ash', 'csh', 'tcsh', 'fish', 'busybox', 'toybox',
   'python', 'python2', 'python3', 'perl', 'ruby', 'node', 'nodejs', 'deno', 'bun', 'php', 'lua',
   'tclsh', 'expect', 'rscript', 'julia', 'erl', 'elixir', 'iex', 'ghc', 'runghc', 'swift',
-  'awk', 'gawk', 'mawk', 'nawk', 'sed', 'xargs', 'parallel',
+  'xargs', 'parallel',
   'env', 'sudo', 'sudoedit', 'su', 'doas', 'pkexec', 'runuser', 'chroot', 'nsenter', 'unshare',
   'setarch', 'runcon', 'eval', 'exec', 'source', 'builtin', 'time',
   'watch', 'script', 'screen', 'tmux', 'byobu',
@@ -127,19 +111,18 @@ const ACCOUNT_COMMANDS = [
 
 /** Firewall, routing and interface state. `ip`, `ifconfig`, `route` and `ethtool` are ruled below. */
 const NETWORK_CONFIG_COMMANDS = [
-  'iptables', 'ip6tables', 'iptables-restore', 'ip6tables-restore', 'nft', 'ipset', 'ipvsadm',
-  'firewall-cmd', 'ufw', 'tc', 'brctl', 'arp', 'conntrack', 'nmcli', 'nmtui', 'netplan',
+  'iptables-restore', 'ip6tables-restore', 'nft', 'ipset', 'ipvsadm',
+  'tc', 'brctl', 'arp', 'conntrack', 'nmcli', 'nmtui', 'netplan',
   'dhclient', 'resolvectl', 'wpa_cli'
 ];
 
 /**
- * Container and orchestration clients. Read subcommands such as `docker ps` confirm too: the
- * write and read forms differ only by a word, and a client that can `exec` into a container is a
- * shell by another name.
+ * Container clients not covered by the subcommand rules below. `docker` / `podman` / `nerdctl` /
+ * `kubectl` / `virsh` are argument-ruled so `docker ps` can run on a trusted server.
  */
 const CONTAINER_COMMANDS = [
-  'docker', 'docker-compose', 'podman', 'podman-compose', 'nerdctl', 'kubectl', 'oc', 'crictl',
-  'ctr', 'helm', 'lxc', 'lxc-attach', 'virsh', 'vagrant', 'minikube', 'k3s'
+  'docker-compose', 'podman-compose', 'oc', 'crictl',
+  'ctr', 'helm', 'lxc', 'lxc-attach', 'vagrant', 'minikube', 'k3s'
 ];
 
 /** Editors and pagers: all of them can run a shell (`:!`, `!`, `v`), and most can write a file. */
@@ -174,6 +157,39 @@ const OTHER_STATE_CHANGE_COMMANDS = [
   'openssl', 'gpg', 'gpg2', 'keytool', 'certbot', 'ssh-keygen', 'ssh-copy-id', 'ssh-add',
   'ssh-agent', 'mail', 'mailx', 'sendmail', 'wall', 'write', 'logger'
 ];
+
+const READ_ONLY_DOCKER_SUBCOMMANDS = new Set([
+  'ps', 'images', 'inspect', 'logs', 'stats', 'top', 'port', 'version', 'info', 'df', 'events',
+  'diff', 'history', 'search'
+]);
+
+const READ_ONLY_DOCKER_NAMESPACES: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ['compose', new Set(['ps', 'logs', 'config', 'images', 'top', 'version'])],
+  ['image', new Set(['ls', 'inspect', 'history'])],
+  ['container', new Set(['ls', 'inspect', 'logs', 'stats', 'top', 'port', 'diff'])],
+  ['network', new Set(['ls', 'inspect'])],
+  ['volume', new Set(['ls', 'inspect'])]
+]);
+
+const READ_ONLY_KUBECTL_SUBCOMMANDS = new Set([
+  'get', 'describe', 'logs', 'top', 'version', 'cluster-info', 'api-resources', 'api-versions', 'explain'
+]);
+
+const READ_ONLY_VIRSH_SUBCOMMANDS = new Set([
+  'list', 'dumpxml', 'dominfo', 'domstate', 'nodeinfo', 'nodememstats', 'version', 'domstats', 'capabilities'
+]);
+
+const SYSTEMCTL_IMPLICIT_LIST_FLAGS = ['--failed', '--all', '--state', '--type'];
+
+const IPTABLES_MUTATE_LETTERS = new Set(['A', 'I', 'D', 'R', 'X', 'F', 'P', 'Z', 'N', 'E']);
+const IPTABLES_LIST_LETTERS = new Set(['L', 'S', 'C']);
+const IPTABLES_MUTATE_LONG = [
+  '--append', '--insert', '--delete', '--replace', '--flush', '--policy', '--zero',
+  '--new-chain', '--delete-chain', '--rename-chain'
+];
+const IPTABLES_LIST_LONG = ['--list', '--list-rules', '--check'];
+
+const UFW_READ_TOKENS = new Set(['status', 'version', '--help', '--version']);
 
 const READ_ONLY_SYSTEMCTL_SUBCOMMANDS = new Set([
   'status', 'is-active', 'is-enabled', 'is-failed', 'is-system-running', 'list-units',
@@ -244,6 +260,120 @@ function onlyTheseSubcommandsRead(readSubcommands: ReadonlySet<string>): Argumen
     return subcommand === undefined || !readSubcommands.has(subcommand);
   };
 }
+
+function operandsOf(args: readonly string[]): string[] {
+  return args.filter((argument) => argument !== '--' && !argument.startsWith('-'));
+}
+
+const systemctlChangesState: ArgumentRule = (args) => {
+  const subcommand = args.find((argument) => !argument.startsWith('-'));
+  if (
+    subcommand === undefined &&
+    args.some((argument) =>
+      SYSTEMCTL_IMPLICIT_LIST_FLAGS.some((flag) => argument === flag || argument.startsWith(`${flag}=`)))
+  ) {
+    return false;
+  }
+  return subcommand === undefined || !READ_ONLY_SYSTEMCTL_SUBCOMMANDS.has(subcommand);
+};
+
+const dockerSubcommandWrites: ArgumentRule = (args) => {
+  const operands = operandsOf(args);
+  const subcommand = operands[0];
+  if (subcommand === undefined) {
+    return true;
+  }
+  if (READ_ONLY_DOCKER_SUBCOMMANDS.has(subcommand)) {
+    return false;
+  }
+  const namespace = READ_ONLY_DOCKER_NAMESPACES.get(subcommand);
+  if (!namespace) {
+    return true;
+  }
+  return operands[1] === undefined || !namespace.has(operands[1]);
+};
+
+const iptablesChangesRules: ArgumentRule = (args) => {
+  let mutate = false;
+  let list = false;
+  for (const argument of args) {
+    if (IPTABLES_MUTATE_LONG.some((flag) => argument === flag || argument.startsWith(`${flag}=`))) {
+      mutate = true;
+      continue;
+    }
+    if (IPTABLES_LIST_LONG.some((flag) => argument === flag || argument.startsWith(`${flag}=`))) {
+      list = true;
+      continue;
+    }
+    if (argument.startsWith('--') || argument === '-') {
+      continue;
+    }
+    if (argument.startsWith('-')) {
+      for (const letter of argument.slice(1)) {
+        if (IPTABLES_MUTATE_LETTERS.has(letter)) {
+          mutate = true;
+        }
+        if (IPTABLES_LIST_LETTERS.has(letter)) {
+          list = true;
+        }
+      }
+    }
+  }
+  if (mutate) {
+    return true;
+  }
+  if (list) {
+    return false;
+  }
+  return args.some((argument) => !argument.startsWith('-'));
+};
+
+const firewallCmdChangesPolicy: ArgumentRule = (args) => {
+  const writes = args.some((argument) =>
+    argument.startsWith('--add-') ||
+    argument.startsWith('--remove-') ||
+    argument === '--reload' ||
+    argument === '--complete-reload' ||
+    argument === '--panic-on' ||
+    argument === '--panic-off' ||
+    argument.startsWith('--set-'));
+  if (writes) {
+    return true;
+  }
+  return !args.some((argument) =>
+    argument === '--state' ||
+    argument === '--list-all' ||
+    argument.startsWith('--list-') ||
+    argument.startsWith('--query-') ||
+    argument.startsWith('--get-'));
+};
+
+const ufwChangesFirewall: ArgumentRule = (args) =>
+  args.length === 0 || !args.some((argument) => UFW_READ_TOKENS.has(argument));
+
+const awkScriptWrites: ArgumentRule = (args) => {
+  if (args.some((argument) =>
+    argument === '-f' ||
+    argument === '--file' ||
+    argument.startsWith('--file=') ||
+    (argument.startsWith('-f') && argument.length > 2 && !argument.startsWith('--')))) {
+    return true;
+  }
+  const joined = args.join(' ');
+  return /\bsystem\s*\(/.test(joined) || /\bprint(?:f)?\s*>/.test(joined);
+};
+
+const sedScriptWrites: ArgumentRule = (args) => {
+  if (args.some((argument) =>
+    argument === '-i' ||
+    argument === '--in-place' ||
+    argument.startsWith('--in-place=') ||
+    (argument.startsWith('-i') && argument.length > 2 && !argument.startsWith('--')))) {
+    return true;
+  }
+  const script = args.find((argument) => !argument.startsWith('-')) ?? '';
+  return /(^|[;\n])\s*w\s+\S/.test(script);
+};
 
 const journalctlRewritesJournal: ArgumentRule = (args) =>
   args.some((argument) =>
@@ -361,7 +491,7 @@ const commandDoesMoreThanLookup: ArgumentRule = (args) => {
  * each one confirms when it cannot tell.
  */
 const ARGUMENT_RULED_COMMANDS: readonly [string, ArgumentRule][] = [
-  ['systemctl', onlyTheseSubcommandsRead(READ_ONLY_SYSTEMCTL_SUBCOMMANDS)],
+  ['systemctl', systemctlChangesState],
   ['hostnamectl', onlyTheseSubcommandsRead(READ_ONLY_CTL_SUBCOMMANDS)],
   ['timedatectl', onlyTheseSubcommandsRead(READ_ONLY_CTL_SUBCOMMANDS)],
   ['localectl', onlyTheseSubcommandsRead(READ_ONLY_CTL_SUBCOMMANDS)],
@@ -379,7 +509,21 @@ const ARGUMENT_RULED_COMMANDS: readonly [string, ArgumentRule][] = [
   ['route', routeChangesTable],
   ['ethtool', ethtoolChangesDevice],
   ['sort', sortWritesFile],
-  ['command', commandDoesMoreThanLookup]
+  ['command', commandDoesMoreThanLookup],
+  ['docker', dockerSubcommandWrites],
+  ['podman', dockerSubcommandWrites],
+  ['nerdctl', dockerSubcommandWrites],
+  ['kubectl', onlyTheseSubcommandsRead(READ_ONLY_KUBECTL_SUBCOMMANDS)],
+  ['virsh', onlyTheseSubcommandsRead(READ_ONLY_VIRSH_SUBCOMMANDS)],
+  ['iptables', iptablesChangesRules],
+  ['ip6tables', iptablesChangesRules],
+  ['firewall-cmd', firewallCmdChangesPolicy],
+  ['ufw', ufwChangesFirewall],
+  ['awk', awkScriptWrites],
+  ['gawk', awkScriptWrites],
+  ['mawk', awkScriptWrites],
+  ['nawk', awkScriptWrites],
+  ['sed', sedScriptWrites]
 ];
 
 function alwaysConfirming(names: readonly string[]): [string, ArgumentRule][] {
@@ -433,14 +577,6 @@ function blockedRuleFor(name: string): ArgumentRule | undefined {
   return BLOCKED_COMMAND_PATTERNS.some((pattern) => pattern.test(name)) ? alwaysConfirms : undefined;
 }
 
-/**
- * Safe stream redirections that only discard output or duplicate file descriptors (e.g. `2>/dev/null`,
- * `>/dev/null 2>&1`, `&>/dev/null`, `1>&2`). These do not create, modify, or truncate filesystem files,
- * so they are stripped before inspecting for unsafe redirections (`>`, `>>`, `<`).
- */
-const SAFE_REDIRECTION = /(?:2>|1>|&>|>&|>)\s*(?:\/dev\/(?:null|stdout|stderr)|&\s*[12\-])/g;
-
-/** Standard Unix binary locations whose commands can be looked up directly in the blocklist by basename. */
 const STANDARD_SYSTEM_PATHS = [
   '/bin/',
   '/sbin/',
@@ -456,7 +592,6 @@ function isStandardSystemBinary(path: string): boolean {
   return STANDARD_SYSTEM_PATHS.some((prefix) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'));
 }
 
-/** Shell control flow keywords that precede a command in a compound command / pipeline stage. */
 const SHELL_CONTROL_KEYWORDS = new Set([
   'do', 'then', 'else', 'elif', 'if', 'while', 'until', 'for', 'case', 'done', 'fi', 'esac', '!'
 ]);
@@ -467,8 +602,7 @@ function normalizeCommandName(head: string): string {
 }
 
 /** One stage of a pipeline or chain: a single command, checked by the name it will really run. */
-function stageRequiresConfirmation(stage: string): boolean {
-  const tokens = stage.split(/\s+/).filter(Boolean);
+function stageRequiresConfirmation(tokens: readonly string[]): boolean {
   let tokenIndex = 0;
   while (tokenIndex < tokens.length && SHELL_CONTROL_KEYWORDS.has(tokens[tokenIndex])) {
     tokenIndex += 1;
@@ -479,8 +613,6 @@ function stageRequiresConfirmation(stage: string): boolean {
   const head = tokens[tokenIndex];
   const args = tokens.slice(tokenIndex + 1);
 
-  // Quotes are ordinary inside arguments, but a quoted *name* (`"rm"`, `r''m`) exists to stop the
-  // name from matching anything, so it is refused before the blocklist is consulted.
   if (/['"]/.test(head)) {
     return true;
   }
@@ -492,8 +624,6 @@ function stageRequiresConfirmation(stage: string): boolean {
   if (rule) {
     return rule(args);
   }
-  // Unlisted, but spelled as a path. Standard system binary locations (/bin, /usr/bin, etc.) are
-  // treated as direct invocations of their basename; custom paths (./script.sh, /tmp/payload) confirm.
   return head.includes('/') && !isStandardSystemBinary(head);
 }
 
@@ -501,28 +631,19 @@ function stageRequiresConfirmation(stage: string): boolean {
  * True when `run_remote_command` must show its confirmation dialog even on a trusted server.
  *
  * Every stage of the line is checked, not just the first: `ls && rm -rf /` confirms because of the
- * second stage, while `ps aux | grep java` runs because neither stage is blocked. Splitting is
- * naive about quotes, which can only add stages — a stage the shell will really run always begins
- * right after an unquoted separator, so it always begins a naive stage too. The extra stages that
- * naive splitting invents (`grep "a|b" file`) can only cost a prompt, never grant one.
+ * second stage, while `ps aux | grep java` runs because neither stage is blocked. The lexer keeps
+ * quoted `|` and `>` inside arguments, so `grep -E 'a|b'` and `awk 'NR>1'` are one stage each.
  */
 export function requiresConfirmation(command: string): boolean {
   const trimmed = command.trim();
   if (!trimmed) {
     return true;
   }
-  const sanitized = trimmed.replaceAll(SAFE_REDIRECTION, ' ');
-  if (UNREADABLE_COMMAND.test(sanitized)) {
+  const lexed = tokenizeShellCommand(trimmed);
+  if (!lexed.ok) {
     return true;
   }
-  const stages = sanitized
-    .split(STAGE_SEPARATOR)
-    .map((stage) => stage.trim())
-    .filter((stage) => stage.length > 0);
-  if (stages.length === 0) {
-    return true;
-  }
-  return stages.some((stage) => stageRequiresConfirmation(stage));
+  return lexed.stages.some((stage) => stageRequiresConfirmation(stage));
 }
 
 /**

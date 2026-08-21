@@ -97,16 +97,36 @@ function selectedAuth(): string {
   return authType?.value === 'privateKey' ? 'privateKey' : 'password';
 }
 
-function agentCommandAutoApproveEnabled(): boolean {
-  const input = document.querySelector<HTMLInputElement>('input[name="agentCommandAutoApprove"]');
-  return input?.checked === true;
+function currentAgentCommandTrust(): 'none' | 'policy' | 'full' {
+  const select = document.querySelector<HTMLSelectElement>('select[name="agentCommandTrust"]');
+  const value = select?.value;
+  if (value === 'policy' || value === 'full') {
+    return value;
+  }
+  return 'none';
+}
+
+let lastSeenTrust: 'none' | 'policy' | 'full' | undefined;
+
+function trustHelpText(trust: 'none' | 'policy' | 'full'): string {
+  if (trust === 'full') {
+    return i18nText('trustHelpFull', 'Remote commands and SFTP writes run without a confirmation dialog.');
+  }
+  if (trust === 'policy') {
+    return i18nText(
+      'trustHelpPolicy',
+      'Skip confirmation unless a stage changes state (rm, chmod, systemctl restart, apt, docker exec, iptables -F) or cannot be read (command substitution, file redirects). Quoted pipes and read forms such as docker ps and iptables -L run without asking. Commands the blocklist does not name run without asking.'
+    );
+  }
+  return i18nText('trustHelpNone', 'Every remote command asks for confirmation.');
 }
 
 function updateTrustFields(): void {
-  const trust = document.querySelector<HTMLInputElement>('input[name="agentCommandAutoApprove"]');
+  const trust = currentAgentCommandTrust();
   const background = document.querySelector<HTMLInputElement>('input[name="backgroundConnectionAllowed"]');
   const sub = document.querySelector<HTMLElement>('#backgroundConnectionSub');
-  const trusted = trust?.checked === true;
+  const help = document.querySelector<HTMLElement>('#agentCommandTrustHelp');
+  const trusted = trust !== 'none';
 
   if (sub) {
     sub.classList.toggle('is-open', trusted);
@@ -117,8 +137,16 @@ function updateTrustFields(): void {
     background.disabled = !trusted;
     if (!trusted) {
       background.checked = false;
+    } else if (lastSeenTrust !== undefined && lastSeenTrust !== trust) {
+      background.checked = trust === 'full';
     }
   }
+
+  if (help) {
+    help.textContent = trustHelpText(trust);
+  }
+
+  lastSeenTrust = trust;
 }
 
 let suppressNextGroupFocus = false;
@@ -237,9 +265,17 @@ function updateSummary(): void {
     }
   }
   if (summaryAgentCommands) {
-    summaryAgentCommands.textContent = agentCommandAutoApproveEnabled()
-      ? i18nText('summaryAgentReadOnly', 'Agent commands: read-only commands trusted')
-      : i18nText('summaryAgentManual', 'Agent commands: manual approval');
+    const trust = currentAgentCommandTrust();
+    if (trust === 'full') {
+      summaryAgentCommands.textContent = i18nText('summaryAgentFull', 'Agent commands: run without asking');
+    } else if (trust === 'policy') {
+      summaryAgentCommands.textContent = i18nText(
+        'summaryAgentPolicy',
+        'Agent commands: state-changing commands still ask'
+      );
+    } else {
+      summaryAgentCommands.textContent = i18nText('summaryAgentManual', 'Agent commands: manual approval');
+    }
   }
 }
 

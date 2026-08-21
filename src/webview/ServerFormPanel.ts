@@ -3,6 +3,11 @@ import { randomUUID } from 'node:crypto';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { parseServerConfig } from '../config/schema';
+import {
+  parseAgentCommandTrust,
+  resolveAgentCommandTrust,
+  type AgentCommandTrust
+} from '../agent/agentCommandTrust';
 import { testSshConnection } from '../ssh/SshConnectionTester';
 import { requireHostKeyVerifier, type HostKeyVerifier } from '../ssh/SshConnectionConfig';
 import { formatError } from '../utils/errors';
@@ -72,8 +77,13 @@ export class ServerFormPanel {
           summaryGroupPrefix: 'Group: {group}',
           summaryRouteVia: 'Route: via {host}',
           summaryRouteDirect: 'Route: Direct connection',
-          summaryAgentReadOnly: 'Agent commands: read-only commands trusted',
           summaryAgentManual: 'Agent commands: manual approval',
+          summaryAgentPolicy: 'Agent commands: state-changing commands still ask',
+          summaryAgentFull: 'Agent commands: run without asking',
+          trustHelpNone: 'Every remote command asks for confirmation.',
+          trustHelpPolicy:
+            'Skip confirmation unless a stage changes state (rm, chmod, systemctl restart, apt, docker exec, iptables -F) or cannot be read (command substitution, file redirects). Quoted pipes and read forms such as docker ps and iptables -L run without asking. Commands the blocklist does not name run without asking.',
+          trustHelpFull: 'Remote commands and SFTP writes run without a confirmation dialog.',
           hide: 'Hide',
           show: 'Show',
           hidePassword: 'Hide password',
@@ -218,8 +228,7 @@ async function passwordForConnectionTest(
 
 function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | undefined): ServerConfig {
   const now = Date.now();
-  const agentCommandAutoApprove =
-    payload.agentCommandAutoApprove === 'on' || payload.agentCommandAutoApprove === true;
+  const agentCommandTrust = parseAgentCommandTrust(payload.agentCommandTrust);
   return parseServerConfig({
     id: existing?.id ?? randomUUID(),
     label: String(payload.label ?? '').trim(),
@@ -230,9 +239,10 @@ function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | unde
     authType: String(payload.authType),
     privateKeyPath: optionalString(payload.privateKeyPath),
     jumpHostId: optionalString(payload.jumpHostId),
-    agentCommandAutoApprove,
+    agentCommandTrust,
+    agentCommandAutoApprove: agentCommandTrust !== 'none',
     backgroundConnectionAllowed:
-      agentCommandAutoApprove &&
+      agentCommandTrust !== 'none' &&
       (payload.backgroundConnectionAllowed === 'on' || payload.backgroundConnectionAllowed === true),
     keepAliveInterval: Number(payload.keepAliveInterval ?? 30),
     encoding: 'utf-8',
@@ -263,11 +273,10 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const selectedJumpHost = jumpHostOptions.find((candidate) => candidate.id === server?.jumpHostId);
   const selectedJumpHostGroup = selectedJumpHost ? displayGroupName(selectedJumpHost.group) : '';
   const jumpHostGroups = groupNames(jumpHostOptions);
-  const agentCommandTrusted = server?.agentCommandAutoApprove === true;
+  const agentCommandTrust = resolveAgentCommandTrust(server ?? {});
+  const agentCommandTrusted = agentCommandTrust !== 'none';
   const backgroundConnectionAllowed = agentCommandTrusted && server?.backgroundConnectionAllowed === true;
-  const agentCommandTrustSummary = agentCommandTrusted
-    ? t('Agent commands: state-changing commands still ask')
-    : t('Agent commands: manual approval');
+  const agentCommandTrustSummary = trustSummary(agentCommandTrust);
   const groupSuggestions = groupNames(servers);
   const groupValue = server ? server.group ?? '' : initialGroup ?? '';
 
@@ -302,12 +311,16 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
           <label class="field-stack">${escapeHtml(t('Username'))} <input name="username" value="${escapeAttr(server?.username ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">${escapeHtml(t('Keepalive'))} <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
           <div class="trust-block field-wide">
-            <label class="trust-toggle-row" for="agentCommandAutoApprove">
+            <label class="trust-toggle-row" for="agentCommandTrust">
               <span class="trust-toggle-copy">
                 <span class="trust-toggle-title">${escapeHtml(t('Trust agent remote commands'))}</span>
-                <span class="field-help">${escapeHtml(t('Skip confirmation unless the command changes state (rm, chmod, systemctl restart, apt, docker, or an interpreter such as sh, python, awk, sed), or hides what it runs behind quotes, escapes, redirects or command substitution. Every stage of a pipeline or chain is checked. Commands the blocklist does not name run without asking.'))}</span>
+                <span id="agentCommandTrustHelp" class="field-help">${escapeHtml(trustHelp(agentCommandTrust))}</span>
               </span>
-              <input id="agentCommandAutoApprove" name="agentCommandAutoApprove" type="checkbox"${agentCommandTrusted ? ' checked' : ''}>
+              <select id="agentCommandTrust" name="agentCommandTrust">
+                <option value="none"${agentCommandTrust === 'none' ? ' selected' : ''}>${escapeHtml(t('Untrusted'))}</option>
+                <option value="policy"${agentCommandTrust === 'policy' ? ' selected' : ''}>${escapeHtml(t('Limited trust'))}</option>
+                <option value="full"${agentCommandTrust === 'full' ? ' selected' : ''}>${escapeHtml(t('Full trust'))}</option>
+              </select>
             </label>
             <div id="backgroundConnectionSub" class="trust-sub${agentCommandTrusted ? ' is-open' : ''}"${agentCommandTrusted ? '' : ' hidden'}>
               <div class="trust-sub-inner">
@@ -462,5 +475,27 @@ function groupSuggestionOptions(groups: string[], selectedGroup: string): string
 function displayGroupName(group: string | undefined): string {
   const trimmed = group?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : t('Default');
+}
+
+function trustHelp(trust: AgentCommandTrust): string {
+  if (trust === 'full') {
+    return t('Remote commands and SFTP writes run without a confirmation dialog.');
+  }
+  if (trust === 'policy') {
+    return t(
+      'Skip confirmation unless a stage changes state (rm, chmod, systemctl restart, apt, docker exec, iptables -F) or cannot be read (command substitution, file redirects). Quoted pipes and read forms such as docker ps and iptables -L run without asking. Commands the blocklist does not name run without asking.'
+    );
+  }
+  return t('Every remote command asks for confirmation.');
+}
+
+function trustSummary(trust: AgentCommandTrust): string {
+  if (trust === 'full') {
+    return t('Agent commands: run without asking');
+  }
+  if (trust === 'policy') {
+    return t('Agent commands: state-changing commands still ask');
+  }
+  return t('Agent commands: manual approval');
 }
 

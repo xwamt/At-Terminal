@@ -39,7 +39,32 @@ describe('AgentToolService', () => {
       servers: [
         expect.objectContaining({
           id: 'server-1',
-          agentCommandAutoApprove: false
+          agentCommandAutoApprove: false,
+          agentCommandTrust: 'none'
+        })
+      ]
+    });
+  });
+
+  it('exposes the resolved trust level on listed servers', async () => {
+    const full = {
+      ...server('server-1'),
+      backgroundConnectionAllowed: true,
+      agentCommandTrust: 'full' as const,
+      agentCommandAutoApprove: true
+    };
+    const service = new AgentToolService({
+      configManager: { listServers: async () => [full] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute: vi.fn() } as unknown as RemoteCommandExecutor
+    });
+
+    await expect(service.listServers()).resolves.toEqual({
+      servers: [
+        expect.objectContaining({
+          id: 'server-1',
+          agentCommandTrust: 'full',
+          agentCommandAutoApprove: true
         })
       ]
     });
@@ -398,6 +423,43 @@ describe('AgentToolService', () => {
       'Run Command'
     );
     expect(execute).toHaveBeenCalled();
+  });
+
+  it('skips confirmation for destructive commands when the server is fully trusted', async () => {
+    const trusted = {
+      ...server(),
+      backgroundConnectionAllowed: true,
+      agentCommandTrust: 'full' as const,
+      agentCommandAutoApprove: true
+    };
+    const showWarningMessage = vi.spyOn(vscode.window, 'showWarningMessage');
+    const execute = vi.fn(async () => ({
+      serverId: 'server-1',
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command: 'rm -rf /tmp/app',
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      durationMs: 1,
+      timedOut: false,
+      truncated: false
+    }));
+    const service = new AgentToolService({
+      configManager: { getServer: async () => trusted, listServers: async () => [trusted] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    await service.runRemoteCommand({ serverId: 'server-1', command: 'rm -rf /tmp/app' });
+
+    expect(showWarningMessage).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(trusted, {
+      command: 'rm -rf /tmp/app',
+      cwd: undefined,
+      timeoutMs: undefined,
+      maxOutputBytes: undefined
+    });
   });
 
   it('cancels destructive commands for trusted servers when the user declines', async () => {

@@ -143,6 +143,44 @@ describe('server config schema', () => {
     });
 
     expect(parsed.agentCommandAutoApprove).toBeUndefined();
+    expect(parsed.agentCommandTrust).toBeUndefined();
+  });
+
+  it('accepts the three agent command trust levels', () => {
+    const parsed = parseServerConfig({
+      id: 'server-13',
+      label: 'Full trust',
+      host: 'full.example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      agentCommandTrust: 'full',
+      agentCommandAutoApprove: true,
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.agentCommandTrust).toBe('full');
+  });
+
+  it('rejects an unknown agent command trust level', () => {
+    expect(() =>
+      parseServerConfig({
+        id: 'server-14',
+        label: 'Bad trust',
+        host: 'bad.example.com',
+        port: 22,
+        username: 'deploy',
+        authType: 'password',
+        agentCommandTrust: 'everything',
+        keepAliveInterval: 30,
+        encoding: 'utf-8',
+        createdAt: 1,
+        updatedAt: 2
+      })
+    ).toThrow();
   });
 
   it('keeps background connection disabled for existing configs', () => {

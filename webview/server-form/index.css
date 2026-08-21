@@ -266,6 +266,12 @@ select:focus {
   width: auto;
 }
 
+.trust-toggle-row select {
+  flex: 0 0 auto;
+  min-width: 8.5em;
+  width: auto;
+}
+
 .trust-sub {
   border-top: 1px dashed var(--vscode-panel-border);
   padding: 0 10px 10px;

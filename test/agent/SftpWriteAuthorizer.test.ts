@@ -61,6 +61,38 @@ function clock(start = 1_000): { now: () => number; advance(ms: number): void } 
   };
 }
 
+describe('SftpWriteAuthorizer full trust', () => {
+  it('does not prompt for ordinary writes on a fully trusted server', async () => {
+    const recorder = recordingConfirm([]);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+    const trusted = { ...server(), agentCommandTrust: 'full' as const };
+
+    await authorizer.requireWrite(trusted, write(`${WORKSPACE_ROOT}/notes/a.txt`));
+
+    expect(recorder.seen).toHaveLength(0);
+  });
+
+  it('does not prompt for sensitive writes on a fully trusted server', async () => {
+    const recorder = recordingConfirm([]);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+    const trusted = { ...server(), agentCommandTrust: 'full' as const };
+
+    await authorizer.requireWrite(trusted, write('/etc/cron.d/backup'));
+
+    expect(recorder.seen).toHaveLength(0);
+  });
+
+  it('still prompts under limited trust even when the legacy checkbox is on', async () => {
+    const recorder = recordingConfirm(['once']);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+    const trusted = { ...server(), agentCommandAutoApprove: true };
+
+    await authorizer.requireWrite(trusted, write(`${WORKSPACE_ROOT}/a.txt`));
+
+    expect(recorder.seen).toHaveLength(1);
+  });
+});
+
 describe('SftpWriteAuthorizer approval scope', () => {
   it('does not let an approval for one directory authorize a write elsewhere on the same server', async () => {
     const recorder = recordingConfirm(['session', 'once']);

@@ -1,8 +1,7 @@
 # ADR-003：Agent 命令确认策略
 
 ## 状态
-已被 2026-08-13 的三次修订取代（见文末「2026-08-13 修订」「2026-08-13 再修订」
-与「2026-08-13 三修订：确认模型由白名单反转为黑名单」；**当前生效的是第三次**）
+已被后续修订取代（见文末；**当前生效的是 2026-08-21 第五次修订**）
 
 ## 日期
 2026-07-21
@@ -163,3 +162,36 @@ Agent 可以执行远程 shell 命令。用户既希望便捷（低摩擦），�
 机器上都不一样。**两种失败模式不对称**：黑名单漏一个危险命令，可以补名单逐步收敛；白名单拦一个查询
 命令，用户当场就要为无意义的弹窗点确认，最终要么关掉开关，要么养成无脑点确认的习惯——后者会让这道门
 在真正需要它的时候也失效。
+
+## 2026-08-21 四修订：引号感知词法 + 多态子命令/标志/脚本
+
+第三次修订的黑名单模型保留。改的是两处误伤：
+
+1. **分段不做词法解析**（第三次已知残留第 5 条）：`grep -E 'error|fail'`、`awk 'NR>1'`、`CPU\(s\)`
+   被当成危险形态。
+2. **整家族拉黑**：`docker ps`、`iptables -L`、`virsh list`、`systemctl --failed`、管道里的 `awk`/`sed`
+   一律弹窗。2026-08-21 一份 11 条主机巡检里 7 条因此误弹。
+
+修订后的解析与家族规则：
+
+2. 分段改由 `shellCommandLexer` 做。单引号内全部字面量；双引号内 `|` `>` `\` 不是操作符，但 `$()`
+   与反引号仍是命令替换。未加引号的 `| ; & && ||` 才切段。安全丢弃重定向（`2>/dev/null` 等）剥掉；
+   写文件的 `>` / `<` 仍弹窗。
+3. `docker` / `podman` / `nerdctl` / `kubectl` / `virsh` 按只读子命令放行（`docker ps`、
+   `docker compose ps`、`kubectl get`、`virsh list`）；`exec` / `run` / `delete` / `destroy` 仍弹窗。
+4. `iptables` / `ip6tables` / `firewall-cmd` / `ufw` 按标志放行（`-L` / `-nvL` / `--state` / `status`）；
+   `-F` / `-A` / `--reload` 仍弹窗。`systemctl --failed` 视为隐式 `list-units`。
+5. `awk` / `sed` 从解释器硬黑名单改为脚本规则：过滤放行；`sed -i`、`awk system(` / `print >` 仍弹窗。
+   `sh` / `python` / `sudo` / `xargs` / `timeout` 仍一律弹窗。
+
+未知命令默认放行不变。`helm list`、`nginx -T`、`sudo iptables -L` 仍弹窗（有意）。
+
+## 2026-08-21 五修订：信任三档
+
+服务器表单把布尔「信任 Agent 远程命令」换成三档下拉 `agentCommandTrust`：
+
+1. **不信任 (`none`)**：每条 `run_remote_command` 都弹窗；不显示「允许后台连接」。
+2. **有限信任 (`policy`)**：沿用上文第四次修订的黑名单/词法策略；显示后台连接，切换到此档时默认不勾。旧配置 `agentCommandAutoApprove === true` 读成这一档。SFTP 写入仍走按目录授权。
+3. **完全信任 (`full`)**：远程命令与 SFTP 写入都不弹窗（含敏感路径）。显示后台连接，切换到此档时默认勾选。
+
+SSH 主机密钥信任与资产包口令仍不跳过。规格见 `docs/superpowers/specs/2026-08-21-agent-command-trust-levels-design.md`。

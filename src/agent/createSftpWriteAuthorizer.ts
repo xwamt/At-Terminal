@@ -1,6 +1,6 @@
 import { SftpWriteAuthorizer } from './SftpWriteAuthorizer';
 
-/** Production wiring must use default VS Code confirm — never auto-approve. */
+/** Production wiring uses the VS Code confirm unless the server is fully trusted. */
 export function createProductionSftpWriteAuthorizer(): SftpWriteAuthorizer {
   return new SftpWriteAuthorizer();
 }

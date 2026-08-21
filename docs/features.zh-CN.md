@@ -73,8 +73,8 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 
 ## 安全行为
 
-- `run_remote_command` 对每条命令都请求确认。`Trust agent remote commands` 让**未命中黑名单**的命令免确认；黑名单收录 441 个会改变状态的命令名，分 19 组（文件写入、权限、归档、磁盘、进程与服务控制、解释器与执行包装、包管理、网络传输与配置、账号、容器、编辑器与分页器、追踪调试、数据库客户端、引导）。命令按 `|`、`;`、`&&`、`||`、`&` 分段，**每一段的命令名都要过黑名单**，任一段命中即弹窗：`ps aux | grep java | head -20` 免确认，`ls && rm -rf /` 弹窗。`systemctl`、`journalctl`、`ip`、`ss`、`find`、`dmesg`、`crontab`、`date`、`hostname`、`sysctl`、`git`、`ifconfig`、`route`、`ethtool`、`sort` 按参数判断，因此 `systemctl status nginx`、`git log` 免确认，`systemctl restart nginx`、`git checkout .` 弹窗。命令替换、重定向、反斜杠转义、命令名带引号或写成路径、多行脚本一律弹窗。**代价写在明面上：黑名单没点名的命令，在受信任服务器上不弹窗直接执行。**
-- 服务器信任开关只影响 `run_remote_command`，不会跳过 SFTP 写入授权或 SSH 主机指纹信任。
+- `run_remote_command` 确认跟随服务器信任下拉（`Trust agent remote commands`）。**不信任**每条都弹窗。**有限信任**让**未命中黑名单**的命令免确认；黑名单收录 441 个会改变状态的命令名，分 19 组（文件写入、权限、归档、磁盘、进程与服务控制、解释器与执行包装、包管理、网络传输与配置、账号、容器、编辑器与分页器、追踪调试、数据库客户端、引导）。命令按 `|`、`;`、`&&`、`||`、`&` 分段，**每一段的命令名都要过黑名单**，任一段命中即弹窗：`ps aux | grep java | head -20` 免确认，`ls && rm -rf /` 弹窗。`systemctl`、`journalctl`、`ip`、`ss`、`find`、`dmesg`、`crontab`、`date`、`hostname`、`sysctl`、`git`、`ifconfig`、`route`、`ethtool`、`sort` 按参数判断，因此 `systemctl status nginx`、`git log` 免确认，`systemctl restart nginx`、`git checkout .` 弹窗。命令替换、重定向、反斜杠转义、命令名带引号或写成路径、多行脚本在有限信任下一律弹窗。**代价写在明面上：黑名单没点名的命令，在有限信任服务器上不弹窗直接执行。** **完全信任**远程命令与 SFTP 写入都不弹窗。
+- 有限信任不会跳过 SFTP 写入授权。完全信任会跳过远程命令确认和 SFTP 写入确认（含敏感路径）。任何信任档都不会跳过 SSH 主机指纹信任。
 - Bridge 发布到 AT Series 注册表 `~/.at-series/bridges/<hostApp>/`。
 - SFTP 写入按「目录」授权：弹窗提供 `Allow Once`（默认）、`Allow This Folder For 15 Minutes`、`Allow This Folder For The Session` 三档，任何一档都只覆盖用户当时看到的那个目录，不会覆盖整台服务器。
 - 写入目标越出 SFTP 会话初始工作目录时，弹窗会明确高亮，并且不提供「本会话」这一档。

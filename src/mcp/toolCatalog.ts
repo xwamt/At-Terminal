@@ -14,10 +14,10 @@ const sftpTargetProperties = {
 } as const;
 
 const WRITE_AUTHORIZATION_NOTE =
-  'The user approves one directory at a time, so expect a dialog whenever the target directory changes; ' +
+  'Unless the server is set to full trust, the user approves one directory at a time, so expect a dialog whenever the target directory changes; ' +
   'an approval never covers the whole server. Writes outside the directory the SFTP session was opened in ' +
   'are called out as such, sensitive paths (SSH keys, /etc, /usr, service units, sudoers, cron) always ask ' +
-  'twice and are never remembered, and a permission-denied write is never retried with sudo.';
+  'twice and are never remembered, and a permission-denied write is never retried with sudo. Full trust skips these write prompts.';
 
 const pathProperties = {
   ...sftpTargetProperties,
@@ -54,7 +54,7 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
     name: 'run_remote_command',
     title: 'Run Remote SSH Command',
     description:
-      'Run a non-interactive command on an AT Terminal SSH server. Every command opens a confirmation dialog in the IDE unless the server is marked as trusted and the command misses a blocklist of state-changing programs (file writes, permissions, packages, services, containers, network transfers, editors, and interpreters such as sh, python, awk and sed). Every stage of a pipeline or chain is checked against it, and a command whose name cannot be read plainly—command substitution, redirects, escapes, quoted names, multi-line scripts—always asks. Unknown commands are not on the blocklist and run without a prompt on a trusted server. Expect a human round-trip and do not batch work into one shell line to avoid it. stdout/stderr each default to 64000 bytes (hard cap 256000); when truncated is true, narrow the command—do not dump whole configs (for example nginx -T or docker compose config).',
+      'Run a non-interactive command on an AT Terminal SSH server. A confirmation dialog depends on the server trust level: untrusted always asks; limited trust uses a blocklist of state-changing programs (file writes, permissions, packages, services, docker exec/run, iptables -F, network transfers, editors, and interpreters such as sh and python) and skips the prompt when every stage misses that list; full trust never asks. awk/sed filters and read subcommands such as docker ps, kubectl get, virsh list, and iptables -L do not prompt under limited trust. Every stage of a pipeline or chain is checked against it. A command whose name cannot be read plainly—command substitution, file redirects, unclosed quotes—always asks under limited trust; quoted pipes and escapes inside arguments do not. Unknown commands are not on the blocklist and run without a prompt on a limited-trust or fully trusted server. Expect a human round-trip unless the server is fully trusted, and do not batch work into one shell line to avoid it. stdout/stderr each default to 64000 bytes (hard cap 256000); when truncated is true, narrow the command—do not dump whole configs (for example nginx -T).',
     risk: 'exec',
     inputSchema: {
       type: 'object',

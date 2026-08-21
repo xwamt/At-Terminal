@@ -38,6 +38,14 @@ describe('toolCatalog', () => {
     expect(byName.run_remote_command.description).toContain('truncated');
   });
 
+  it('tells the caller that confirmation follows the three server trust levels', () => {
+    const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((tool) => [tool.name, tool]));
+
+    expect(byName.run_remote_command.description).toContain('untrusted');
+    expect(byName.run_remote_command.description).toContain('limited trust');
+    expect(byName.run_remote_command.description).toContain('full trust');
+  });
+
   it('tells the caller that run_remote_command confirms the commands on a blocklist', () => {
     const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((tool) => [tool.name, tool]));
 

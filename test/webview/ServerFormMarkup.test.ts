@@ -146,13 +146,13 @@ describe('ServerFormPanel markup', () => {
     expect(script).toContain('suppressNextGroupFocus = true');
   });
 
-  it('keeps background connection nested under trust in the form script', () => {
+  it('keeps background connection nested under the trust dropdown in the form script', () => {
     const script = readFileSync(join(process.cwd(), 'webview/server-form/index.ts'), 'utf8');
 
     expect(script).toContain('function updateTrustFields(): void');
+    expect(script).toContain("document.querySelector<HTMLSelectElement>('select[name=\"agentCommandTrust\"]')");
     expect(script).toContain("document.querySelector<HTMLInputElement>('input[name=\"backgroundConnectionAllowed\"]')");
-    expect(script).toContain('background.disabled = !trusted');
-    expect(script).toContain('background.checked = false');
+    expect(script).toContain("background.checked = trust === 'full'");
     expect(script).toContain('updateTrustFields()');
   });
 
@@ -210,20 +210,23 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('Route: via Bastion CN');
   });
 
-  it('renders the agent command trust switch off by default', () => {
+  it('renders the agent command trust dropdown as untrusted by default', () => {
     const html = renderServerForm();
 
-    expect(html).toContain('name="agentCommandAutoApprove"');
+    expect(html).toContain('name="agentCommandTrust"');
     expect(html).toContain('Trust agent remote commands');
-    expect(html).toContain(
-      'Skip confirmation unless the command changes state (rm, chmod, systemctl restart, apt, docker, or an interpreter such as sh, python, awk, sed), or hides what it runs behind quotes, escapes, redirects or command substitution. Every stage of a pipeline or chain is checked. Commands the blocklist does not name run without asking.'
-    );
-    expect(html).not.toContain('Run non-destructive MCP remote commands without asking each time.');
+    expect(html).toContain('<option value="none" selected>');
+    expect(html).toContain('Untrusted');
+    expect(html).toContain('Limited trust');
+    expect(html).toContain('Full trust');
+    expect(html).toContain('Every remote command asks for confirmation.');
+    expect(html).toContain('id="agentCommandTrustHelp"');
     expect(html).toContain('Agent commands: manual approval');
-    expect(html).not.toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
+    expect(html).not.toContain('name="agentCommandAutoApprove"');
+    expect(html).not.toContain('Run non-destructive MCP remote commands without asking each time.');
   });
 
-  it('renders the agent command trust switch checked for trusted servers', () => {
+  it('selects limited trust for servers that only have the legacy checkbox', () => {
     const html = renderServerForm({
       id: 'server-1',
       label: 'Production',
@@ -238,8 +241,36 @@ describe('ServerFormPanel markup', () => {
       updatedAt: 2
     });
 
-    expect(html).toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
+    expect(html).toContain('<option value="policy" selected>');
+    expect(html).toContain(
+      'Skip confirmation unless a stage changes state (rm, chmod, systemctl restart, apt, docker exec, iptables -F) or cannot be read (command substitution, file redirects). Quoted pipes and read forms such as docker ps and iptables -L run without asking. Commands the blocklist does not name run without asking.'
+    );
     expect(html).toContain('Agent commands: state-changing commands still ask');
+  });
+
+  it('selects full trust and restores a saved background connection', () => {
+    const html = renderServerForm({
+      id: 'server-1',
+      label: 'Production',
+      host: 'example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      agentCommandTrust: 'full',
+      agentCommandAutoApprove: true,
+      backgroundConnectionAllowed: true,
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(html).toContain('<option value="full" selected>');
+    expect(html).toContain('Remote commands and SFTP writes run without a confirmation dialog.');
+    expect(html).toContain('Agent commands: run without asking');
+    expect(html).toContain('class="trust-sub is-open"');
+    expect(html).not.toMatch(/id="backgroundConnectionSub"[^>]*hidden/);
+    expect(html).toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
   });
 
   it('nests the background connection switch under trust and hides it by default', () => {
@@ -271,7 +302,6 @@ describe('ServerFormPanel markup', () => {
       updatedAt: 2
     });
 
-    expect(html).toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
     expect(html).toContain('class="trust-sub is-open"');
     expect(html).not.toMatch(/id="backgroundConnectionSub"[^>]*hidden/);
     expect(html).toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
@@ -293,7 +323,8 @@ describe('ServerFormPanel markup', () => {
       updatedAt: 2
     });
 
-    expect(html).not.toMatch(/name="agentCommandAutoApprove"[^>]*checked/);
+    expect(html).not.toContain('<option value="policy" selected>');
+    expect(html).not.toContain('<option value="full" selected>');
     expect(html).toMatch(/id="backgroundConnectionSub"[^>]*hidden/);
     expect(html).not.toMatch(/name="backgroundConnectionAllowed"[^>]*checked/);
     expect(html).toMatch(/name="backgroundConnectionAllowed"[^>]*disabled/);

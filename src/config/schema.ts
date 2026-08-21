@@ -11,6 +11,7 @@ export const serverConfigSchema = z
     authType: z.enum(['password', 'privateKey']),
     privateKeyPath: z.string().min(1).optional(),
     jumpHostId: z.string().min(1).optional(),
+    agentCommandTrust: z.enum(['none', 'policy', 'full']).optional(),
     agentCommandAutoApprove: z.boolean().optional(),
     backgroundConnectionAllowed: z.boolean().optional(),
     keepAliveInterval: z.number().int().min(0),

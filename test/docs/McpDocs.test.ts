@@ -27,7 +27,9 @@ describe('MCP documentation', () => {
     expect(features).toContain('get_terminal_context');
     expect(features).toContain('sftp_read_file');
     expect(features).toContain('Trust agent remote commands');
-    expect(features).toContain('does not bypass SFTP write authorization or SSH host key trust');
+    expect(features).toContain('Full trust');
+    expect(features).toContain('does not bypass SFTP write authorization');
+    expect(features).toContain('SSH host key trust');
     expect(features).not.toContain('language model tools');
     expect(usage).toContain('AT Terminal: Install MCP Config');
     expect(usage).toContain('~/.kiro/settings/mcp.json');

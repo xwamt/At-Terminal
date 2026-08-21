@@ -75,7 +75,7 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 
 使用说明：
 
-1. 在服务器编辑页先勾选 **Trust agent remote commands**，再勾选其子项 **Allow background connections**。
+1. 在服务器编辑页将 **Trust agent remote commands** 设为 **Limited trust** 或 **Full trust**，再勾选其子项 **Allow background connections**。
 2. 未授权后台连接的服务器不会出现在 `list_ssh_servers` 中；若前端已打开该服务器终端连接，`run_remote_command` 仍可执行。仅在前端未连接时，才要求勾选后台连接。
 3. 旧配置默认关闭后台连接，升级后需按服务器显式开启。
 
@@ -91,8 +91,10 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 
 ### 命令信任与智能放行策略（0.3.3）
 
-从 **0.3.3** 起，远程命令确认网关（Remote Command Policy）全面升级为精细化黑名单模式：
+从 **0.3.3** 起，远程命令确认网关（Remote Command Policy）升级为三档信任 + 精细化黑名单：
 
+- **三档信任下拉**：不信任（每条远程命令都弹窗，不显示后台连接）、有限信任（黑名单策略，显示后台连接且切换时默认不勾）、完全信任（远程命令与 SFTP 写入均不弹窗，显示后台连接且切换时默认勾选）。已有「信任」勾选的服务器读成有限信任。
+- **引号感知词法**：引号内的 `|`、`>`、`\` 不再当操作符；`grep -E 'error|fail'`、`awk 'NR>1'`、`docker ps`、`iptables -L` 在有限信任下免确认；`sed -i`、`docker exec`、`sudo` 等仍弹窗。
 - **智能安全重定向放行**：对静默/错误输出重定向（如 `2>/dev/null`、`>/dev/null 2>&1`、`&>/dev/null`、`1>&2` 等）智能识别并自动放行，不再误触发确认弹窗；向实际文件写数据的重定向（如 `> /etc/hosts`、`>> file`）依然严格弹窗。
 - **系统标准二进制路径支持**：支持 `/bin/ls`、`/usr/bin/cat`、`/usr/bin/uptime` 等标准系统路径调用的只读命令直接放行；对自定义脚本路径（`./deploy.sh`、`/tmp/payload`）保持确认。
 - **复合语句与控制流关键字识别**：对 `for ...; do ...; done`、`while ...; do ...; done`、`if ...; then ...; fi` 等 Shell 循环与分支命令自动跳过 `do` / `then` 等控制流关键字，内部只读命令安全放行，包含危险操作（`do rm ...`）精准拦截。
