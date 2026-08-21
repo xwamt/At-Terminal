@@ -2,7 +2,7 @@
   "name": "at-terminal-mcp",
   "displayName": "%atTerminal.displayName%",
   "description": "%atTerminal.description%",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "publisher": "local",
   "icon": "media/at-terminal-icon.png",
   "l10n": "./l10n",

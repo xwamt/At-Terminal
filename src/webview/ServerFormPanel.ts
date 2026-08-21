@@ -62,6 +62,7 @@ export class ServerFormPanel {
           testing: 'Testing...',
           testConnection: 'Test Connection',
           errorRequired: 'Label, host, and username are required.',
+          errorPasswordRequired: 'Password is required for new password-auth servers.',
           errorPrivateKey: 'Select or enter a private key path.',
           errorJumpHost: 'Select a jump host server or choose Direct connection.',
           testingVia: 'Testing connection via {name}...',
@@ -278,7 +279,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
     </div>
     <div id="form-status" class="form-status">${escapeHtml(t('Manual setup'))}</div>
   </header>
-  <form id="server-form" class="server-form">
+  <form id="server-form" class="server-form" data-mode="${server ? 'edit' : 'create'}">
     <div class="form-section-grid">
       <section class="form-panel form-panel-connection">
         <div class="form-panel-header">

@@ -56,7 +56,16 @@ describe('requiresConfirmation', () => {
     'pgrep -a nginx',
     'stat /etc/hosts',
     'nproc',
-    'sort /etc/passwd | uniq -c | head'
+    'sort /etc/passwd | uniq -c | head',
+    '/bin/ls -la /var/log',
+    '/usr/bin/cat /etc/hosts',
+    '/usr/bin/uptime',
+    'which nginx 2>/dev/null',
+    'command -v nginx >/dev/null 2>&1',
+    'cat /proc/sys/net/ipv4/ip_forward 2>/dev/null',
+    'ls -la /sys/class/net/br-Vlan66/bridge/; for p in /sys/class/net/br-Vlan66/brif/*; do echo -n "$p: "; cat $p/hairpin_mode 2>/dev/null; cat $p/isolate_mode 2>/dev/null; done',
+    'for p in /sys/class/net/*; do echo $p; done',
+    'while read line; do echo "$line"; done'
   ])('auto-approves the read-only command %j', (command) => {
     expect(requiresConfirmation(command)).toBe(false);
   });
@@ -232,6 +241,10 @@ describe('requiresConfirmation', () => {
       expect(requiresConfirmation('cat /etc/hosts && systemctl restart nginx')).toBe(true);
       expect(requiresConfirmation('uptime; apt-get install -y nginx')).toBe(true);
       expect(requiresConfirmation('df -h & rm -rf /')).toBe(true);
+      expect(requiresConfirmation('for f in *; do rm $f; done')).toBe(true);
+      expect(requiresConfirmation('while read line; do rm -f "$line"; done')).toBe(true);
+      expect(requiresConfirmation('if true; then systemctl restart nginx; fi')).toBe(true);
+      expect(requiresConfirmation('rm -rf / 2>/dev/null')).toBe(true);
     });
 
     it('reads the command name after stripping its directory and lowercasing it', () => {
@@ -369,6 +382,13 @@ describe('requiresConfirmation', () => {
     it('confirms sort only when it writes its output to a file', () => {
       expect(requiresConfirmation('sort -n /var/log/sizes')).toBe(false);
       expect(requiresConfirmation('sort -o /etc/passwd /etc/passwd')).toBe(true);
+    });
+
+    it('confirms command only when it is not a -v / -V lookup', () => {
+      expect(requiresConfirmation('command -v nginx')).toBe(false);
+      expect(requiresConfirmation('command -V nginx')).toBe(false);
+      expect(requiresConfirmation('command rm -rf /')).toBe(true);
+      expect(requiresConfirmation('command ls')).toBe(true);
     });
   });
 

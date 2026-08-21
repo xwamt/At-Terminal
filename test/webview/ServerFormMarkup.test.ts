@@ -37,6 +37,7 @@ describe('ServerFormPanel markup', () => {
 
     expect(html).toContain('class="server-form-shell"');
     expect(html).toContain('class="form-section-grid"');
+    expect(html).toContain('data-mode="create"');
     expect(html).toContain('data-auth-option="password"');
     expect(html).toContain('data-auth-option="privateKey"');
     expect(html).toContain('id="authType"');
@@ -50,7 +51,7 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('id="submitSpinner"');
   });
 
-  it('explains that a blank edit password keeps the saved password', () => {
+  it('explains that a blank edit password keeps the saved password and sets edit mode', () => {
     const html = renderServerForm({
       id: 'server-1',
       label: 'Production',
@@ -65,6 +66,7 @@ describe('ServerFormPanel markup', () => {
       updatedAt: 2
     });
 
+    expect(html).toContain('data-mode="edit"');
     expect(html).toContain('Leave blank to keep the saved password.');
   });
 
@@ -152,6 +154,15 @@ describe('ServerFormPanel markup', () => {
     expect(script).toContain('background.disabled = !trusted');
     expect(script).toContain('background.checked = false');
     expect(script).toContain('updateTrustFields()');
+  });
+
+  it('toggles password required based on form edit mode instead of localized DOM text', () => {
+    const script = readFileSync(join(process.cwd(), 'webview/server-form/index.ts'), 'utf8');
+
+    expect(script).toContain("function isEditMode(): boolean");
+    expect(script).toContain("form?.dataset.mode === 'edit'");
+    expect(script).toContain("password?.toggleAttribute('required', !isPrivateKey && !isEditMode())");
+    expect(script).not.toContain("includes('Leave blank')");
   });
 
   it('keeps the group suggestions hidden until script opens them', () => {

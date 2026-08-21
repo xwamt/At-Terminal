@@ -230,5 +230,5 @@ npm run package:base
 Generated base VSIX:
 
 ```text
-at-terminal-2.10.2.vsix
+at-terminal-0.3.3.vsix
 ```

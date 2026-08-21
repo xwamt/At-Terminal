@@ -97,7 +97,7 @@ const INTERPRETER_AND_WRAPPER_COMMANDS = [
   'tclsh', 'expect', 'rscript', 'julia', 'erl', 'elixir', 'iex', 'ghc', 'runghc', 'swift',
   'awk', 'gawk', 'mawk', 'nawk', 'sed', 'xargs', 'parallel',
   'env', 'sudo', 'sudoedit', 'su', 'doas', 'pkexec', 'runuser', 'chroot', 'nsenter', 'unshare',
-  'setarch', 'runcon', 'eval', 'exec', 'source', 'command', 'builtin', 'time',
+  'setarch', 'runcon', 'eval', 'exec', 'source', 'builtin', 'time',
   'watch', 'script', 'screen', 'tmux', 'byobu',
   'make', 'cmake', 'ninja', 'gcc', 'g++', 'cc', 'clang', 'clang++', 'javac', 'java', 'mvn',
   'gradle', 'ant', 'dotnet', 'rustc', 'npx', 'pnpx',
@@ -349,6 +349,12 @@ const ethtoolChangesDevice: ArgumentRule = (args) =>
 const sortWritesFile: ArgumentRule = (args) =>
   args.some((argument) => argument === '-o' || argument === '--output' || argument.startsWith('--output='));
 
+/** `command -v` or `command -V` only checks command path / availability; any other use executes code. */
+const commandDoesMoreThanLookup: ArgumentRule = (args) => {
+  const flags = args.filter((argument) => argument.startsWith('-'));
+  return !flags.includes('-v') && !flags.includes('-V');
+};
+
 /**
  * Commands whose most common form is read-only, so the whole name cannot be blocked without
  * bringing back the usability problem an allowlist had. Each rule decides from the arguments, and
@@ -372,7 +378,8 @@ const ARGUMENT_RULED_COMMANDS: readonly [string, ArgumentRule][] = [
   ['ifconfig', ifconfigChangesInterface],
   ['route', routeChangesTable],
   ['ethtool', ethtoolChangesDevice],
-  ['sort', sortWritesFile]
+  ['sort', sortWritesFile],
+  ['command', commandDoesMoreThanLookup]
 ];
 
 function alwaysConfirming(names: readonly string[]): [string, ArgumentRule][] {
@@ -426,6 +433,34 @@ function blockedRuleFor(name: string): ArgumentRule | undefined {
   return BLOCKED_COMMAND_PATTERNS.some((pattern) => pattern.test(name)) ? alwaysConfirms : undefined;
 }
 
+/**
+ * Safe stream redirections that only discard output or duplicate file descriptors (e.g. `2>/dev/null`,
+ * `>/dev/null 2>&1`, `&>/dev/null`, `1>&2`). These do not create, modify, or truncate filesystem files,
+ * so they are stripped before inspecting for unsafe redirections (`>`, `>>`, `<`).
+ */
+const SAFE_REDIRECTION = /(?:2>|1>|&>|>&|>)\s*(?:\/dev\/(?:null|stdout|stderr)|&\s*[12\-])/g;
+
+/** Standard Unix binary locations whose commands can be looked up directly in the blocklist by basename. */
+const STANDARD_SYSTEM_PATHS = [
+  '/bin/',
+  '/sbin/',
+  '/usr/bin/',
+  '/usr/sbin/',
+  '/usr/local/bin/',
+  '/usr/local/sbin/',
+  '/opt/homebrew/bin/',
+  '/opt/homebrew/sbin/'
+];
+
+function isStandardSystemBinary(path: string): boolean {
+  return STANDARD_SYSTEM_PATHS.some((prefix) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'));
+}
+
+/** Shell control flow keywords that precede a command in a compound command / pipeline stage. */
+const SHELL_CONTROL_KEYWORDS = new Set([
+  'do', 'then', 'else', 'elif', 'if', 'while', 'until', 'for', 'case', 'done', 'fi', 'esac', '!'
+]);
+
 /** `/usr/bin/RM` and `rm` are the same program; the blocklist is written in the second spelling. */
 function normalizeCommandName(head: string): string {
   return head.slice(head.lastIndexOf('/') + 1).toLowerCase();
@@ -433,7 +468,17 @@ function normalizeCommandName(head: string): string {
 
 /** One stage of a pipeline or chain: a single command, checked by the name it will really run. */
 function stageRequiresConfirmation(stage: string): boolean {
-  const [head, ...args] = stage.split(/\s+/);
+  const tokens = stage.split(/\s+/).filter(Boolean);
+  let tokenIndex = 0;
+  while (tokenIndex < tokens.length && SHELL_CONTROL_KEYWORDS.has(tokens[tokenIndex])) {
+    tokenIndex += 1;
+  }
+  if (tokenIndex >= tokens.length) {
+    return false;
+  }
+  const head = tokens[tokenIndex];
+  const args = tokens.slice(tokenIndex + 1);
+
   // Quotes are ordinary inside arguments, but a quoted *name* (`"rm"`, `r''m`) exists to stop the
   // name from matching anything, so it is refused before the blocklist is consulted.
   if (/['"]/.test(head)) {
@@ -447,9 +492,9 @@ function stageRequiresConfirmation(stage: string): boolean {
   if (rule) {
     return rule(args);
   }
-  // Unlisted, but spelled as a path. A blocklist recognises names, and `/tmp/deploy.sh` is not a
-  // name it could ever have been asked about, so the one thing it can say is "ask".
-  return head.includes('/');
+  // Unlisted, but spelled as a path. Standard system binary locations (/bin, /usr/bin, etc.) are
+  // treated as direct invocations of their basename; custom paths (./script.sh, /tmp/payload) confirm.
+  return head.includes('/') && !isStandardSystemBinary(head);
 }
 
 /**
@@ -463,10 +508,14 @@ function stageRequiresConfirmation(stage: string): boolean {
  */
 export function requiresConfirmation(command: string): boolean {
   const trimmed = command.trim();
-  if (!trimmed || UNREADABLE_COMMAND.test(trimmed)) {
+  if (!trimmed) {
     return true;
   }
-  const stages = trimmed
+  const sanitized = trimmed.replaceAll(SAFE_REDIRECTION, ' ');
+  if (UNREADABLE_COMMAND.test(sanitized)) {
+    return true;
+  }
+  const stages = sanitized
     .split(STAGE_SEPARATOR)
     .map((stage) => stage.trim())
     .filter((stage) => stage.length > 0);

@@ -89,6 +89,15 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 
 架构说明见 [ADR-004](docs/decisions/ADR-004-at-series-mcp-hub.md) 与 [ADR-005](docs/decisions/ADR-005-at-series-hub-adaptation.md)。
 
+### 命令信任与智能放行策略（0.3.3）
+
+从 **0.3.3** 起，远程命令确认网关（Remote Command Policy）全面升级为精细化黑名单模式：
+
+- **智能安全重定向放行**：对静默/错误输出重定向（如 `2>/dev/null`、`>/dev/null 2>&1`、`&>/dev/null`、`1>&2` 等）智能识别并自动放行，不再误触发确认弹窗；向实际文件写数据的重定向（如 `> /etc/hosts`、`>> file`）依然严格弹窗。
+- **系统标准二进制路径支持**：支持 `/bin/ls`、`/usr/bin/cat`、`/usr/bin/uptime` 等标准系统路径调用的只读命令直接放行；对自定义脚本路径（`./deploy.sh`、`/tmp/payload`）保持确认。
+- **复合语句与控制流关键字识别**：对 `for ...; do ...; done`、`while ...; do ...; done`、`if ...; then ...; fi` 等 Shell 循环与分支命令自动跳过 `do` / `then` 等控制流关键字，内部只读命令安全放行，包含危险操作（`do rm ...`）精准拦截。
+- **编辑服务器密码体验优化**：修复多语言环境下编辑已有服务器时密码被强制要求重填的问题，留空保存即可安全保留已有凭据。
+
 #### 构建产物
 
 请先安装 Node.js 和 npm。建议使用较新的 Node.js LTS 版本。进入项目根目录后安装依赖：
@@ -110,13 +119,13 @@ npm run package:mcp
 打包成功后，项目根目录会生成类似下面的文件：
 
 ```textile
-at-terminal-mcp-0.3.0.vsix
+at-terminal-mcp-0.3.3.vsix
 ```
 
 生成 .vsix 后，可以在 VS Code / Cursor / Kiro 等兼容 VS Code 插件的 IDE 中通过“从 VSIX 安装”安装，也可以使用命令行安装
 
 ```bash
-code --install-extension at-terminal-mcp-0.3.0.vsix
+code --install-extension at-terminal-mcp-0.3.3.vsix
 #如果安装基础版，则把文件名替换为实际生成的 at-terminal-*.vsix。
 ```
 

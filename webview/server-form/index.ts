@@ -171,10 +171,14 @@ function selectAuth(value: string): void {
   updateSummary();
 }
 
+function isEditMode(): boolean {
+  return form?.dataset.mode === 'edit';
+}
+
 function updateAuthFields(): void {
   const isPrivateKey = selectedAuth() === 'privateKey';
   privateKeyPath?.toggleAttribute('required', isPrivateKey);
-  password?.toggleAttribute('required', !isPrivateKey && !password?.closest('.auth-password-field')?.textContent?.includes('Leave blank'));
+  password?.toggleAttribute('required', !isPrivateKey && !isEditMode());
 
   for (const card of authCards) {
     const selected = card.dataset.authOption === selectedAuth();
@@ -362,6 +366,13 @@ function validatePayload(payload: Record<string, FormDataEntryValue>): boolean {
     setTesting(false);
     clearTestStatus();
     setError(i18nText('errorPrivateKey', 'Select or enter a private key path.'));
+    return false;
+  }
+  if (selectedAuth() === 'password' && !isEditMode() && !String(payload.password ?? '').trim()) {
+    setSaving(false);
+    setTesting(false);
+    clearTestStatus();
+    setError(i18nText('errorPasswordRequired', 'Password is required for new password-auth servers.'));
     return false;
   }
   if (jumpHostGroup?.value && !jumpHost?.value) {
