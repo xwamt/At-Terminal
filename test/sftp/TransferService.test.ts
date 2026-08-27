@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { SftpConflictError } from '../../src/sftp/SftpErrors';
 import { TransferService, type TransferReporter } from '../../src/sftp/TransferService';
+
+function recordingReporter() {
+  const successes: string[] = [];
+  const failures: string[] = [];
+  const progressLabels: string[] = [];
+  const reporter: TransferReporter = {
+    withProgress: async (label, task) => {
+      progressLabels.push(label);
+      return task({ report: () => undefined });
+    },
+    notifySuccess: async (message) => {
+      successes.push(message);
+    },
+    notifyFailure: async (message) => {
+      failures.push(message);
+    }
+  };
+  return { reporter, successes, failures, progressLabels };
+}
 
 describe('TransferService', () => {
   it('starts transfer jobs concurrently', async () => {
@@ -119,5 +139,45 @@ describe('TransferService', () => {
     ]);
 
     expect(result).toBe('rejected');
+  });
+
+  it('runs quiet jobs without a progress notification or success toast', async () => {
+    const { reporter, successes, failures, progressLabels } = recordingReporter();
+    const service = new TransferService(reporter);
+
+    const result = await service.run('rename', async () => 'renamed', { notification: 'quiet' });
+
+    expect(result).toBe('renamed');
+    expect(progressLabels).toEqual([]);
+    expect(successes).toEqual([]);
+    expect(failures).toEqual([]);
+  });
+
+  it('still notifies failures for quiet jobs', async () => {
+    const { reporter, failures } = recordingReporter();
+    const service = new TransferService(reporter);
+
+    await expect(
+      service.run(
+        'delete',
+        async () => {
+          throw new Error('permission denied');
+        },
+        { notification: 'quiet' }
+      )
+    ).rejects.toThrow('permission denied');
+    expect(failures).toEqual(['delete failed.']);
+  });
+
+  it('does not toast a failure for upload conflicts, which the UI resolves with a prompt', async () => {
+    const { reporter, failures } = recordingReporter();
+    const service = new TransferService(reporter);
+
+    await expect(
+      service.run('Upload /srv/app.conf', async () => {
+        throw new SftpConflictError('/srv/app.conf');
+      })
+    ).rejects.toThrow('already exists');
+    expect(failures).toEqual([]);
   });
 });

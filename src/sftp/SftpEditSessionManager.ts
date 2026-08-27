@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import * as vscode from 'vscode';
 import { formatError } from '../utils/errors';
@@ -27,7 +27,12 @@ export interface SftpEditSftpClient {
   stat(remotePath: string, serverId?: string): Promise<SftpFileStat>;
   readFile?(remotePath: string, maxBytes: number, serverId?: string): Promise<Buffer>;
   downloadFile(remotePath: string, localPath: string): Promise<void>;
-  uploadFile(localPath: string, remotePath: string, serverId?: string): Promise<void>;
+  uploadFile(
+    localPath: string,
+    remotePath: string,
+    serverId?: string,
+    options?: { overwrite?: boolean }
+  ): Promise<void>;
 }
 
 export interface SftpEditUi {
@@ -324,7 +329,11 @@ export class SftpEditSessionManager {
       }
       session.syncState = 'uploading';
     }
-    await this.options.sftp.uploadFile(session.localUri.fsPath, session.remotePath, session.serverId);
+    // Edit sessions always target a file that already exists remotely, and the stat check
+    // above is this flow's conflict handling, so the upload states the overwrite explicitly.
+    await this.options.sftp.uploadFile(session.localUri.fsPath, session.remotePath, session.serverId, {
+      overwrite: true
+    });
     const uploadedRemoteStat = await this.options.sftp.stat(session.remotePath, session.serverId);
     await this.verifyUploadedContent(session, currentRemoteStat, uploadedRemoteStat);
     session.baseRemoteStat = uploadedRemoteStat;
@@ -336,10 +345,12 @@ export class SftpEditSessionManager {
     preUploadStat: SftpFileStat,
     remoteStat: SftpFileStat
   ): Promise<void> {
-    const localContent = await readFile(session.localUri.fsPath);
-    if (remoteStat.size !== localContent.byteLength) {
+    // The size check only needs fs.stat. Reading the local file here would pull the entire
+    // buffer into memory on every save, even for files far too large to ever byte-compare.
+    const localStat = await stat(session.localUri.fsPath);
+    if (remoteStat.size !== localStat.size) {
       throw new Error(
-        `Remote sync verification failed for ${session.remotePath}: remote size is ${remoteStat.size} bytes, expected ${localContent.byteLength} bytes.`
+        `Remote sync verification failed for ${session.remotePath}: remote size is ${remoteStat.size} bytes, expected ${localStat.size} bytes.`
       );
     }
 
@@ -355,10 +366,11 @@ export class SftpEditSessionManager {
       return;
     }
 
-    if (localContent.byteLength > VERIFY_FULL_CONTENT_MAX_BYTES) {
+    if (localStat.size > VERIFY_FULL_CONTENT_MAX_BYTES) {
       return;
     }
 
+    const localContent = await readFile(session.localUri.fsPath);
     const remoteContent = await this.options.sftp.readFile(session.remotePath, localContent.byteLength, session.serverId);
     if (!remoteContent.equals(localContent)) {
       throw new Error(

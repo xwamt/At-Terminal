@@ -41,6 +41,15 @@ export class SftpFileTreeItem extends vscode.TreeItem {
     super(entry.name, vscode.TreeItemCollapsibleState.None);
     this.contextValue = disconnected ? 'sftpDisconnectedFile' : 'sftpFile';
     this.description = entry.size === undefined ? undefined : formatFileSize(entry.size);
-    this.tooltip = entry.path;
+    if (disconnected) {
+      this.tooltip = entry.path;
+      return;
+    }
+    this.tooltip = `${entry.path}\n${t('Click to preview. Edit opens a local copy that is uploaded back to the server on save.')}`;
+    this.command = {
+      command: 'sshManager.sftp.openPreview',
+      title: t('Preview Remote File'),
+      arguments: [this]
+    };
   }
 }

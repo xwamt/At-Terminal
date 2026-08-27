@@ -1,3 +1,5 @@
+import { isSftpConflictError } from './SftpErrors';
+
 export interface TransferProgress {
   report(event: { transferredBytes: number; totalBytes: number }): void;
 }
@@ -8,6 +10,15 @@ export interface TransferReporter {
   withProgress<T>(label: string, job: (progress: TransferProgress) => Promise<T>): Promise<T>;
   notifySuccess(message: string): Promise<void>;
   notifyFailure(message: string): Promise<void>;
+}
+
+export interface TransferRunOptions {
+  /**
+   * `quiet` is for tiny metadata operations (mkdir/rename/delete/create): no progress
+   * notification and no success toast -- the tree refresh already shows the result.
+   * Failures still notify. Real byte transfers stay `full`.
+   */
+  notification?: 'full' | 'quiet';
 }
 
 const noopProgress: TransferProgress = {
@@ -23,19 +34,26 @@ export class TransferService {
     }
   }
 
-  run<T>(label: string, job: TransferJob<T>): Promise<T> {
-    return this.runWithReporter(label, job);
+  run<T>(label: string, job: TransferJob<T>, options?: TransferRunOptions): Promise<T> {
+    return this.runWithReporter(label, job, options?.notification ?? 'full');
   }
 
-  private async runWithReporter<T>(label: string, job: TransferJob<T>): Promise<T> {
+  private async runWithReporter<T>(label: string, job: TransferJob<T>, notification: 'full' | 'quiet'): Promise<T> {
     try {
-      const result = this.reporter
-        ? await this.reporter.withProgress(label, job)
-        : await job(noopProgress);
-      void this.reporter?.notifySuccess(`${label} completed.`);
+      const result =
+        this.reporter && notification === 'full'
+          ? await this.reporter.withProgress(label, job)
+          : await job(noopProgress);
+      if (notification === 'full') {
+        void this.reporter?.notifySuccess(`${label} completed.`);
+      }
       return result;
     } catch (error) {
-      void this.reporter?.notifyFailure(`${label} failed.`);
+      // A conflict is not a failure: the caller maps it to an overwrite/skip prompt, so a
+      // "failed" toast right before that dialog would only mislead.
+      if (!isSftpConflictError(error)) {
+        void this.reporter?.notifyFailure(`${label} failed.`);
+      }
       throw error;
     }
   }
