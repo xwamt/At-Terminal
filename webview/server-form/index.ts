@@ -106,8 +106,6 @@ function currentAgentCommandTrust(): 'none' | 'policy' | 'full' {
   return 'none';
 }
 
-let lastSeenTrust: 'none' | 'policy' | 'full' | undefined;
-
 function trustHelpText(trust: 'none' | 'policy' | 'full'): string {
   if (trust === 'full') {
     return i18nText('trustHelpFull', 'Remote commands and SFTP writes run without a confirmation dialog.');
@@ -115,7 +113,7 @@ function trustHelpText(trust: 'none' | 'policy' | 'full'): string {
   if (trust === 'policy') {
     return i18nText(
       'trustHelpPolicy',
-      'Skip confirmation unless a stage changes state (rm, chmod, systemctl restart, apt, docker exec, iptables -F) or cannot be read (command substitution, file redirects). Quoted pipes and read forms such as docker ps and iptables -L run without asking. Commands the blocklist does not name run without asking.'
+      'State-changing commands on the blocklist (rm, chmod, systemctl restart, apt, docker exec, iptables -F) always ask.\nCommands not on the blocklist, including unknown commands, run without asking.\nCommands that cannot be read plainly (command substitution, file redirects) always ask.'
     );
   }
   return i18nText('trustHelpNone', 'Every remote command asks for confirmation.');
@@ -134,19 +132,15 @@ function updateTrustFields(): void {
   }
 
   if (background) {
+    // Only availability follows the trust level. The checked state is the user's
+    // choice and is never auto-toggled when trust changes; a disabled checkbox is
+    // excluded from the submit payload and the host clears it for untrusted servers.
     background.disabled = !trusted;
-    if (!trusted) {
-      background.checked = false;
-    } else if (lastSeenTrust !== undefined && lastSeenTrust !== trust) {
-      background.checked = trust === 'full';
-    }
   }
 
   if (help) {
     help.textContent = trustHelpText(trust);
   }
-
-  lastSeenTrust = trust;
 }
 
 let suppressNextGroupFocus = false;

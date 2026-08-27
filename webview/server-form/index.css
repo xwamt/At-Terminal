@@ -339,6 +339,11 @@ select:focus {
   line-height: 1.4;
 }
 
+/* Trust help copy is authored as short lines separated by \n. */
+.field-help {
+  white-space: pre-line;
+}
+
 .auth-card.is-selected .auth-card-copy {
   color: inherit;
 }

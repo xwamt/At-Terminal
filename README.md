@@ -5,7 +5,7 @@
 
 ### 文档入口
 
-[飞书文档](https://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd?from=from_copylinkhttps://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd?from=from_copylink)
+[飞书文档](https://my.feishu.cn/docx/BWuvdNdnHoVnzIx7BXEcbAK4nfd)
 
 - [Features](docs/features.md)
 - [Usage Guide](docs/usage.md)
@@ -53,21 +53,9 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 | Packaged `dist/hub.js` sync | Not included | Included |
 | Installable Agent Skills | Installed separately | Installed separately |
 
-|                              |             |                 |
-| ---------------------------- | ----------- | --------------- |
-| 能力                           | AT Terminal | AT Terminal MCP |
-| SSH 终端                       | 支持          | 支持              |
-| SFTP 文件工作区                   | 支持          | 支持              |
-| 远程文件本地编辑                     | 支持          | 支持              |
-| 资产导入导出                       | 支持          | 支持              |
-| AT Series MCP hub / bridge   | 不包含         | 支持              |
-| 打包 `hub.js` 同步               | 不包含         | 支持              |
-| MCP 配置安装命令                   | 不包含         | 支持              |
-| Agent 工具指导文件                 | 不包含         | 支持              |
-
 如果只需要在 IDE 内使用 SSH/SFTP，安装基础版 AT Terminal 即可。如果用户希望 GitHub Copilot Chat、Kiro、Cursor、Continue 等 Agent 调用远程命令或远程文件工具，应安装 AT Terminal MCP。
 
-### 后台连接授权（0.2.17）
+### 后台连接（Background connections）
 
 为适配当前 **Agent 窗口形态** 的 AI IDE（例如 Codex、Cursor Agent、Kiro 等：对话在独立 Agent 侧，IDE 更多承担扩展宿主角色），AT Terminal MCP 增加了按服务器维度的 **「允许后台连接（Allow background connections）」** 授权。
 
@@ -84,7 +72,7 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 从 **0.3.0** 起，共享 MCP Hub 已从本插件仓库拆分为独立开源包 [`@at-series/mcp-hub`](https://www.npmjs.com/package/@at-series/mcp-hub)：
 
 - **职责边界**：Hub 负责 AT Series 入口聚合、安装器与协议类型；本仓库只保留 AT Terminal 扩展、Bridge 发布与按需同步 `hub.js`。
-- **依赖方式**：通过 npm 公开 registry 声明依赖（当前 `^0.1.1`）。执行 `npm install` 即可拉取，**不再**需要克隆 Hub 仓库，也**不再**使用 `file:` 本地链接。
+- **依赖方式**：通过 npm 公开 registry 声明依赖（当前 `^0.3.2`）。执行 `npm install` 即可拉取，**不再**需要克隆 Hub 仓库，也**不再**使用 `file:` 本地链接。
 - **打包行为**：`npm run build:mcp` / `package:mcp` 会把已发布 Hub 中的运行时复制为 `dist/hub.js`，并写入 `dist/hub-version.json` 供选举同步使用。
 
 架构说明见 [ADR-004](docs/decisions/ADR-004-at-series-mcp-hub.md) 与 [ADR-005](docs/decisions/ADR-005-at-series-hub-adaptation.md)。
@@ -96,7 +84,7 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 - **依赖方式**：通过 npm 公开 registry **精确锁定**版本（当前 `"0.1.0"`，禁止 `^` / `~`）。执行 `npm install` 即可拉取，**不再**使用 `file:../at-series-command-policy`。
 - **接口规范**：该包 `docs/api.md`。本插件只做信任档映射与确认 UI。
 - **三档信任**：不信任（每条都弹窗，不加载策略包）、有限信任（懒加载策略包，仅 `allow` 免确认）、完全信任（不加载策略包，远程命令与 SFTP 写入均不弹窗）。
-- **分析范围**：Tree-sitter Bash 证明普通只读后才免确认；写操作、服务控制、敏感读、未知二进制、解析失败一律确认。`# Purpose:` 注释不授予权限。
+- **分析范围**：对每一段命令检查变更状态黑名单：写操作、服务控制等命中黑名单的阶段一律确认；无法安全解析（命令替换、文件重定向）一律确认；不在黑名单中的命令（包括未知命令）不弹窗直接运行。`# Purpose:` 注释不授予权限。
 
 #### 构建产物
 
@@ -161,9 +149,8 @@ code --install-extension at-terminal-mcp-0.3.4.vsix
 
 ### 功能总览
 
-|           |                                                |
-| --------- | ---------------------------------------------- |
 | 模块        | 能力                                             |
+| --------- | ---------------------------------------------- |
 | SSH 服务器管理 | 添加、编辑、删除、分组展示服务器配置，支持复制连接信息。                   |
 | SSH 连接    | 支持密码认证、私钥认证、keep-alive、断开、重连和独立终端标签页。          |
 | 主机信任      | 首次连接确认主机指纹，已信任主机指纹变化时阻止连接。                     |

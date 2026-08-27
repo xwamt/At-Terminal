@@ -64,6 +64,8 @@ await cp(join(root, 'docs', 'usage.md'), join(stage, 'docs', 'usage.md'));
 await cp(join(root, 'docs', 'usage.zh-CN.md'), join(stage, 'docs', 'usage.zh-CN.md'));
 await cp(join(root, 'docs', 'README.zh-CN.md'), join(stage, 'docs', 'README.zh-CN.md'));
 await cp(join(root, 'docs', 'mcp'), join(stage, 'docs', 'mcp'), { recursive: true });
+// README-base.md references docs/images screenshots; ship them when the directory exists.
+await cp(join(root, 'docs', 'images'), join(stage, 'docs', 'images'), { recursive: true }).catch(() => {});
 await cp(join(root, 'webview'), join(stage, 'webview'), { recursive: true });
 await cp(join(root, 'l10n'), join(stage, 'l10n'), { recursive: true }).catch(() => {});
 await cp(join(root, 'package.nls.json'), join(stage, 'package.nls.json')).catch(() => {});

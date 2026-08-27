@@ -77,10 +77,34 @@ export async function importAssetsCommand(options: ImportAssetsCommandOptions): 
   if (!source) {
     return;
   }
-  const password = await vscode.window.showInputBox({ prompt: t('Asset package password'), password: true });
-  if (!password) {
+
+  let envelope;
+  try {
+    envelope = parseAssetPackageEnvelope(JSON.parse(await readFile(source.fsPath, 'utf8')));
+  } catch (error) {
+    await vscode.window.showErrorMessage(localizeAssetImportError(error));
     return;
   }
+
+  // A wrong package password is recoverable, so keep asking instead of silently exiting.
+  let payload;
+  for (;;) {
+    const password = await vscode.window.showInputBox({ prompt: t('Asset package password'), password: true });
+    if (!password) {
+      return;
+    }
+    try {
+      payload = await decryptAssetPayload(envelope, password);
+      break;
+    } catch (error) {
+      const retryAction = t('Try Again');
+      const choice = await vscode.window.showErrorMessage(localizeAssetImportError(error), retryAction);
+      if (choice !== retryAction) {
+        return;
+      }
+    }
+  }
+
   const skipLabel = t('Skip existing servers');
   const overwriteLabel = t('Overwrite existing servers');
   const renameLabel = t('Keep both and rename imports');
@@ -95,8 +119,6 @@ export async function importAssetsCommand(options: ImportAssetsCommandOptions): 
   }
 
   try {
-    const envelope = parseAssetPackageEnvelope(JSON.parse(await readFile(source.fsPath, 'utf8')));
-    const payload = await decryptAssetPayload(envelope, password);
     await mkdir(options.privateKeyDirectory, { recursive: true });
     const summary = await applyAssetImport({
       payload,
@@ -112,8 +134,21 @@ export async function importAssetsCommand(options: ImportAssetsCommandOptions): 
       })
     );
   } catch (error) {
-    await vscode.window.showErrorMessage(formatError(error));
+    await vscode.window.showErrorMessage(localizeAssetImportError(error));
   }
+}
+
+/**
+ * AssetCrypto and the envelope parser throw English messages; the command layer maps
+ * the known recoverable case (wrong password / corrupted package) to a localized
+ * message and wraps everything else so the user still sees a translated frame.
+ */
+export function localizeAssetImportError(error: unknown): string {
+  const message = formatError(error);
+  if (message.includes('Invalid package password or corrupted asset package')) {
+    return t('Import failed: the package password is wrong or the package file is corrupted.');
+  }
+  return t('Import failed: {message}', { message });
 }
 
 export function assetPrivateKeyDirectory(context: vscode.ExtensionContext): string {
@@ -121,12 +156,25 @@ export function assetPrivateKeyDirectory(context: vscode.ExtensionContext): stri
 }
 
 async function askForConfirmedPassword(prompt: string): Promise<string | undefined> {
-  const password = await vscode.window.showInputBox({ prompt, password: true });
-  if (!password) {
-    return undefined;
+  for (;;) {
+    const password = await vscode.window.showInputBox({ prompt, password: true });
+    if (!password) {
+      return undefined;
+    }
+    const confirmation = await vscode.window.showInputBox({
+      prompt: t('Confirm asset package password'),
+      password: true
+    });
+    if (confirmation === password) {
+      return password;
+    }
+    // A typo used to abort the whole export silently; surface it and offer a redo.
+    const retryAction = t('Try Again');
+    const choice = await vscode.window.showErrorMessage(t('The passwords do not match.'), retryAction);
+    if (choice !== retryAction) {
+      return undefined;
+    }
   }
-  const confirmation = await vscode.window.showInputBox({ prompt: t('Confirm asset package password'), password: true });
-  return confirmation === password ? password : undefined;
 }
 
 function conflictStrategyFromLabel(

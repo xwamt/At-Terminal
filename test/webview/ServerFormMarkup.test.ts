@@ -152,8 +152,15 @@ describe('ServerFormPanel markup', () => {
     expect(script).toContain('function updateTrustFields(): void');
     expect(script).toContain("document.querySelector<HTMLSelectElement>('select[name=\"agentCommandTrust\"]')");
     expect(script).toContain("document.querySelector<HTMLInputElement>('input[name=\"backgroundConnectionAllowed\"]')");
-    expect(script).toContain("background.checked = trust === 'full'");
     expect(script).toContain('updateTrustFields()');
+  });
+
+  it('never auto-toggles the background connection checkbox when trust changes', () => {
+    const script = readFileSync(join(process.cwd(), 'webview/server-form/index.ts'), 'utf8');
+
+    expect(script).not.toContain("background.checked = trust === 'full'");
+    expect(script).not.toContain('background.checked = false');
+    expect(script).toContain('background.disabled = !trusted');
   });
 
   it('toggles password required based on form edit mode instead of localized DOM text', () => {
@@ -243,7 +250,9 @@ describe('ServerFormPanel markup', () => {
 
     expect(html).toContain('<option value="policy" selected>');
     expect(html).toContain(
-      'Skip confirmation unless a stage changes state (rm, chmod, systemctl restart, apt, docker exec, iptables -F) or cannot be read (command substitution, file redirects). Quoted pipes and read forms such as docker ps and iptables -L run without asking. Commands the blocklist does not name run without asking.'
+      'State-changing commands on the blocklist (rm, chmod, systemctl restart, apt, docker exec, iptables -F) always ask.\n' +
+        'Commands not on the blocklist, including unknown commands, run without asking.\n' +
+        'Commands that cannot be read plainly (command substitution, file redirects) always ask.'
     );
     expect(html).toContain('Agent commands: state-changing commands still ask');
   });

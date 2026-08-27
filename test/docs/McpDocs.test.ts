@@ -31,7 +31,8 @@ describe('MCP documentation', () => {
     expect(features).toContain('does not bypass SFTP write authorization');
     expect(features).toContain('SSH host key trust');
     expect(features).not.toContain('language model tools');
-    expect(usage).toContain('AT Terminal: Install MCP Config');
+    expect(usage).toContain('AT Terminal: Install/Repair MCP Config');
+    expect(usage).not.toContain('AT Terminal: Install MCP Config');
     expect(usage).toContain('~/.kiro/settings/mcp.json');
     expect(usage).toContain('.at-series/mcp/hub.js');
     expect(usage).toContain('AT Series');
@@ -44,9 +45,30 @@ describe('MCP documentation', () => {
     expect(chineseReadme).not.toContain('dist/mcp-server.js');
     expect(chineseFeatures).toContain('get_terminal_context');
     expect(chineseFeatures).toContain('Trust agent remote commands');
-    expect(chineseUsage).toContain('AT Terminal: Install MCP Config');
+    expect(chineseUsage).toContain('AT Terminal: Install/Repair MCP Config');
+    expect(chineseUsage).not.toContain('AT Terminal: Install MCP Config');
     expect(chineseUsage).toContain('~/.kiro/settings/mcp.json');
     expect(chineseUsage).toContain('.at-series/mcp/hub.js');
     expect(chineseUsage).not.toContain('dist/mcp-server.js');
+  });
+
+  it('does not advertise unimplemented rz/sz transfers in the feature docs', () => {
+    const features = readFileSync('docs/features.md', 'utf8');
+    const chineseFeatures = readFileSync('docs/features.zh-CN.md', 'utf8');
+
+    expect(features).not.toMatch(/\brz\b/);
+    expect(features).not.toMatch(/\bsz\b/);
+    expect(chineseFeatures).not.toMatch(/\brz\b/);
+    expect(chineseFeatures).not.toMatch(/\bsz\b/);
+  });
+
+  it('documents the idle disconnect setting and the current vsix version in the usage guides', () => {
+    const usage = readFileSync('docs/usage.md', 'utf8');
+    const chineseUsage = readFileSync('docs/usage.zh-CN.md', 'utf8');
+
+    expect(usage).toContain('sshManager.idleDisconnectMinutes');
+    expect(chineseUsage).toContain('sshManager.idleDisconnectMinutes');
+    expect(usage).toContain('at-terminal-mcp-0.3.4.vsix');
+    expect(chineseUsage).toContain('at-terminal-mcp-0.3.4.vsix');
   });
 });

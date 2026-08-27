@@ -28,7 +28,7 @@ npm run package:mcp
 安装 MCP 版：
 
 ```powershell
-code --install-extension .\at-terminal-mcp-0.3.0.vsix
+code --install-extension .\at-terminal-mcp-0.3.4.vsix
 ```
 
 Kiro 和 Cursor 可以通过各自 IDE 的扩展安装入口或兼容命令行安装 VSIX。
@@ -38,7 +38,7 @@ Kiro 和 Cursor 可以通过各自 IDE 的扩展安装入口或兼容命令行�
 在命令面板运行：
 
 ```text
-AT Terminal: Install MCP Config
+AT Terminal: Install/Repair MCP Config
 ```
 
 它会：
@@ -186,7 +186,7 @@ docs/mcp/continue-at-terminal-mcp.yaml
 
 ## Agent 访问
 
-安装 `at-terminal-mcp-*.vsix` 后，请为 IDE 配置 **AT Series** MCP（优先使用 `AT Terminal: Install MCP Config`）。`list_ssh_servers`、`get_terminal_context` 和 SFTP 工具通过共享 hub 暴露，而不是 VS Code 内置 LM 工具贡献。
+安装 `at-terminal-mcp-*.vsix` 后，请为 IDE 配置 **AT Series** MCP（优先使用 `AT Terminal: Install/Repair MCP Config`）。`list_ssh_servers`、`get_terminal_context` 和 SFTP 工具通过共享 hub 暴露，而不是 VS Code 内置 LM 工具贡献。
 
 示例提示词：
 
@@ -200,7 +200,7 @@ Use sftp_read_file to read /etc/os-release from the connected AT Terminal server
 
 1. 确认安装的是 MCP 版，不是基础版。
 2. Reload Window，并保持 AT Terminal MCP 已激活。
-3. 运行 `AT Terminal: Install MCP Config`。
+3. 运行 `AT Terminal: Install/Repair MCP Config`。
 4. 确认存在 `~/.at-series/mcp/hub.js`，且 MCP 条目名称为 `AT Series`。
 
 ## 命令
@@ -239,8 +239,10 @@ SFTP 命令：
 
 MCP 命令：
 
-- `AT Terminal: Install MCP Config`
-- `AT Terminal: Uninstall AT Series MCP Config`
+- `AT Terminal: Install/Repair MCP Config`
+- `AT Terminal: Uninstall MCP Config`
+
+所有命令在命令面板中都归属 `AT Terminal` 分类。
 
 ## 设置
 
@@ -248,7 +250,10 @@ MCP 命令：
 - `sshManager.terminalFontFamily`：终端字体。
 - `sshManager.scrollback`：终端滚动缓冲行数。
 - `sshManager.semanticHighlight`：对没有 ANSI 颜色的普通 SSH 输出启用前端语义高亮。
+- `sshManager.idleDisconnectMinutes`：SSH 终端空闲超过该分钟数后自动断开，`0` 表示关闭。
 - `sshManager.keepAliveInterval`：SSH keep-alive 间隔秒数，`0` 表示关闭。
+- `sshManager.zebraStripes`：在 SSH 终端中渲染斑马纹交替行背景，默认关闭。
+- `sshManager.sessionLogDirectory`：SSH 会话输出日志的保存目录，留空表示不记录。
 
 ## 开发
 

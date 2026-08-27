@@ -82,7 +82,7 @@ export class ServerFormPanel {
           summaryAgentFull: 'Agent commands: run without asking',
           trustHelpNone: 'Every remote command asks for confirmation.',
           trustHelpPolicy:
-            'Skip confirmation unless a stage changes state (rm, chmod, systemctl restart, apt, docker exec, iptables -F) or cannot be read (command substitution, file redirects). Quoted pipes and read forms such as docker ps and iptables -L run without asking. Commands the blocklist does not name run without asking.',
+            'State-changing commands on the blocklist (rm, chmod, systemctl restart, apt, docker exec, iptables -F) always ask.\nCommands not on the blocklist, including unknown commands, run without asking.\nCommands that cannot be read plainly (command substitution, file redirects) always ask.',
           trustHelpFull: 'Remote commands and SFTP writes run without a confirmation dialog.',
           hide: 'Hide',
           show: 'Show',
@@ -127,7 +127,7 @@ export async function handleServerFormMessage(
           canSelectFiles: true,
           canSelectFolders: false,
           canSelectMany: false,
-          title: 'Select SSH private key'
+          title: t('Select SSH private key')
         }));
       const selected = selections?.[0];
       if (selected) {
@@ -482,8 +482,10 @@ function trustHelp(trust: AgentCommandTrust): string {
     return t('Remote commands and SFTP writes run without a confirmation dialog.');
   }
   if (trust === 'policy') {
+    // Three lines that mirror the actual policy in toolCatalog/command-policy: blocklist
+    // hits ask, everything else (unknown commands included) runs, unreadable input asks.
     return t(
-      'Skip confirmation unless a stage changes state (rm, chmod, systemctl restart, apt, docker exec, iptables -F) or cannot be read (command substitution, file redirects). Quoted pipes and read forms such as docker ps and iptables -L run without asking. Commands the blocklist does not name run without asking.'
+      'State-changing commands on the blocklist (rm, chmod, systemctl restart, apt, docker exec, iptables -F) always ask.\nCommands not on the blocklist, including unknown commands, run without asking.\nCommands that cannot be read plainly (command substitution, file redirects) always ask.'
     );
   }
   return t('Every remote command asks for confirmation.');

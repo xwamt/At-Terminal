@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import {
   FAILED_NOTIFICATION_MS,
+  showErrorWithActions,
   showTimedNotification,
   TIMED_NOTIFICATION_MS
 } from '../../src/utils/notifications';
@@ -79,6 +80,22 @@ describe('notifications', () => {
     await Promise.resolve();
 
     expect(callerResumed).toBe(true);
+  });
+
+  it('shows persistent errors with action buttons and resolves the chosen action', async () => {
+    const showErrorMessage = vi
+      .spyOn(vscode.window, 'showErrorMessage')
+      .mockResolvedValue('Repair' as never);
+
+    await expect(showErrorWithActions('Hub sync failed', 'Repair', 'Dismiss')).resolves.toBe('Repair');
+
+    expect(showErrorMessage).toHaveBeenCalledWith('Hub sync failed', 'Repair', 'Dismiss');
+  });
+
+  it('resolves undefined when the persistent error is dismissed without an action', async () => {
+    vi.spyOn(vscode.window, 'showErrorMessage').mockResolvedValue(undefined as never);
+
+    await expect(showErrorWithActions('broken')).resolves.toBeUndefined();
   });
 
   it('picks an icon per notification kind', () => {

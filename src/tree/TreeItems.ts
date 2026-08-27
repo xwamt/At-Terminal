@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import type { ServerConfig } from '../config/schema';
 import { t } from '../i18n/t';
 
+export type ServerConnectionState = 'connected' | 'disconnected';
+
 export class GroupTreeItem extends vscode.TreeItem {
   constructor(public readonly groupName: string) {
     super(groupName, vscode.TreeItemCollapsibleState.Collapsed);
@@ -10,11 +12,23 @@ export class GroupTreeItem extends vscode.TreeItem {
 }
 
 export class ServerTreeItem extends vscode.TreeItem {
-  constructor(public readonly server: ServerConfig) {
+  constructor(
+    public readonly server: ServerConfig,
+    connectionState?: ServerConnectionState
+  ) {
     super(server.label, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'server';
-    this.iconPath = new vscode.ThemeIcon('server');
-    this.description = `${server.username}@${server.host}:${server.port}`;
+    const target = `${server.username}@${server.host}:${server.port}`;
+    if (connectionState === 'connected') {
+      this.iconPath = new vscode.ThemeIcon('vm-active');
+      this.description = `${target} · ${t('Connected')}`;
+    } else if (connectionState === 'disconnected') {
+      this.iconPath = new vscode.ThemeIcon('debug-disconnect');
+      this.description = target;
+    } else {
+      this.iconPath = new vscode.ThemeIcon('server');
+      this.description = target;
+    }
     this.tooltip = [
       server.label,
       t('Group: {group}', { group: server.group?.trim() || t('Default') }),
@@ -33,4 +47,3 @@ export class ServerTreeItem extends vscode.TreeItem {
     };
   }
 }
-

@@ -19,8 +19,14 @@ describe('package variants', () => {
     expect(baseManifest.dependencies['@modelcontextprotocol/sdk']).toBeUndefined();
   });
 
+  it('gives the MCP build its own display name', () => {
+    expect(mcpManifest.displayName).toBe('%atTerminal.mcpDisplayName%');
+    expect(baseManifest.displayName).toBe('%atTerminal.displayName%');
+    expect(mcpManifest.displayName).not.toBe(baseManifest.displayName);
+  });
+
   it('keeps the MCP manifest free of languageModelTools while retaining MCP activation', () => {
-    expect(mcpManifest.displayName).toBe('%atTerminal.displayName%');
+    expect(mcpManifest.displayName).toBe('%atTerminal.mcpDisplayName%');
     expect(mcpManifest.activationEvents).toContain('onStartupFinished');
     expect(mcpManifest.activationEvents.every((event: string) => !event.startsWith('onLanguageModelTool:'))).toBe(
       true
@@ -60,6 +66,90 @@ describe('package variants', () => {
     }
   });
 
+  it('contributes viewsWelcome for the empty Servers and SFTP Files views in every variant', () => {
+    for (const manifest of manifests) {
+      expect(manifest.contributes.viewsWelcome).toEqual([
+        { view: 'sshManager.servers', contents: '%atTerminal.viewsWelcome.servers%' },
+        { view: 'sshManager.sftpFiles', contents: '%atTerminal.viewsWelcome.sftpFiles%' }
+      ]);
+    }
+  });
+
+  it('categorizes every command under AT Terminal in every variant', () => {
+    for (const manifest of manifests) {
+      for (const command of manifest.contributes.commands) {
+        expect(command.category, command.command).toBe('AT Terminal');
+      }
+    }
+  });
+
+  it('contributes host key commands on the server context menu in every variant', () => {
+    for (const manifest of manifests) {
+      const commands = manifest.contributes.commands.map((entry: { command: string }) => entry.command);
+      expect(commands).toContain('sshManager.viewHostFingerprint');
+      expect(commands).toContain('sshManager.forgetHostKey');
+      expect(manifest.contributes.menus['view/item/context']).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            command: 'sshManager.viewHostFingerprint',
+            when: 'view == sshManager.servers && viewItem == server'
+          }),
+          expect.objectContaining({
+            command: 'sshManager.forgetHostKey',
+            when: 'view == sshManager.servers && viewItem == server'
+          })
+        ])
+      );
+    }
+  });
+
+  it('hides tree-item-only SFTP commands from the palette but keeps server commands available', () => {
+    for (const manifest of manifests) {
+      const palette = manifest.contributes.menus.commandPalette as Array<{ command: string; when: string }>;
+      const hidden = palette.filter((entry) => entry.when === 'false').map((entry) => entry.command);
+      expect(hidden).toEqual(
+        expect.arrayContaining([
+          'sshManager.sftp.download',
+          'sshManager.sftp.delete',
+          'sshManager.sftp.rename',
+          'sshManager.sftp.edit',
+          'sshManager.sftp.openPreview',
+          'sshManager.sftp.cdToDirectory',
+          'sshManager.sftp.copyPath'
+        ])
+      );
+      for (const command of [
+        'sshManager.connect',
+        'sshManager.editServer',
+        'sshManager.deleteServer',
+        'sshManager.disconnect',
+        'sshManager.reconnect',
+        'sshManager.copyHost'
+      ]) {
+        expect(hidden, command).not.toContain(command);
+      }
+    }
+  });
+
+  it('declares the zebraStripes and sessionLogDirectory settings identically in every variant', () => {
+    for (const manifest of manifests) {
+      const properties = manifest.contributes.configuration.properties;
+      expect(properties['sshManager.zebraStripes']).toEqual({
+        type: 'boolean',
+        default: false,
+        description: '%atTerminal.config.zebraStripes.description%'
+      });
+      expect(properties['sshManager.sessionLogDirectory']).toEqual({
+        type: 'string',
+        default: '',
+        description: '%atTerminal.config.sessionLogDirectory.description%'
+      });
+      for (const [key, value] of Object.entries(properties) as Array<[string, { description?: string }]>) {
+        expect(value.description, key).toMatch(/^%atTerminal\.config\.[\w.]+\.description%$/);
+      }
+    }
+  });
+
   it('does not build a per-plugin mcp-server entry', () => {
     expect(buildConfig).toContain('--variant=mcp');
     expect(buildConfig).not.toContain('src/mcp/server.ts');
@@ -96,7 +186,7 @@ describe('package variants', () => {
     expect(packageScript).toContain('RUNTIME_DEPENDENCIES');
     expect(packageScript).toContain("'ssh2'");
     expect(packageScript).toContain("'--omit=optional'");
-    expect(packageScript).not.toContain("join(root, 'docs', 'images')");
+    expect(packageScript).toContain("join(root, 'docs', 'images')");
     expect(packageScript).toContain("join(root, 'docs', 'features.md')");
     expect(packageScript).toContain("join(root, 'docs', 'features.zh-CN.md')");
     expect(packageScript).toContain("join(root, 'docs', 'usage.zh-CN.md')");

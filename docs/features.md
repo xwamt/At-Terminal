@@ -14,7 +14,6 @@ The MCP build still includes the base AT Terminal workflow:
 - SFTP create, rename, delete, copy path, and preview.
 - Local editing for remote files with upload-on-save.
 - Terminal font, scrollback, semantic highlighting, and keep-alive settings.
-- `rz`/`sz` sequence detection.
 
 ## SSH Terminal
 
@@ -77,7 +76,7 @@ AT Terminal MCP publishes tools through the shared **AT Series** hub (`~/.at-ser
 - All SSH and SFTP connect paths verify host keys (unknown hosts prompt; changed hosts are blocked).
 - Bridges publish into the AT Series registry under `~/.at-series/bridges/<hostApp>/`.
 - Bridge requests validate JSON schemas and enforce a maximum body size (2 MiB).
-- `run_remote_command` confirmation follows the server trust dropdown (`Trust agent remote commands`). Untrusted always asks. Limited trust loads `@at-series/command-policy@0.1.0` (pinned exact npm version, no `^`) and skips the prompt only when the evaluator returns `allow` for a proven ordinary read. Writes, service control, sensitive reads, unknown binaries, parse failures, and anything the engine cannot prove are `review` and still ask. `# Purpose:` comments never grant authority; quoted multiline scripts and static `sudo` / `python3 -c` / `sqlite3` payloads are analyzed instead of blocked by name. Full trust never asks.
+- `run_remote_command` confirmation follows the server trust dropdown (`Trust agent remote commands`). Untrusted always asks. Limited trust loads `@at-series/command-policy@0.1.0` (pinned exact npm version, no `^`) and checks every stage of a pipeline or chain against a blocklist of state-changing programs: blocklisted stages (file writes, permissions, packages, services, `docker exec`, `iptables -F`) still ask, and a command whose name cannot be read plainly (command substitution, file redirects, unclosed quotes) always asks. Commands that miss the blocklist — including unknown commands — run without a prompt under limited trust. `# Purpose:` comments never grant authority; quoted multiline scripts and static `sudo` / `python3 -c` / `sqlite3` payloads are analyzed instead of blocked by name. Full trust never asks.
 - Limited trust does not bypass SFTP write authorization. Full trust skips both remote-command and SFTP write confirmation, including sensitive paths. No trust level bypasses SSH host key trust.
 - Writes outside the directory the SFTP session was opened in are highlighted in the prompt and cannot be granted for the whole session.
 - Sensitive paths (`~/.ssh`, `/etc`, `/usr`, `/root`, `*.service`, `authorized_keys`, `sudoers*`, `crontab`) always require a second confirmation and are never remembered.

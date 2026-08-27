@@ -14,7 +14,6 @@ MCP 版仍然包含基础版工作流：
 - SFTP 新建、重命名、删除、复制路径和预览。
 - 远程文件本地编辑，并在保存时上传同步。
 - 终端字体、滚动缓冲、语义高亮和 keep-alive 设置。
-- `rz`/`sz` 序列检测。
 
 ## SSH 终端
 
@@ -73,7 +72,7 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 
 ## 安全行为
 
-- `run_remote_command` 确认跟随服务器信任下拉（`Trust agent remote commands`）。**不信任**每条都弹窗。**有限信任**会加载 npm 精确依赖 `@at-series/command-policy@0.1.0`（禁止 `^`），仅当分析器返回 `allow`（已证明的普通只读）时免确认。写操作、服务控制、敏感读、未知二进制、解析失败以及无法证明的语义一律 `review` 并弹窗。`# Purpose:` 注释不授予权限；带引号的多行脚本以及静态 `sudo` / `python3 -c` / `sqlite3` 载荷会进入分析，而不是按包装命令名一刀切拦截。**完全信任**远程命令与 SFTP 写入都不弹窗。
+- `run_remote_command` 确认跟随服务器信任下拉（`Trust agent remote commands`）。**不信任**每条都弹窗。**有限信任**会加载 npm 精确依赖 `@at-series/command-policy@0.1.0`（禁止 `^`），对管道/链式命令的每一段检查变更状态黑名单：命中黑名单的阶段（写文件、改权限、装包、服务控制、`docker exec`、`iptables -F`）仍会弹窗；无法安全解析的命令（命令替换、文件重定向、未闭合引号）总是弹窗。**不在黑名单中的命令（包括未知命令）在有限信任下不弹窗直接运行。**`# Purpose:` 注释不授予权限；带引号的多行脚本以及静态 `sudo` / `python3 -c` / `sqlite3` 载荷会进入分析，而不是按包装命令名一刀切拦截。**完全信任**远程命令与 SFTP 写入都不弹窗。
 - 有限信任不会跳过 SFTP 写入授权。完全信任会跳过远程命令确认和 SFTP 写入确认（含敏感路径）。任何信任档都不会跳过 SSH 主机指纹信任。
 - Bridge 发布到 AT Series 注册表 `~/.at-series/bridges/<hostApp>/`。
 - SFTP 写入按「目录」授权：弹窗提供 `Allow Once`（默认）、`Allow This Folder For 15 Minutes`、`Allow This Folder For The Session` 三档，任何一档都只覆盖用户当时看到的那个目录，不会覆盖整台服务器。

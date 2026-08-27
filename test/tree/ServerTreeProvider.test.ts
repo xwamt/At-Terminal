@@ -39,6 +39,35 @@ describe('ServerTreeProvider', () => {
     expect(prodChildren.map((item) => item.server.label)).toEqual(['A', 'C']);
   });
 
+  it('marks connected servers with the active icon and a Connected description suffix', () => {
+    const item = new ServerTreeItem(server('a', 'A', 'prod'), 'connected');
+
+    expect(item.iconPath).toEqual(expect.objectContaining({ id: 'vm-active' }));
+    expect(item.description).toBe('deploy@a.example.com:22 · Connected');
+  });
+
+  it('marks servers with only disconnected terminals with the disconnect icon', () => {
+    const item = new ServerTreeItem(server('a', 'A', 'prod'), 'disconnected');
+
+    expect(item.iconPath).toEqual(expect.objectContaining({ id: 'debug-disconnect' }));
+    expect(item.description).toBe('deploy@a.example.com:22');
+  });
+
+  it('reads connection states from the provider callback when building server items', async () => {
+    const provider = new ServerTreeProvider(
+      { listServers: async () => [server('a', 'A', 'prod'), server('b', 'B', 'prod')] },
+      () => new Map([['a', 'connected' as const]])
+    );
+
+    const roots = (await provider.getChildren()) as GroupTreeItem[];
+    const children = (await provider.getChildren(roots[0])) as ServerTreeItem[];
+
+    expect(children[0].iconPath).toEqual(expect.objectContaining({ id: 'vm-active' }));
+    expect(children[0].description).toContain('Connected');
+    expect(children[1].iconPath).toEqual(expect.objectContaining({ id: 'server' }));
+    expect(children[1].description).not.toContain('Connected');
+  });
+
   it('shows non-sensitive server metadata in server tree items', () => {
     const item = new ServerTreeItem({
       id: 'server-1',

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { ServerConfig } from '../config/schema';
-import { GroupTreeItem, ServerTreeItem } from './TreeItems';
+import { GroupTreeItem, ServerTreeItem, type ServerConnectionState } from './TreeItems';
 import { t } from '../i18n/t';
 
 export interface ServerListSource {
@@ -11,7 +11,10 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<GroupTreeItem
   private readonly changed = new vscode.EventEmitter<GroupTreeItem | ServerTreeItem | undefined>();
   readonly onDidChangeTreeData = this.changed.event;
 
-  constructor(private readonly source: ServerListSource) {}
+  constructor(
+    private readonly source: ServerListSource,
+    private readonly connectionStates?: () => ReadonlyMap<string, ServerConnectionState>
+  ) {}
 
   refresh(): void {
     this.changed.fire(undefined);
@@ -29,10 +32,11 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<GroupTreeItem
         .map((group) => new GroupTreeItem(group));
     }
     if (element instanceof GroupTreeItem) {
+      const states = this.connectionStates?.();
       return servers
         .filter((server) => this.groupName(server) === element.groupName)
         .sort((a, b) => a.label.localeCompare(b.label))
-        .map((server) => new ServerTreeItem(server));
+        .map((server) => new ServerTreeItem(server, states?.get(server.id)));
     }
     return [];
   }
@@ -42,4 +46,3 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<GroupTreeItem
     return group && group.length > 0 ? group : t('Default');
   }
 }
-

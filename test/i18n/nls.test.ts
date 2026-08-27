@@ -132,13 +132,18 @@ describe('package.json', () => {
     }
   });
 
-  it('leaves no nls key unused in package.mcp.json or package.base.json', () => {
-    const mcpStrings = stringValuesOf(readJson<unknown>('package.mcp.json'));
-    const mcpPlaceholders = mcpStrings
+  it('leaves no nls key unused across package.mcp.json and package.base.json', () => {
+    // The base build keeps %atTerminal.displayName% while the MCP build uses
+    // %atTerminal.mcpDisplayName%, so a key only has to be used by one variant.
+    const variantStrings = [
+      ...stringValuesOf(readJson<unknown>('package.mcp.json')),
+      ...stringValuesOf(readJson<unknown>('package.base.json'))
+    ];
+    const variantPlaceholders = variantStrings
       .map((value) => WHOLE_PLACEHOLDER.exec(value)?.[1])
       .filter((key): key is string => key !== undefined);
     for (const key of Object.keys(english)) {
-      expect(mcpPlaceholders, key).toContain(key);
+      expect(variantPlaceholders, key).toContain(key);
     }
   });
 });

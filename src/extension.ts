@@ -28,7 +28,7 @@ import { SftpTreeProvider } from './tree/SftpTreeProvider';
 import { SftpDirectoryTreeItem, SftpFileTreeItem } from './tree/SftpTreeItems';
 import { GroupTreeItem, ServerTreeItem } from './tree/TreeItems';
 import { formatError } from './utils/errors';
-import { showTimedNotification } from './utils/notifications';
+import { showErrorWithActions, showTimedNotification } from './utils/notifications';
 import { ServerFormPanel } from './webview/ServerFormPanel';
 import { TerminalPanel } from './webview/TerminalPanel';
 import { t } from './i18n/t';
@@ -38,8 +38,10 @@ let extensionCleanup: { dispose(): void } | undefined;
 export function activate(context: vscode.ExtensionContext): void {
   const configManager = new ConfigManager(context.globalState, context.secrets);
   const hostKeyStore = new HostKeyStore(context.globalState);
-  const treeProvider = new ServerTreeProvider(configManager);
   const terminalContext = new TerminalContextRegistry();
+  const treeProvider = new ServerTreeProvider(configManager, () =>
+    serverConnectionStates(terminalContext.getSnapshot().knownTerminals)
+  );
   const hostKeyVerifier = {
     async verify(host: string, port: number, fingerprint: string): Promise<boolean> {
       const status = await hostKeyStore.check(host, port, fingerprint);
@@ -47,15 +49,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return true;
       }
       if (status === 'changed') {
-        showTimedNotification(
-          t('Host key for {host}:{port} changed. Connection blocked. Fingerprint: {fingerprint}', {
-            host,
-            port,
-            fingerprint
-          }),
-          'error'
-        );
-        return false;
+        return promptChangedHostKey(host, port, fingerprint, hostKeyStore);
       }
       const trustAction = t('Trust and Connect');
       const answer = await vscode.window.showWarningMessage(
@@ -113,9 +107,12 @@ export function activate(context: vscode.ExtensionContext): void {
     if (terminalContext.getActive()?.terminalId !== changedContext.terminalId) {
       sftpManager.syncTerminalContext(changedContext);
     }
+    // Connection state feeds the Servers tree icon/description.
+    treeProvider.refresh();
   });
   terminalContext.onDidRemoveContext((terminalId) => {
     sftpManager.removeTerminalContext(terminalId);
+    treeProvider.refresh();
   });
 
   let bridgeServer: BridgeServer | undefined;
@@ -145,12 +142,17 @@ export function activate(context: vscode.ExtensionContext): void {
       })
       .catch((error) => {
         console.error('AT Terminal hub sync failed:', formatError(error));
-        showTimedNotification(
+        const repairAction = t('Repair');
+        void showErrorWithActions(
           t('AT Series hub sync failed: {message}. MCP may not start until Repair succeeds.', {
             message: formatError(error)
           }),
-          'warning'
-        );
+          repairAction
+        ).then((choice) => {
+          if (choice === repairAction) {
+            void vscode.commands.executeCommand('sshManager.installMcpConfig');
+          }
+        });
         throw error;
       });
     const sftpWriteAuthorizer = createProductionSftpWriteAuthorizer();
@@ -177,9 +179,8 @@ export function activate(context: vscode.ExtensionContext): void {
           : undefined
     });
     void bridgeServer.start().catch((error) => {
-      showTimedNotification(
-        t('AT Terminal MCP bridge failed to start: {message}', { message: formatError(error) }),
-        'warning'
+      void showErrorWithActions(
+        t('AT Terminal MCP bridge failed to start: {message}', { message: formatError(error) })
       );
     });
     void hubReady
@@ -190,19 +191,29 @@ export function activate(context: vscode.ExtensionContext): void {
         })
       )
       .catch((error) => {
-        showTimedNotification(
+        const repairAction = t('Repair');
+        void showErrorWithActions(
           t('AT Series MCP config could not be updated: {message}', { message: formatError(error) }),
-          'warning'
-        );
+          repairAction
+        ).then((choice) => {
+          if (choice === repairAction) {
+            void vscode.commands.executeCommand('sshManager.installMcpConfig');
+          }
+        });
       });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
       try {
         await syncPackagedHub(context);
       } catch (error) {
-        showTimedNotification(
+        const repairAction = t('Repair');
+        void showErrorWithActions(
           t('AT Series hub sync failed: {message}', { message: formatError(error) }),
-          'error'
-        );
+          repairAction
+        ).then((choice) => {
+          if (choice === repairAction) {
+            void vscode.commands.executeCommand('sshManager.installMcpConfig');
+          }
+        });
         return;
       }
       const result = await ensureAtSeriesConfigForCurrentIde({
@@ -217,9 +228,8 @@ export function activate(context: vscode.ExtensionContext): void {
         );
         return;
       }
-      showTimedNotification(
-        t('No supported IDE MCP config target was detected. Open a workspace to install Continue config.'),
-        'warning'
+      void vscode.window.showWarningMessage(
+        t('No supported IDE MCP config target was detected. Open a workspace to install Continue config.')
       );
     });
     uninstallMcpConfigCommand = vscode.commands.registerCommand('sshManager.uninstallAtSeriesMcpConfig', async () => {
@@ -235,9 +245,8 @@ export function activate(context: vscode.ExtensionContext): void {
         showTimedNotification(t('AT Series MCP config was not present.'));
         return;
       }
-      showTimedNotification(
-        t('No supported IDE MCP config target was detected. Open a workspace to uninstall Continue config.'),
-        'warning'
+      void vscode.window.showWarningMessage(
+        t('No supported IDE MCP config target was detected. Open a workspace to uninstall Continue config.')
       );
     });
   }
@@ -301,10 +310,11 @@ export function activate(context: vscode.ExtensionContext): void {
       );
     }),
     vscode.commands.registerCommand('sshManager.editServer', async (item?: ServerTreeItem) => {
-      if (!item) {
+      const picked = item?.server ?? (await pickServer(configManager));
+      if (!picked) {
         return;
       }
-      const server = await configManager.getServer(item.server.id);
+      const server = await configManager.getServer(picked.id);
       if (server) {
         await ServerFormPanel.open(
           context,
@@ -322,45 +332,108 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     vscode.commands.registerCommand('sshManager.deleteServer', async (item?: ServerTreeItem) => {
-      if (!item) {
+      const server = item?.server ?? (await pickServer(configManager));
+      if (!server) {
         return;
       }
-      const references = await configManager.findJumpHostReferences(item.server.id);
+      const references = await configManager.findJumpHostReferences(server.id);
       if (references.length > 0) {
-        showTimedNotification(formatJumpHostDeleteBlockMessage(item.server, references), 'warning');
+        void vscode.window.showWarningMessage(formatJumpHostDeleteBlockMessage(server, references));
         return;
       }
       const deleteAction = t('Delete');
       const answer = await vscode.window.showWarningMessage(
-        t('Delete SSH server "{label}"?', { label: item.server.label }),
+        t('Delete SSH server "{label}"?', { label: server.label }),
         { modal: true },
         deleteAction
       );
       if (answer === deleteAction) {
-        await deleteServerAndTrust.remove(item.server, { configManager, hostKeyStore });
+        await deleteServerAndTrust.remove(server, { configManager, hostKeyStore });
         treeProvider.refresh();
       }
     }),
-    vscode.commands.registerCommand('sshManager.connect', (item?: ServerTreeItem) => {
-      if (!item) {
+    vscode.commands.registerCommand('sshManager.connect', async (item?: ServerTreeItem) => {
+      const server = item?.server ?? (await pickServer(configManager));
+      if (!server) {
         return;
       }
-      TerminalPanel.open(context, item.server, configManager, hostKeyVerifier, terminalContext);
+      TerminalPanel.open(context, server, configManager, hostKeyVerifier, terminalContext);
     }),
     vscode.commands.registerCommand('sshManager.copyHost', async (item?: ServerTreeItem) => {
-      if (!item) {
+      const server = item?.server ?? (await pickServer(configManager));
+      if (!server) {
         return;
       }
-      await vscode.env.clipboard.writeText(`${item.server.username}@${item.server.host}:${item.server.port}`);
+      await vscode.env.clipboard.writeText(`${server.username}@${server.host}:${server.port}`);
+    }),
+    vscode.commands.registerCommand('sshManager.viewHostFingerprint', async (item?: ServerTreeItem) => {
+      const server = item?.server ?? (await pickServer(configManager));
+      if (!server) {
+        return;
+      }
+      const trusted = hostKeyStore.getTrusted(server.host, server.port);
+      if (!trusted) {
+        void vscode.window.showInformationMessage(
+          t('No trusted host key is stored for {host}:{port}. The next connection will ask to trust the fingerprint.', {
+            host: server.host,
+            port: server.port
+          })
+        );
+        return;
+      }
+      const copyAction = t('Copy Fingerprint');
+      const choice = await vscode.window.showInformationMessage(
+        t('Stored fingerprint for {host}:{port}: {fingerprint}', {
+          host: server.host,
+          port: server.port,
+          fingerprint: trusted.fingerprint
+        }),
+        copyAction
+      );
+      if (choice === copyAction) {
+        await vscode.env.clipboard.writeText(trusted.fingerprint);
+      }
+    }),
+    vscode.commands.registerCommand('sshManager.forgetHostKey', async (item?: ServerTreeItem) => {
+      const server = item?.server ?? (await pickServer(configManager));
+      if (!server) {
+        return;
+      }
+      if (!hostKeyStore.getTrusted(server.host, server.port)) {
+        void vscode.window.showInformationMessage(
+          t('No trusted host key is stored for {host}:{port}. The next connection will ask to trust the fingerprint.', {
+            host: server.host,
+            port: server.port
+          })
+        );
+        return;
+      }
+      await hostKeyStore.forget(server.host, server.port);
+      showTimedNotification(
+        t('Forgot the host key for {host}:{port}. The next connection will ask to trust the fingerprint again.', {
+          host: server.host,
+          port: server.port
+        })
+      );
     }),
     vscode.commands.registerCommand('sshManager.refresh', () => {
       treeProvider.refresh();
     }),
     vscode.commands.registerCommand('sshManager.disconnect', () => {
-      TerminalPanel.getActive()?.disconnect();
+      const active = TerminalPanel.getActive();
+      if (!active) {
+        void vscode.window.showInformationMessage(t('No active SSH terminal'));
+        return;
+      }
+      active.disconnect();
     }),
     vscode.commands.registerCommand('sshManager.reconnect', async () => {
-      await TerminalPanel.getActive()?.reconnect();
+      const active = TerminalPanel.getActive();
+      if (!active) {
+        void vscode.window.showInformationMessage(t('No active SSH terminal'));
+        return;
+      }
+      await active.reconnect();
     }),
     vscode.commands.registerCommand('sshManager.sftp.refresh', () => {
       sftpTreeProvider.refresh();
@@ -518,8 +591,111 @@ async function runSftpCommand(command: () => Promise<void>): Promise<void> {
   try {
     await command();
   } catch (error) {
-    showTimedNotification(formatError(error), 'error');
+    // Errors stay on screen until dismissed; only success toasts self-dismiss.
+    void vscode.window.showErrorMessage(formatError(error));
   }
+}
+
+/**
+ * A changed host key blocks the connection by default. Instead of a dead end, the
+ * persistent error offers explicit ways out: inspect the stored fingerprint, trust the
+ * new key, or forget the stored key so the next connection goes through the normal
+ * first-use trust prompt. Nothing is ever trusted automatically.
+ */
+export async function promptChangedHostKey(
+  host: string,
+  port: number,
+  fingerprint: string,
+  hostKeyStore: Pick<HostKeyStore, 'trust' | 'forget' | 'getTrusted'>
+): Promise<boolean> {
+  const viewAction = t('View Fingerprint');
+  const trustAction = t('Trust New Key');
+  const forgetAction = t('Forget and Reconnect');
+  for (;;) {
+    const choice = await vscode.window.showErrorMessage(
+      t('Host key for {host}:{port} changed. The connection stays blocked until you trust the new key or forget the stored one. New fingerprint: {fingerprint}', {
+        host,
+        port,
+        fingerprint
+      }),
+      viewAction,
+      trustAction,
+      forgetAction
+    );
+    if (choice === viewAction) {
+      const trusted = hostKeyStore.getTrusted(host, port);
+      await vscode.window.showInformationMessage(
+        trusted
+          ? t('Stored fingerprint for {host}:{port}: {fingerprint}', {
+              host,
+              port,
+              fingerprint: trusted.fingerprint
+            })
+          : t('No trusted host key is stored for {host}:{port}. The next connection will ask to trust the fingerprint.', {
+              host,
+              port
+            })
+      );
+      continue;
+    }
+    if (choice === trustAction) {
+      await hostKeyStore.trust(host, port, fingerprint);
+      return true;
+    }
+    if (choice === forgetAction) {
+      await hostKeyStore.forget(host, port);
+      showTimedNotification(
+        t('Forgot the host key for {host}:{port}. The next connection will ask to trust the fingerprint again.', {
+          host,
+          port
+        })
+      );
+      return false;
+    }
+    return false;
+  }
+}
+
+async function pickServer(
+  configManager: Pick<ConfigManager, 'listServers'>
+): Promise<ServerConfig | undefined> {
+  const servers = await configManager.listServers();
+  if (servers.length === 0) {
+    void vscode.window.showInformationMessage(
+      t('No SSH servers configured yet. Run "SSH: Add Server" to create one.')
+    );
+    return undefined;
+  }
+  const picked = await vscode.window.showQuickPick(
+    servers.map((server) => ({
+      label: server.label,
+      description: `${server.username}@${server.host}:${server.port}`,
+      server
+    })),
+    { placeHolder: t('Select an SSH server') }
+  );
+  return picked?.server;
+}
+
+export type ServerConnectionState = 'connected' | 'disconnected';
+
+/**
+ * Reduces terminal summaries to one state per server: any connected terminal wins;
+ * known-but-disconnected terminals mark the server as disconnected; servers without a
+ * terminal stay absent so the tree keeps their neutral icon.
+ */
+export function serverConnectionStates(
+  terminals: ReadonlyArray<{ serverId: string; connected: boolean }>
+): Map<string, ServerConnectionState> {
+  const states = new Map<string, ServerConnectionState>();
+  for (const terminal of terminals) {
+    if (terminal.connected) {
+      states.set(terminal.serverId, 'connected');
+    } else if (!states.has(terminal.serverId)) {
+      states.set(terminal.serverId, 'disconnected');
+    }
+  }
+  return states;
 }
 
 function getTargetDirectory(

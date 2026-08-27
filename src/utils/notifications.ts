@@ -38,3 +38,12 @@ export function showTimedNotification(
 export function delay(durationMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
+
+/**
+ * Shows a persistent error notification with optional action buttons and resolves with
+ * the chosen action title (or `undefined` when dismissed). Errors must stay on screen
+ * until the user reacts; the self-dismissing toast above is only for success/info.
+ */
+export function showErrorWithActions(message: string, ...actions: string[]): Thenable<string | undefined> {
+  return vscode.window.showErrorMessage(message, ...actions);
+}

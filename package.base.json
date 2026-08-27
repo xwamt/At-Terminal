@@ -44,117 +44,149 @@
       {
         "command": "sshManager.addServer",
         "title": "%atTerminal.command.addServer.title%",
-        "icon": "$(add)"
+        "icon": "$(add)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.editServer",
         "title": "%atTerminal.command.editServer.title%",
-        "icon": "$(edit)"
+        "icon": "$(edit)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.deleteServer",
         "title": "%atTerminal.command.deleteServer.title%",
-        "icon": "$(trash)"
+        "icon": "$(trash)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.connect",
-        "title": "%atTerminal.command.connect.title%"
+        "title": "%atTerminal.command.connect.title%",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.disconnect",
-        "title": "%atTerminal.command.disconnect.title%"
+        "title": "%atTerminal.command.disconnect.title%",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.reconnect",
-        "title": "%atTerminal.command.reconnect.title%"
+        "title": "%atTerminal.command.reconnect.title%",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.copyHost",
         "title": "%atTerminal.command.copyHost.title%",
-        "icon": "$(copy)"
+        "icon": "$(copy)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.refresh",
         "title": "%atTerminal.command.refresh.title%",
-        "icon": "$(refresh)"
+        "icon": "$(refresh)",
+        "category": "AT Terminal"
+      },
+      {
+        "command": "sshManager.viewHostFingerprint",
+        "title": "%atTerminal.command.viewHostFingerprint.title%",
+        "category": "AT Terminal"
+      },
+      {
+        "command": "sshManager.forgetHostKey",
+        "title": "%atTerminal.command.forgetHostKey.title%",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.refresh",
         "title": "%atTerminal.command.sftp.refresh.title%",
-        "icon": "$(refresh)"
+        "icon": "$(refresh)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.upload",
         "title": "%atTerminal.command.sftp.upload.title%",
-        "icon": "$(cloud-upload)"
+        "icon": "$(cloud-upload)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.download",
         "title": "%atTerminal.command.sftp.download.title%",
-        "icon": "$(cloud-download)"
+        "icon": "$(cloud-download)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.delete",
         "title": "%atTerminal.command.sftp.delete.title%",
-        "icon": "$(trash)"
+        "icon": "$(trash)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.rename",
         "title": "%atTerminal.command.sftp.rename.title%",
-        "icon": "$(edit)"
+        "icon": "$(edit)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.newFile",
         "title": "%atTerminal.command.sftp.newFile.title%",
-        "icon": "$(new-file)"
+        "icon": "$(new-file)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.newFolder",
         "title": "%atTerminal.command.sftp.newFolder.title%",
-        "icon": "$(new-folder)"
+        "icon": "$(new-folder)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.copyPath",
         "title": "%atTerminal.command.sftp.copyPath.title%",
-        "icon": "$(copy)"
+        "icon": "$(copy)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.edit",
         "title": "%atTerminal.command.sftp.edit.title%",
-        "icon": "$(edit)"
+        "icon": "$(edit)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.openPreview",
         "title": "%atTerminal.command.sftp.openPreview.title%",
-        "icon": "$(open-preview)"
+        "icon": "$(open-preview)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.cdToDirectory",
         "title": "%atTerminal.command.sftp.cdToDirectory.title%",
-        "icon": "$(terminal)"
+        "icon": "$(terminal)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.goToPath",
         "title": "%atTerminal.command.sftp.goToPath.title%",
-        "icon": "$(folder-opened)"
+        "icon": "$(folder-opened)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.sftp.goUp",
         "title": "%atTerminal.command.sftp.goUp.title%",
-        "icon": "$(arrow-up)"
+        "icon": "$(arrow-up)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.exportAssets",
         "title": "%atTerminal.command.exportAssets.title%",
-        "icon": "$(cloud-upload)"
+        "icon": "$(cloud-upload)",
+        "category": "AT Terminal"
       },
       {
         "command": "sshManager.importAssets",
         "title": "%atTerminal.command.importAssets.title%",
-        "icon": "$(cloud-download)"
+        "icon": "$(cloud-download)",
+        "category": "AT Terminal"
       }
     ],
-
     "menus": {
       "view/title": [
         {
@@ -220,6 +252,16 @@
           "group": "management@3"
         },
         {
+          "command": "sshManager.viewHostFingerprint",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@4"
+        },
+        {
+          "command": "sshManager.forgetHostKey",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@5"
+        },
+        {
           "command": "sshManager.sftp.refresh",
           "when": "view == sshManager.sftpFiles && viewItem == sftpDirectory",
           "group": "navigation@1"
@@ -274,44 +316,97 @@
           "when": "view == sshManager.sftpFiles && (viewItem == sftpDirectory || viewItem == sftpFile || viewItem == sftpDisconnectedDirectory || viewItem == sftpDisconnectedFile)",
           "group": "management@5"
         }
+      ],
+      "commandPalette": [
+        {
+          "command": "sshManager.sftp.download",
+          "when": "false"
+        },
+        {
+          "command": "sshManager.sftp.delete",
+          "when": "false"
+        },
+        {
+          "command": "sshManager.sftp.rename",
+          "when": "false"
+        },
+        {
+          "command": "sshManager.sftp.edit",
+          "when": "false"
+        },
+        {
+          "command": "sshManager.sftp.openPreview",
+          "when": "false"
+        },
+        {
+          "command": "sshManager.sftp.cdToDirectory",
+          "when": "false"
+        },
+        {
+          "command": "sshManager.sftp.copyPath",
+          "when": "false"
+        }
       ]
     },
     "configuration": {
       "title": "%atTerminal.configuration.title%",
       "properties": {
-
         "sshManager.terminalFontSize": {
           "type": "number",
           "default": 14,
-          "minimum": 8
+          "minimum": 8,
+          "description": "%atTerminal.config.terminalFontSize.description%"
         },
         "sshManager.terminalFontFamily": {
           "type": "string",
-          "default": "Cascadia Code, Menlo, monospace"
+          "default": "Cascadia Code, Menlo, monospace",
+          "description": "%atTerminal.config.terminalFontFamily.description%"
         },
         "sshManager.scrollback": {
           "type": "number",
           "default": 10000,
-          "minimum": 100
+          "minimum": 100,
+          "description": "%atTerminal.config.scrollback.description%"
         },
         "sshManager.semanticHighlight": {
           "type": "boolean",
           "default": true,
-          "description": "Enable frontend semantic highlighting for plain SSH terminal output that does not already contain ANSI colors."
+          "description": "%atTerminal.config.semanticHighlight.description%"
         },
         "sshManager.idleDisconnectMinutes": {
           "type": "number",
           "default": 60,
           "minimum": 0,
-          "description": "Disconnect idle SSH terminals after this many minutes. Set 0 to disable."
+          "description": "%atTerminal.config.idleDisconnectMinutes.description%"
         },
         "sshManager.keepAliveInterval": {
           "type": "number",
           "default": 30,
-          "minimum": 0
+          "minimum": 0,
+          "description": "%atTerminal.config.keepAliveInterval.description%"
+        },
+        "sshManager.zebraStripes": {
+          "type": "boolean",
+          "default": false,
+          "description": "%atTerminal.config.zebraStripes.description%"
+        },
+        "sshManager.sessionLogDirectory": {
+          "type": "string",
+          "default": "",
+          "description": "%atTerminal.config.sessionLogDirectory.description%"
         }
       }
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "sshManager.servers",
+        "contents": "%atTerminal.viewsWelcome.servers%"
+      },
+      {
+        "view": "sshManager.sftpFiles",
+        "contents": "%atTerminal.viewsWelcome.sftpFiles%"
+      }
+    ]
   },
   "scripts": {
     "build": "node esbuild.config.mjs",

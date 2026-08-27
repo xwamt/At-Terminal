@@ -122,7 +122,10 @@ SFTP 命令：
 - `sshManager.terminalFontFamily`: 终端字体。
 - `sshManager.scrollback`: 终端滚动缓冲行数。
 - `sshManager.semanticHighlight`: 对无 ANSI 色彩的普通 SSH 输出启用前端语义高亮。
+- `sshManager.idleDisconnectMinutes`: SSH 终端空闲超过该分钟数后自动断开，`0` 表示关闭。
 - `sshManager.keepAliveInterval`: SSH keep-alive 间隔秒数，`0` 表示关闭。
+- `sshManager.zebraStripes`: 在 SSH 终端中渲染斑马纹交替行背景，默认关闭。
+- `sshManager.sessionLogDirectory`: SSH 会话输出日志的保存目录，留空表示不记录。
 
 ### 开发和打包
 
@@ -136,7 +139,7 @@ npm run package:base
 生成的基础版 VSIX：
 
 ```text
-at-terminal-2.10.2.vsix
+at-terminal-0.3.4.vsix
 ```
 
 ## English

@@ -28,7 +28,7 @@ Generated files:
 Install the MCP build:
 
 ```powershell
-code --install-extension .\at-terminal-mcp-0.3.0.vsix
+code --install-extension .\at-terminal-mcp-0.3.4.vsix
 ```
 
 For Kiro and Cursor, install the VSIX through the IDE's extension UI or compatible command-line installer.
@@ -38,7 +38,7 @@ For Kiro and Cursor, install the VSIX through the IDE's extension UI or compatib
 Run this command from the Command Palette:
 
 ```text
-AT Terminal: Install MCP Config
+AT Terminal: Install/Repair MCP Config
 ```
 
 It:
@@ -186,7 +186,7 @@ docs/mcp/continue-at-terminal-mcp.yaml
 
 ## Agent Access
 
-After installing `at-terminal-mcp-*.vsix`, configure the IDE MCP client for **AT Series** (prefer `AT Terminal: Install MCP Config`). Tools such as `list_ssh_servers`, `get_terminal_context`, and SFTP helpers are exposed through the shared hub rather than VS Code built-in LM tool contributions.
+After installing `at-terminal-mcp-*.vsix`, configure the IDE MCP client for **AT Series** (prefer `AT Terminal: Install/Repair MCP Config`). Tools such as `list_ssh_servers`, `get_terminal_context`, and SFTP helpers are exposed through the shared hub rather than VS Code built-in LM tool contributions.
 
 Example prompts:
 
@@ -200,7 +200,7 @@ If tools are missing:
 
 1. Confirm that the MCP build is installed, not the base build.
 2. Reload Window and keep AT Terminal MCP activated.
-3. Run `AT Terminal: Install MCP Config`.
+3. Run `AT Terminal: Install/Repair MCP Config`.
 4. Confirm `~/.at-series/mcp/hub.js` exists and the MCP entry is named `AT Series`.
 
 ## Commands
@@ -239,8 +239,10 @@ Asset commands:
 
 MCP commands:
 
-- `AT Terminal: Install MCP Config`
-- `AT Terminal: Uninstall AT Series MCP Config`
+- `AT Terminal: Install/Repair MCP Config`
+- `AT Terminal: Uninstall MCP Config`
+
+All commands are grouped under the `AT Terminal` category in the command palette.
 
 ## Settings
 
@@ -248,7 +250,10 @@ MCP commands:
 - `sshManager.terminalFontFamily`: terminal font family.
 - `sshManager.scrollback`: terminal scrollback lines.
 - `sshManager.semanticHighlight`: enables frontend semantic highlighting for plain SSH output without ANSI colors.
+- `sshManager.idleDisconnectMinutes`: disconnect idle SSH terminals after this many minutes. `0` disables idle disconnect.
 - `sshManager.keepAliveInterval`: SSH keep-alive interval in seconds. `0` disables keep-alive.
+- `sshManager.zebraStripes`: render alternating row backgrounds in the SSH terminal. Off by default.
+- `sshManager.sessionLogDirectory`: directory for SSH session output logs. Empty disables session logging.
 
 ## Development
 
