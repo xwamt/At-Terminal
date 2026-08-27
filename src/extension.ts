@@ -13,7 +13,10 @@ import {
   uninstallAtSeriesConfigForCurrentIde
 } from './mcp/McpConfigInstaller';
 import { detectHostApp } from '@at-series/mcp-hub';
+import { join as joinLocalPath } from 'node:path';
+import { stat } from 'node:fs/promises';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
+import { isSftpConflictError } from './sftp/SftpErrors';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
 import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
 import { SftpManager } from './sftp/SftpManager';
@@ -24,7 +27,7 @@ import { VscodeTransferReporter } from './sftp/VscodeTransferReporter';
 import { HostKeyStore } from './ssh/HostKeyStore';
 import { TerminalContextRegistry } from './terminal/TerminalContext';
 import { ServerTreeProvider } from './tree/ServerTreeProvider';
-import { SftpTreeProvider } from './tree/SftpTreeProvider';
+import { SftpTreeProvider, shouldRefreshOnContextChange } from './tree/SftpTreeProvider';
 import { SftpDirectoryTreeItem, SftpFileTreeItem } from './tree/SftpTreeItems';
 import { GroupTreeItem, ServerTreeItem } from './tree/TreeItems';
 import { formatError } from './utils/errors';
@@ -100,8 +103,11 @@ export function activate(context: vscode.ExtensionContext): void {
   extensionCleanup = cleanup;
 
   terminalContext.onDidChangeActiveContext((activeContext) => {
+    const previousView = sftpManager.getActiveViewDescriptor();
     sftpManager.setTerminalContext(activeContext);
-    sftpTreeProvider.refresh();
+    if (shouldRefreshOnContextChange(previousView, sftpManager.getActiveViewDescriptor())) {
+      sftpTreeProvider.refresh();
+    }
   });
   terminalContext.onDidChangeContext((changedContext) => {
     if (terminalContext.getActive()?.terminalId !== changedContext.terminalId) {
@@ -461,21 +467,68 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('sshManager.sftp.upload', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
       await runSftpCommand(async () => {
-        const files = await vscode.window.showOpenDialog({ canSelectFiles: true, canSelectFolders: false, canSelectMany: true });
+        const files = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: true,
+          canSelectMany: true
+        });
         if (!files?.length) {
           return;
         }
         const state = sftpManager.getState();
         const targetDirectory = getTargetDirectory(item, state.kind === 'active' ? state.rootPath : '.');
+        let overwriteAll = false;
         for (const file of files) {
-          await sftpManager.uploadFile(file.fsPath, joinRemotePath(targetDirectory, localUploadFileName(file.fsPath)));
+          const remotePath = joinRemotePath(targetDirectory, localUploadFileName(file.fsPath));
+          const localStat = await stat(file.fsPath);
+          const upload = async (overwrite: boolean) => {
+            if (localStat.isDirectory()) {
+              await sftpManager.uploadDirectory(file.fsPath, remotePath, undefined, { overwrite });
+              return;
+            }
+            await sftpManager.uploadFile(file.fsPath, remotePath, undefined, { overwrite });
+          };
+          try {
+            await upload(overwriteAll);
+          } catch (error) {
+            if (!isSftpConflictError(error)) {
+              throw error;
+            }
+            const overwrite = t('Overwrite');
+            const overwriteEverything = t('Overwrite All');
+            const skip = t('Skip');
+            const choice = await vscode.window.showWarningMessage(
+              error.message,
+              { modal: true },
+              overwrite,
+              overwriteEverything,
+              skip
+            );
+            if (choice === overwrite || choice === overwriteEverything) {
+              overwriteAll = choice === overwriteEverything;
+              await upload(true);
+            }
+          }
         }
-        sftpTreeProvider.refresh();
+        sftpTreeProvider.refresh(item instanceof SftpDirectoryTreeItem ? item : undefined);
       });
     }),
     vscode.commands.registerCommand('sshManager.sftp.download', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
       await runSftpCommand(async () => {
         if (!item) {
+          return;
+        }
+        if (item.entry.type === 'directory' || item.entry.targetType === 'directory') {
+          const folders = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: t('Download Here')
+          });
+          if (!folders?.length) {
+            return;
+          }
+          await sftpManager.downloadDirectory(item.entry.path, joinLocalPath(folders[0].fsPath, item.entry.name));
           return;
         }
         const destination = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(item.entry.name) });
@@ -491,11 +544,14 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
         const deleteAction = t('Delete');
-        const answer = await vscode.window.showWarningMessage(
-          t('Delete remote {type} "{path}"?', { type: item.entry.type, path: item.entry.path }),
-          { modal: true },
-          deleteAction
-        );
+        const message =
+          item.entry.type === 'directory' || item.entry.targetType === 'directory'
+            ? t('Delete remote directory "{path}"? {count} entries will be permanently deleted.', {
+                path: item.entry.path,
+                count: await sftpManager.countDeletableEntries(item.entry.path)
+              })
+            : t('Delete remote {type} "{path}"?', { type: item.entry.type, path: item.entry.path });
+        const answer = await vscode.window.showWarningMessage(message, { modal: true }, deleteAction);
         if (answer === deleteAction) {
           await sftpManager.deleteEntry(item.entry);
           sftpTreeProvider.refresh();
