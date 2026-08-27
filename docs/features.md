@@ -64,12 +64,14 @@ AT Terminal MCP publishes tools through the shared **AT Series** hub (`~/.at-ser
 | `list_ssh_servers` | read-only | Lists SSH servers authorized for background connections without exposing passwords or private keys. |
 | `get_terminal_context` | read-only | Returns focused, default connected, connected, and known AT Terminal SSH terminal context. |
 | `run_remote_command` | command | Runs a confirmed non-interactive SSH command and returns stdout, stderr, exit code, timeout, duration, and truncation metadata. Every command is confirmed unless the server is trusted and `@at-series/command-policy` proves an ordinary read. stdout/stderr each default to 64000 bytes (hard cap 256000). |
-| `sftp_list_directory` | read-only | Lists a remote directory through a connected AT Terminal SFTP session. Returns at most `maxEntries` (default 500, hard cap 5000) plus `truncated`/`total`. |
+| `sftp_list_directory` | read-only | Lists a remote directory through a connected AT Terminal SFTP session. Returns at most `maxEntries` (default 500, hard cap 5000) plus `truncated`/`total`; `offset` pages through large listings. |
 | `sftp_stat_path` | read-only | Returns metadata for a remote file or directory. |
-| `sftp_read_file` | read-only | Reads bounded UTF-8 text from a remote file. Default `maxBytes` 65536 (hard cap 262144). Binary-looking content is rejected. |
+| `sftp_read_file` | read-only | Reads bounded UTF-8 text from a remote file. Default `maxBytes` 65536 (hard cap 262144). `offset` continues a read; a negative `offset` reads the tail of the file. Binary-looking content is rejected. |
 | `sftp_write_file` | write | Writes UTF-8 text to a remote file. Existing files require `overwrite: true`. |
 | `sftp_create_file` | write | Creates a new remote file, optionally with UTF-8 content. |
 | `sftp_create_directory` | write | Creates a new remote directory. |
+| `sftp_rename` | write | Renames or moves a remote file or directory. Both the source and destination paths require write authorization. |
+| `sftp_delete` | write | Deletes a single remote file (directories are refused). Always asks the user, even at full trust, and the answer is never remembered. |
 
 ## Safety Behavior
 
