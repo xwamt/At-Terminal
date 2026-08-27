@@ -37,4 +37,17 @@ describe('commandPreview', () => {
     expect(message.endsWith('Warning: this command appears destructive.')).toBe(true);
     expect(message.indexOf('… (truncated')).toBeLessThan(message.indexOf('Warning:'));
   });
+
+  it('appends unique redacted policy risk summaries after the warning', () => {
+    const message = formatRemoteCommandConfirmMessage({
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command: 'rm -rf /tmp/app',
+      destructive: true,
+      riskSummaries: ['Writes files.', 'Writes files.', '']
+    });
+    expect(message).toContain('Warning: this command appears destructive.');
+    expect(message).toContain('- Writes files.');
+    expect(message.split('Writes files.').length - 1).toBe(1);
+  });
 });

@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild';
+import { rm } from 'node:fs/promises';
 
 const watch = process.argv.includes('--watch');
 const variantArg = process.argv.find((arg) => arg.startsWith('--variant=')) ?? '--variant=mcp';
@@ -63,6 +64,22 @@ function stubMcpHubPlugin() {
   };
 }
 
+function stubCommandPolicyPlugin() {
+  return {
+    name: 'stub-command-policy',
+    setup(build) {
+      build.onResolve({ filter: /^@at-series\/command-policy(\/.*)?$/ }, () => ({
+        path: '@at-series/command-policy',
+        namespace: 'stub-command-policy'
+      }));
+      build.onLoad({ filter: /.*/, namespace: 'stub-command-policy' }, () => ({
+        contents: 'export const createShellPolicyEvaluator = undefined;\n',
+        loader: 'js'
+      }));
+    }
+  };
+}
+
 const contextConfigs = [
   esbuild.context({
     ...common,
@@ -72,7 +89,7 @@ const contextConfigs = [
     target: HOST_TARGET,
     format: 'cjs',
     external: ['vscode', 'ssh2'],
-    plugins: mcpEnabled ? [] : [stubMcpHubPlugin()]
+    plugins: mcpEnabled ? [] : [stubMcpHubPlugin(), stubCommandPolicyPlugin()]
   }),
   esbuild.context({
     ...common,
@@ -92,12 +109,44 @@ const contextConfigs = [
   })
 ];
 
+if (mcpEnabled) {
+  contextConfigs.push(
+    esbuild.context({
+      ...common,
+      entryPoints: ['src/policy-runtime/index.ts'],
+      outfile: 'dist/policy-runtime.js',
+      platform: 'node',
+      target: HOST_TARGET,
+      format: 'cjs',
+      banner: {
+        js: 'var __policyRuntimeModuleUrl = require("node:url").pathToFileURL(__filename).href;'
+      },
+      define: {
+        ...common.define,
+        'import.meta.url': '__policyRuntimeModuleUrl'
+      }
+    })
+  );
+}
+
 const contexts = await Promise.all(contextConfigs);
 
 if (watch) {
   await Promise.all(contexts.map((context) => context.watch()));
+  if (mcpEnabled) {
+    const { copyPolicyRuntimeAssets } = await import('./scripts/copy-policy-assets.mjs');
+    await copyPolicyRuntimeAssets();
+  }
   console.log('Watching extension and webview bundles...');
 } else {
   await Promise.all(contexts.map((context) => context.rebuild()));
   await Promise.all(contexts.map((context) => context.dispose()));
+  if (mcpEnabled) {
+    const { copyPolicyRuntimeAssets } = await import('./scripts/copy-policy-assets.mjs');
+    await copyPolicyRuntimeAssets();
+  } else {
+    await rm('dist/policy-runtime.js', { force: true });
+    await rm('dist/policy-runtime.js.map', { force: true });
+    await rm('dist/policy-assets', { recursive: true, force: true });
+  }
 }

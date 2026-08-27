@@ -46,9 +46,16 @@ await rm(join(stage, 'dist', 'mcp-server.js.map'), { force: true });
 if (variant === 'mcp') {
   await access(join(stage, 'dist', 'hub.js'));
   await access(join(stage, 'dist', 'hub-version.json'));
+  await access(join(stage, 'dist', 'policy-runtime.js'));
+  await access(join(stage, 'dist', 'policy-assets', 'web-tree-sitter.wasm'));
+  await access(join(stage, 'dist', 'policy-assets', 'tree-sitter-bash.wasm'));
+  await access(join(stage, 'dist', 'policy-assets', 'tree-sitter-python.wasm'));
 } else {
   await rm(join(stage, 'dist', 'hub.js'), { force: true });
   await rm(join(stage, 'dist', 'hub-version.json'), { force: true });
+  await rm(join(stage, 'dist', 'policy-runtime.js'), { force: true });
+  await rm(join(stage, 'dist', 'policy-runtime.js.map'), { force: true });
+  await rm(join(stage, 'dist', 'policy-assets'), { recursive: true, force: true });
 }
 await cp(join(root, 'media'), join(stage, 'media'), { recursive: true });
 await cp(join(root, 'docs', 'features.md'), join(stage, 'docs', 'features.md'));

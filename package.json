@@ -2,8 +2,8 @@
   "name": "at-terminal",
   "displayName": "%atTerminal.displayName%",
   "description": "%atTerminal.description%",
-  "version": "0.3.3",
-  "publisher": "local",
+  "version": "0.3.4",
+  "publisher": "xwamt",
   "icon": "media/at-terminal-icon.png",
   "l10n": "./l10n",
   "engines": {
@@ -163,7 +163,6 @@
         "icon": "$(cloud-download)"
       }
     ],
-
     "menus": {
       "view/title": [
         {
@@ -288,7 +287,6 @@
     "configuration": {
       "title": "%atTerminal.configuration.title%",
       "properties": {
-
         "sshManager.terminalFontSize": {
           "type": "number",
           "default": 14,
@@ -330,11 +328,13 @@
     "test:watch": "vitest",
     "build:base": "node esbuild.config.mjs --variant=base",
     "copy:hub": "node scripts/copy-hub.mjs",
-    "build:mcp": "node esbuild.config.mjs --variant=mcp && npm run copy:hub",
+    "copy:policy-assets": "node scripts/copy-policy-assets.mjs",
+    "build:mcp": "node esbuild.config.mjs --variant=mcp && npm run copy:hub && npm run copy:policy-assets",
     "package:base": "npm run build:base && node scripts/package-variant.mjs base",
     "package:mcp": "npm run build:mcp && node scripts/package-variant.mjs mcp"
   },
   "dependencies": {
+    "@at-series/command-policy": "0.1.0",
     "@at-series/mcp-hub": "^0.3.2",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",

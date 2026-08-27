@@ -226,4 +226,44 @@ describe('TerminalContextRegistry', () => {
 
     expect(removed).toHaveBeenCalledWith('terminal-a');
   });
+
+  it('updates cached server config for active and background contexts', () => {
+    const registry = new TerminalContextRegistry();
+    const contextListener = vi.fn();
+    const activeListener = vi.fn();
+    registry.onDidChangeContext(contextListener);
+    registry.onDidChangeActiveContext(activeListener);
+
+    const initialServer = server('a');
+    registry.setActive({
+      terminalId: 'terminal-a',
+      server: initialServer,
+      connected: true,
+      write: vi.fn()
+    });
+
+    const updatedServer: ServerConfig = {
+      ...initialServer,
+      label: 'Updated Server A',
+      agentCommandTrust: 'full'
+    };
+
+    registry.updateServer(updatedServer);
+
+    expect(registry.getActive()?.server.label).toBe('Updated Server A');
+    expect(registry.getActive()?.server.agentCommandTrust).toBe('full');
+    expect(registry.getConnectedTerminalByServerId('a')?.server.label).toBe('Updated Server A');
+    expect(contextListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalId: 'terminal-a',
+        server: updatedServer
+      })
+    );
+    expect(activeListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalId: 'terminal-a',
+        server: updatedServer
+      })
+    );
+  });
 });

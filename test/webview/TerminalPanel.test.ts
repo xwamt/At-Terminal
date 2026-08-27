@@ -467,4 +467,27 @@ describe('TerminalPanel rendering helpers', () => {
     expect(registry.getActive()?.connected).toBe(true);
     expect(panelHost.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'status', payload: 'Disconnected' });
   });
+
+  it('updates server configuration and re-publishes context across active panels', async () => {
+    const registry = new TerminalContextRegistry();
+    const panelHost = createPanel();
+    vi.mocked(vscode.window.createWebviewPanel).mockReturnValueOnce(panelHost.panel);
+
+    const initial = server('server-to-update');
+    TerminalPanel.open(extensionContext(), initial, configManager(), hostKeyVerifier, registry);
+    await flushPromises();
+
+    expect(registry.getActive()?.server.label).toBe('server-to-update');
+
+    const updated = {
+      ...initial,
+      label: 'New Label',
+      agentCommandTrust: 'full' as const
+    };
+
+    TerminalPanel.updateServer(updated);
+
+    expect(registry.getActive()?.server.label).toBe('New Label');
+    expect(registry.getActive()?.server.agentCommandTrust).toBe('full');
+  });
 });

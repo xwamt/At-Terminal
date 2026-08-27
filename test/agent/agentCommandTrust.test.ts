@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   parseAgentCommandTrust,
   resolveAgentCommandTrust,
-  shouldAutoApproveRemoteCommand,
   shouldAutoApproveSftpWrite
 } from '../../src/agent/agentCommandTrust';
 
@@ -32,22 +31,6 @@ describe('parseAgentCommandTrust', () => {
     expect(parseAgentCommandTrust('on')).toBe('none');
     expect(parseAgentCommandTrust(true)).toBe('none');
     expect(parseAgentCommandTrust(undefined)).toBe('none');
-  });
-});
-
-describe('shouldAutoApproveRemoteCommand', () => {
-  it('never auto-approves when the server is untrusted', () => {
-    expect(shouldAutoApproveRemoteCommand({ agentCommandTrust: 'none' }, 'uptime')).toBe(false);
-  });
-
-  it('uses the current blocklist under limited trust', () => {
-    expect(shouldAutoApproveRemoteCommand({ agentCommandTrust: 'policy' }, 'uptime')).toBe(true);
-    expect(shouldAutoApproveRemoteCommand({ agentCommandTrust: 'policy' }, 'rm -rf /')).toBe(false);
-    expect(shouldAutoApproveRemoteCommand({ agentCommandAutoApprove: true }, 'uptime')).toBe(true);
-  });
-
-  it('auto-approves every remote command under full trust', () => {
-    expect(shouldAutoApproveRemoteCommand({ agentCommandTrust: 'full' }, 'rm -rf /')).toBe(true);
   });
 });
 

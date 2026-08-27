@@ -115,6 +115,24 @@ export class TerminalContextRegistry {
     this.updateConnectionState(terminalId, false);
   }
 
+  updateServer(server: ServerConfig): void {
+    let activeUpdated = false;
+    for (const [terminalId, context] of this.contexts) {
+      if (context.server.id === server.id) {
+        const updated = { ...context, server };
+        this.contexts.set(terminalId, updated);
+        this.onDidChangeContextEmitter.fire(updated);
+        if (this.active?.terminalId === terminalId) {
+          this.active = updated;
+          activeUpdated = true;
+        }
+      }
+    }
+    if (activeUpdated && this.active) {
+      this.onDidChangeActiveContextEmitter.fire(this.active);
+    }
+  }
+
   clearIfActive(terminalId: string): void {
     const deleted = this.contexts.delete(terminalId);
     if (deleted) {

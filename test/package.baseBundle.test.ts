@@ -1,5 +1,8 @@
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -19,13 +22,51 @@ import { beforeAll, describe, expect, it } from 'vitest';
 let baseBundle = '';
 let mcpBundle = '';
 
+let mcpPolicyRuntimeExists = false;
+let mcpPolicyRuntimeContainsEvaluator = false;
+let mcpPolicyAssetBytes = 0;
+let mcpPolicyCompressedBytes = 0;
+let mcpPolicyAllowsUptime = false;
+let mcpPolicyReviewsWrite = false;
+
+const require = createRequire(__filename);
+
 function build(variant: 'base' | 'mcp'): string {
   execFileSync(process.execPath, ['esbuild.config.mjs', `--variant=${variant}`], { stdio: 'pipe' });
   return readFileSync('dist/extension.js', 'utf8');
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   mcpBundle = build('mcp');
+  mcpPolicyRuntimeExists = existsSync('dist/policy-runtime.js');
+  mcpPolicyRuntimeContainsEvaluator = mcpPolicyRuntimeExists
+    && readFileSync('dist/policy-runtime.js', 'utf8').includes('createTerminalPolicyRuntime');
+  const wasmFiles = existsSync('dist/policy-assets')
+    ? readdirSync('dist/policy-assets').filter((name) => name.endsWith('.wasm'))
+    : [];
+  mcpPolicyAssetBytes = wasmFiles.reduce(
+    (total, name) => total + statSync(join('dist/policy-assets', name)).size,
+    0
+  );
+  if (mcpPolicyRuntimeExists) {
+    mcpPolicyCompressedBytes = gzipSync(readFileSync('dist/policy-runtime.js')).length
+      + wasmFiles.reduce(
+        (total, name) => total + gzipSync(readFileSync(join('dist/policy-assets', name))).length,
+        0
+      );
+    const runtime = require(join(process.cwd(), 'dist/policy-runtime.js')) as {
+      createTerminalPolicyRuntime(options: { assetDirectory: string }): {
+        evaluate(input: { sourceText: string }): Promise<{ action: string }>;
+      };
+    };
+    const evaluator = runtime.createTerminalPolicyRuntime({
+      assetDirectory: join(process.cwd(), 'dist/policy-assets')
+    });
+    const allowed = await evaluator.evaluate({ sourceText: 'uptime' });
+    const reviewed = await evaluator.evaluate({ sourceText: 'rm -rf /tmp/app' });
+    mcpPolicyAllowsUptime = allowed.action === 'allow';
+    mcpPolicyReviewsWrite = reviewed.action !== 'allow';
+  }
   baseBundle = build('base');
 }, 120_000);
 
@@ -68,5 +109,24 @@ describe('base variant bundle', () => {
   it('leaves no sourceMappingURL behind, since .vscodeignore keeps maps out of the VSIX', () => {
     expect(readFileSync('.vscodeignore', 'utf8')).toContain('**/*.map');
     expect(baseBundle).not.toContain('sourceMappingURL');
+  });
+
+  it('keeps shared command policy out of the base bundle and off the base disk layout', () => {
+    expect(mcpPolicyRuntimeExists).toBe(true);
+    expect(mcpPolicyRuntimeContainsEvaluator).toBe(true);
+    expect(mcpPolicyAllowsUptime).toBe(true);
+    expect(mcpPolicyReviewsWrite).toBe(true);
+    expect(mcpPolicyAssetBytes).toBeGreaterThan(0);
+    expect(mcpPolicyAssetBytes).toBeLessThanOrEqual(2.5 * 1024 * 1024);
+    expect(mcpPolicyCompressedBytes).toBeGreaterThan(0);
+    expect(mcpPolicyCompressedBytes).toBeLessThanOrEqual(500 * 1024);
+    expect(baseBundle).not.toContain('createTerminalPolicyRuntime');
+    expect(baseBundle).not.toContain('createShellPolicyEvaluator');
+    expect(baseBundle).not.toContain('tree-sitter-bash');
+    expect(baseBundle).not.toContain('@at-series/command-policy');
+    expect(mcpBundle).not.toContain('createShellPolicyEvaluator');
+    expect(mcpBundle).not.toContain('tree-sitter-bash');
+    expect(existsSync('dist/policy-runtime.js')).toBe(false);
+    expect(existsSync('dist/policy-assets')).toBe(false);
   });
 });

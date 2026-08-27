@@ -36,7 +36,7 @@ export class ServerFormPanel {
   static async open(
     context: vscode.ExtensionContext,
     configManager: ConfigManager,
-    onSaved: () => void,
+    onSaved: (server?: ServerConfig) => void,
     existing: ServerConfig | undefined,
     hostKeyVerifier: HostKeyVerifier,
     initialGroup?: string
@@ -116,7 +116,7 @@ export async function handleServerFormMessage(
   message: ServerFormMessage,
   existing: ServerConfig | undefined,
   configManager: Pick<ConfigManager, 'saveServer' | 'getPassword' | 'getServer'>,
-  onSaved: () => void,
+  onSaved: (server?: ServerConfig) => void,
   panel: Pick<vscode.WebviewPanel, 'dispose' | 'webview'>,
   options: ServerFormMessageOptions = {}
 ): Promise<boolean> {
@@ -162,7 +162,7 @@ export async function handleServerFormMessage(
     }
 
     await configManager.saveServer(server, password);
-    onSaved();
+    onSaved(server);
     panel.dispose();
   } catch (error) {
     await panel.webview.postMessage({ type: 'error', payload: formatError(error) });

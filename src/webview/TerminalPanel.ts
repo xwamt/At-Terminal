@@ -46,7 +46,7 @@ export class TerminalPanel {
 
   private constructor(
     private readonly panel: vscode.WebviewPanel,
-    private readonly server: ServerConfig,
+    private server: ServerConfig,
     private readonly configManager: ConfigManager,
     private readonly settings: TerminalSettings,
     private readonly hostKeyVerifier: HostKeyVerifier,
@@ -90,6 +90,19 @@ export class TerminalPanel {
 
   static getActive(): TerminalPanel | undefined {
     return TerminalPanel.active;
+  }
+
+  static updateServer(server: ServerConfig): void {
+    for (const terminal of TerminalPanel.panels) {
+      if (terminal.server.id === server.id) {
+        terminal.updateServer(server);
+      }
+    }
+  }
+
+  updateServer(server: ServerConfig): void {
+    this.server = server;
+    this.publishContext();
   }
 
   static disconnectAll(): void {

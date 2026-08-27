@@ -27,8 +27,11 @@ export function formatRemoteCommandConfirmMessage(options: {
   host: string;
   command: string;
   destructive: boolean;
+  riskSummaries?: readonly string[];
 }): string {
   const preview = truncateCommandPreview(options.command);
   const warning = options.destructive ? '\n\nWarning: this command appears destructive.' : '';
-  return `Run remote command on ${options.serverLabel} (${options.host})?\n\n${preview}${warning}`;
+  const uniqueSummaries = [...new Set((options.riskSummaries ?? []).filter((summary) => summary.length > 0))];
+  const risks = uniqueSummaries.length === 0 ? '' : `\n\n${uniqueSummaries.map((summary) => `- ${summary}`).join('\n')}`;
+  return `Run remote command on ${options.serverLabel} (${options.host})?\n\n${preview}${warning}${risks}`;
 }

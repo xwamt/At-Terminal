@@ -1,4 +1,4 @@
-import { requiresConfirmation } from './remoteCommandPolicy';
+import { authorizeRemoteCommand } from './remoteCommandAuthorization';
 
 export const AGENT_COMMAND_TRUST_LEVELS = ['none', 'policy', 'full'] as const;
 export type AgentCommandTrust = (typeof AGENT_COMMAND_TRUST_LEVELS)[number];
@@ -19,21 +19,18 @@ export function resolveAgentCommandTrust(server: {
   return server.agentCommandAutoApprove === true ? 'policy' : 'none';
 }
 
-export function shouldAutoApproveRemoteCommand(
+export { authorizeRemoteCommand };
+
+export async function shouldAutoApproveRemoteCommand(
   server: {
     agentCommandTrust?: AgentCommandTrust;
     agentCommandAutoApprove?: boolean;
   },
-  command: string
-): boolean {
-  const trust = resolveAgentCommandTrust(server);
-  if (trust === 'full') {
-    return true;
-  }
-  if (trust === 'policy') {
-    return !requiresConfirmation(command);
-  }
-  return false;
+  command: string,
+  cwd?: string
+): Promise<boolean> {
+  const authorization = await authorizeRemoteCommand({ server, command, cwd });
+  return authorization.autoApprove;
 }
 
 export function shouldAutoApproveSftpWrite(server: {

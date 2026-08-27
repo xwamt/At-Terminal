@@ -4,11 +4,7 @@ import type { ServerConfig } from '../config/schema';
 import type { TerminalContextRegistry, TerminalContextSnapshot } from '../terminal/TerminalContext';
 import { formatRemoteCommandConfirmMessage } from '../utils/commandPreview';
 import type { RemoteCommandExecutor, RemoteCommandResult } from './RemoteCommandExecutor';
-import { looksDestructive } from './remoteCommandPolicy';
-import {
-  resolveAgentCommandTrust,
-  shouldAutoApproveRemoteCommand
-} from './agentCommandTrust';
+import { authorizeRemoteCommand, resolveAgentCommandTrust } from './agentCommandTrust';
 import type { SftpAgentService } from './SftpAgentService';
 
 export interface AgentToolServiceDependencies {
@@ -55,15 +51,19 @@ export class AgentToolService {
       throw new Error('Remote command cannot be empty.');
     }
     const server = await this.resolveServer(input.serverId);
-    const destructive = looksDestructive(command);
-    const autoApproved = shouldAutoApproveRemoteCommand(server, command);
-    if (!autoApproved) {
+    const authorization = await authorizeRemoteCommand({
+      server,
+      command,
+      cwd: input.cwd
+    });
+    if (!authorization.autoApprove) {
       const answer = await vscode.window.showWarningMessage(
         formatRemoteCommandConfirmMessage({
           serverLabel: server.label,
           host: server.host,
           command,
-          destructive
+          destructive: authorization.destructive,
+          riskSummaries: authorization.riskSummaries
         }),
         { modal: true },
         'Run Command'
@@ -120,6 +120,11 @@ export class AgentToolService {
       const connected = this.dependencies.terminalContext.getConnectedTerminal();
       if (connected) {
         // Live UI terminal connection is enough; background auth is only for no-UI paths.
+        const latest = await this.dependencies.configManager.getServer(connected.server.id);
+        if (latest) {
+          this.dependencies.terminalContext.updateServer(latest);
+          return latest;
+        }
         return connected.server;
       }
       if (serverId === 'active') {
@@ -130,6 +135,11 @@ export class AgentToolService {
     if (serverId && serverId !== 'active') {
       const connectedByServer = this.dependencies.terminalContext.getConnectedTerminalByServerId(serverId);
       if (connectedByServer) {
+        const latest = await this.dependencies.configManager.getServer(connectedByServer.server.id);
+        if (latest) {
+          this.dependencies.terminalContext.updateServer(latest);
+          return latest;
+        }
         return connectedByServer.server;
       }
     }

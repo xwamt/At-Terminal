@@ -33,5 +33,5 @@ MCP hub 不直接读取 AT Terminal 的密码、私钥或服务器配置。实�
 - SFTP 浏览、上传、下载、拖拽上传、创建、重命名、删除、复制路径和预览。
 - 远程文件本地编辑，并在保存时同步回远程路径。
 - 面向 Kiro、Cursor、Continue 等 MCP Client 的共享 AT Series hub。
-- 远程命令确认、SFTP 写入授权、只读工具不暴露密码或私钥。
+- 远程命令确认、SFTP 写入授权、只读工具不暴露密码或私钥。有限信任依赖 npm 精确版本 `@at-series/command-policy@0.1.0`（禁止 `^`），接口见该包 `docs/api.md`。
 - 加密资产导入导出，用于迁移 SSH 服务器配置。

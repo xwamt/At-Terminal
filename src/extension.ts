@@ -285,7 +285,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('sshManager.addServer', (item?: GroupTreeItem) => {
       const initialGroup = item instanceof GroupTreeItem ? item.groupName : undefined;
-      void ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), undefined, hostKeyVerifier, initialGroup);
+      void ServerFormPanel.open(
+        context,
+        configManager,
+        (savedServer) => {
+          if (savedServer) {
+            terminalContext.updateServer(savedServer);
+            TerminalPanel.updateServer(savedServer);
+          }
+          treeProvider.refresh();
+        },
+        undefined,
+        hostKeyVerifier,
+        initialGroup
+      );
     }),
     vscode.commands.registerCommand('sshManager.editServer', async (item?: ServerTreeItem) => {
       if (!item) {
@@ -293,7 +306,19 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const server = await configManager.getServer(item.server.id);
       if (server) {
-        await ServerFormPanel.open(context, configManager, () => treeProvider.refresh(), server, hostKeyVerifier);
+        await ServerFormPanel.open(
+          context,
+          configManager,
+          (savedServer) => {
+            if (savedServer) {
+              terminalContext.updateServer(savedServer);
+              TerminalPanel.updateServer(savedServer);
+            }
+            treeProvider.refresh();
+          },
+          server,
+          hostKeyVerifier
+        );
       }
     }),
     vscode.commands.registerCommand('sshManager.deleteServer', async (item?: ServerTreeItem) => {

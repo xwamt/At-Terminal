@@ -89,16 +89,14 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 
 架构说明见 [ADR-004](docs/decisions/ADR-004-at-series-mcp-hub.md) 与 [ADR-005](docs/decisions/ADR-005-at-series-hub-adaptation.md)。
 
-### 命令信任与智能放行策略（0.3.3）
+### 命令信任与共享策略包
 
-从 **0.3.3** 起，远程命令确认网关（Remote Command Policy）升级为三档信任 + 精细化黑名单：
+有限信任下的 `run_remote_command` 分析器来自独立开源包 [`@at-series/command-policy`](https://www.npmjs.com/package/@at-series/command-policy)：
 
-- **三档信任下拉**：不信任（每条远程命令都弹窗，不显示后台连接）、有限信任（黑名单策略，显示后台连接且切换时默认不勾）、完全信任（远程命令与 SFTP 写入均不弹窗，显示后台连接且切换时默认勾选）。已有「信任」勾选的服务器读成有限信任。
-- **引号感知词法**：引号内的 `|`、`>`、`\` 不再当操作符；`grep -E 'error|fail'`、`awk 'NR>1'`、`docker ps`、`iptables -L` 在有限信任下免确认；`sed -i`、`docker exec`、`sudo` 等仍弹窗。
-- **智能安全重定向放行**：对静默/错误输出重定向（如 `2>/dev/null`、`>/dev/null 2>&1`、`&>/dev/null`、`1>&2` 等）智能识别并自动放行，不再误触发确认弹窗；向实际文件写数据的重定向（如 `> /etc/hosts`、`>> file`）依然严格弹窗。
-- **系统标准二进制路径支持**：支持 `/bin/ls`、`/usr/bin/cat`、`/usr/bin/uptime` 等标准系统路径调用的只读命令直接放行；对自定义脚本路径（`./deploy.sh`、`/tmp/payload`）保持确认。
-- **复合语句与控制流关键字识别**：对 `for ...; do ...; done`、`while ...; do ...; done`、`if ...; then ...; fi` 等 Shell 循环与分支命令自动跳过 `do` / `then` 等控制流关键字，内部只读命令安全放行，包含危险操作（`do rm ...`）精准拦截。
-- **编辑服务器密码体验优化**：修复多语言环境下编辑已有服务器时密码被强制要求重填的问题，留空保存即可安全保留已有凭据。
+- **依赖方式**：通过 npm 公开 registry **精确锁定**版本（当前 `"0.1.0"`，禁止 `^` / `~`）。执行 `npm install` 即可拉取，**不再**使用 `file:../at-series-command-policy`。
+- **接口规范**：该包 `docs/api.md`。本插件只做信任档映射与确认 UI。
+- **三档信任**：不信任（每条都弹窗，不加载策略包）、有限信任（懒加载策略包，仅 `allow` 免确认）、完全信任（不加载策略包，远程命令与 SFTP 写入均不弹窗）。
+- **分析范围**：Tree-sitter Bash 证明普通只读后才免确认；写操作、服务控制、敏感读、未知二进制、解析失败一律确认。`# Purpose:` 注释不授予权限。
 
 #### 构建产物
 
@@ -121,13 +119,13 @@ npm run package:mcp
 打包成功后，项目根目录会生成类似下面的文件：
 
 ```textile
-at-terminal-mcp-0.3.3.vsix
+at-terminal-mcp-0.3.4.vsix
 ```
 
 生成 .vsix 后，可以在 VS Code / Cursor / Kiro 等兼容 VS Code 插件的 IDE 中通过“从 VSIX 安装”安装，也可以使用命令行安装
 
 ```bash
-code --install-extension at-terminal-mcp-0.3.3.vsix
+code --install-extension at-terminal-mcp-0.3.4.vsix
 #如果安装基础版，则把文件名替换为实际生成的 at-terminal-*.vsix。
 ```
 

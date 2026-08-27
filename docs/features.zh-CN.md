@@ -63,7 +63,7 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 | --- | --- | --- |
 | `list_ssh_servers` | 只读 | 列出已允许后台连接的 SSH 服务器，不暴露密码或私钥。 |
 | `get_terminal_context` | 只读 | 返回当前聚焦、默认连接、已连接和已知的 AT Terminal SSH 终端上下文。 |
-| `run_remote_command` | 命令 | 执行经过确认的非交互 SSH 命令，并返回 stdout、stderr、exit code、timeout、duration 和截断信息。除非服务器已被信任且命令未命中「会改变状态」的黑名单，否则每条命令都要确认。stdout/stderr 各默认 64000 字节（硬顶 256000）。 |
+| `run_remote_command` | 命令 | 执行经过确认的非交互 SSH 命令，并返回 stdout、stderr、exit code、timeout、duration 和截断信息。除非服务器已被信任且 `@at-series/command-policy` 能证明这是普通只读，否则每条命令都要确认。stdout/stderr 各默认 64000 字节（硬顶 256000）。 |
 | `sftp_list_directory` | 只读 | 通过已连接的 AT Terminal SFTP 会话列出远程目录。最多返回 `maxEntries` 条（默认 500，硬顶 5000），并带 `truncated`/`total`。 |
 | `sftp_stat_path` | 只读 | 返回远程文件或目录的元信息。 |
 | `sftp_read_file` | 只读 | 读取有限大小的 UTF-8 远程文本文件；默认 `maxBytes` 65536（硬顶 262144）；疑似二进制内容会被拒绝。 |
@@ -73,7 +73,7 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 
 ## 安全行为
 
-- `run_remote_command` 确认跟随服务器信任下拉（`Trust agent remote commands`）。**不信任**每条都弹窗。**有限信任**让**未命中黑名单**的命令免确认；黑名单收录 441 个会改变状态的命令名，分 19 组（文件写入、权限、归档、磁盘、进程与服务控制、解释器与执行包装、包管理、网络传输与配置、账号、容器、编辑器与分页器、追踪调试、数据库客户端、引导）。命令按 `|`、`;`、`&&`、`||`、`&` 分段，**每一段的命令名都要过黑名单**，任一段命中即弹窗：`ps aux | grep java | head -20` 免确认，`ls && rm -rf /` 弹窗。`systemctl`、`journalctl`、`ip`、`ss`、`find`、`dmesg`、`crontab`、`date`、`hostname`、`sysctl`、`git`、`ifconfig`、`route`、`ethtool`、`sort` 按参数判断，因此 `systemctl status nginx`、`git log` 免确认，`systemctl restart nginx`、`git checkout .` 弹窗。命令替换、重定向、反斜杠转义、命令名带引号或写成路径、多行脚本在有限信任下一律弹窗。**代价写在明面上：黑名单没点名的命令，在有限信任服务器上不弹窗直接执行。** **完全信任**远程命令与 SFTP 写入都不弹窗。
+- `run_remote_command` 确认跟随服务器信任下拉（`Trust agent remote commands`）。**不信任**每条都弹窗。**有限信任**会加载 npm 精确依赖 `@at-series/command-policy@0.1.0`（禁止 `^`），仅当分析器返回 `allow`（已证明的普通只读）时免确认。写操作、服务控制、敏感读、未知二进制、解析失败以及无法证明的语义一律 `review` 并弹窗。`# Purpose:` 注释不授予权限；带引号的多行脚本以及静态 `sudo` / `python3 -c` / `sqlite3` 载荷会进入分析，而不是按包装命令名一刀切拦截。**完全信任**远程命令与 SFTP 写入都不弹窗。
 - 有限信任不会跳过 SFTP 写入授权。完全信任会跳过远程命令确认和 SFTP 写入确认（含敏感路径）。任何信任档都不会跳过 SSH 主机指纹信任。
 - Bridge 发布到 AT Series 注册表 `~/.at-series/bridges/<hostApp>/`。
 - SFTP 写入按「目录」授权：弹窗提供 `Allow Once`（默认）、`Allow This Folder For 15 Minutes`、`Allow This Folder For The Session` 三档，任何一档都只覆盖用户当时看到的那个目录，不会覆盖整台服务器。

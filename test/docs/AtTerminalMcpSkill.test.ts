@@ -33,7 +33,17 @@ describe('AT Terminal MCP skill', () => {
     expect(skill).toContain('[Safe operations](references/safe-operations.md)');
     expect(skill).toContain('[Workspace troubleshooting](references/workspace-troubleshooting.md)');
     expect(skill).toContain('[Incident response](references/incident-response.md)');
+    expect(skill).not.toContain('Load every reference that applies');
+    expect(skill).toMatch(/at most 1 ops reference/i);
     expect(skill.split(/\s+/).length).toBeLessThan(400);
+  });
+
+  it('keeps YAML description free of Hub workflow shortcut', () => {
+    const skill = readFileSync('skills/at-terminal-mcp/SKILL.md', 'utf8');
+    const match = skill.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    expect(match).not.toBeNull();
+    expect(match![1]).not.toMatch(/discover\s*→\s*select/i);
+    expect(match![1]).not.toMatch(/first-class call/i);
   });
 
   it('ships installable, one-level reference files for cross-agent use', () => {

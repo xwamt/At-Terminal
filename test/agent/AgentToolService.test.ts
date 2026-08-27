@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { AgentToolService } from '../../src/agent/AgentToolService';
+import {
+  setRemoteCommandPolicyLoaderForTests
+} from '../../src/agent/loadRemoteCommandPolicy';
+import { createTerminalPolicyRuntime } from '../../src/policy-runtime';
 import type { RemoteCommandExecutor } from '../../src/agent/RemoteCommandExecutor';
 import type { ServerConfig } from '../../src/config/schema';
 import { TerminalContextRegistry } from '../../src/terminal/TerminalContext';
@@ -19,6 +23,11 @@ function server(id = 'server-1'): ServerConfig {
     updatedAt: 1
   };
 }
+
+beforeAll(() => {
+  const runtime = createTerminalPolicyRuntime();
+  setRemoteCommandPolicyLoaderForTests(async () => runtime);
+});
 
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -418,10 +427,11 @@ describe('AgentToolService', () => {
     await service.runRemoteCommand({ serverId: 'server-1', command: 'rm -rf /tmp/app' });
 
     expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-      'Run remote command on Production (server-1.example.com)?\n\nrm -rf /tmp/app\n\nWarning: this command appears destructive.',
+      expect.stringContaining('Warning: this command appears destructive.'),
       { modal: true },
       'Run Command'
     );
+    expect(vi.mocked(vscode.window.showWarningMessage).mock.calls[0][0]).toContain('rm -rf /tmp/app');
     expect(execute).toHaveBeenCalled();
   });
 
@@ -510,5 +520,56 @@ describe('AgentToolService', () => {
       expect.anything(),
       expect.objectContaining({ command: longCommand })
     );
+  });
+
+  it('hot-reloads updated trust configuration from configManager for a live connected terminal', async () => {
+    // Initial connected terminal snapshot had trust = none
+    const initialConnectedServer = { ...server('server-1'), backgroundConnectionAllowed: false, agentCommandTrust: 'none' as const };
+    const terminalContext = new TerminalContextRegistry();
+    terminalContext.setActive({
+      terminalId: 'terminal-1',
+      server: initialConnectedServer,
+      connected: true,
+      write: vi.fn()
+    });
+
+    // In configManager, server was updated to full trust
+    const latestServerInConfig = {
+      ...initialConnectedServer,
+      agentCommandTrust: 'full' as const,
+      agentCommandAutoApprove: true
+    };
+    const showWarningMessage = vi.spyOn(vscode.window, 'showWarningMessage');
+    const execute = vi.fn(async () => ({
+      serverId: 'server-1',
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command: 'docker exec app rm -rf /tmp/data',
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+      durationMs: 1,
+      timedOut: false,
+      truncated: false
+    }));
+
+    const service = new AgentToolService({
+      configManager: {
+        getServer: async (id: string) => (id === 'server-1' ? latestServerInConfig : undefined),
+        listServers: async () => [latestServerInConfig]
+      } as never,
+      terminalContext,
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+
+    // Command should execute without modal confirmation dialog
+    await service.runRemoteCommand({ serverId: 'server-1', command: 'docker exec app rm -rf /tmp/data' });
+
+    expect(showWarningMessage).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ agentCommandTrust: 'full' }),
+      expect.objectContaining({ command: 'docker exec app rm -rf /tmp/data' })
+    );
+    expect(terminalContext.getActive()?.server.agentCommandTrust).toBe('full');
   });
 });
