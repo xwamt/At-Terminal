@@ -160,6 +160,10 @@ export const window = {
   createWebviewPanel: () => ({ dispose: () => undefined }),
   showTextDocument: async (document: TextDocument) => document,
   createStatusBarItem: (_alignment?: StatusBarAlignment, _priority?: number) => new StatusBarItem(),
+  createOutputChannel: (_name: string) => ({
+    appendLine: () => undefined,
+    dispose: () => undefined
+  }),
   tabGroups: {
     onDidChangeTabs: didChangeTabs.event,
     __fireDidChangeTabs: (event: { closed: unknown[] }) => didChangeTabs.fire(event)

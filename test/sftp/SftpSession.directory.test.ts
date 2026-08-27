@@ -96,6 +96,16 @@ async function flush(): Promise<void> {
   }
 }
 
+async function waitUntil(predicate: () => boolean): Promise<void> {
+  for (let turn = 0; turn < 50; turn += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error('timed out waiting for SFTP directory transfer to progress');
+}
+
 describe('SftpSession downloadFile with a directory target', () => {
   it('cannot download a directory: fastGet fails like the server does', async () => {
     // Documents the gap downloadDirectory exists to fill: fastGet only handles regular files.
@@ -158,13 +168,20 @@ describe('SftpSession downloadDirectory', () => {
     const sftp = session({ readdir: readdirFromTree(tree), fastGet });
 
     const done = sftp.downloadDirectory('/srv/data', localDir);
-    await flush();
+    await waitUntil(() => fastGet.mock.calls.length >= DIRECTORY_TRANSFER_CONCURRENCY);
 
     expect(fastGet).toHaveBeenCalledTimes(DIRECTORY_TRANSFER_CONCURRENCY);
 
+    while (fastGet.mock.calls.length < files.length) {
+      expect(pending.length).toBeGreaterThan(0);
+      expect(pending.length).toBeLessThanOrEqual(DIRECTORY_TRANSFER_CONCURRENCY);
+      pending.shift()!();
+      await waitUntil(
+        () => pending.length > 0 || fastGet.mock.calls.length === files.length
+      );
+    }
     while (pending.length > 0) {
       pending.shift()!();
-      await flush();
     }
     await done;
     expect(fastGet).toHaveBeenCalledTimes(files.length);

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { createAgentAuditLog } from './agent/AgentAuditLog';
 import { AgentToolService } from './agent/AgentToolService';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
 import { SftpAgentService } from './agent/SftpAgentService';
@@ -131,6 +132,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   terminalContext.onDidRemoveContext((terminalId) => {
     sftpManager.removeTerminalContext(terminalId);
+    sftpAgentService?.disposeTerminal(terminalId);
     treeProvider.refresh();
   });
 
@@ -175,20 +177,25 @@ export function activate(context: vscode.ExtensionContext): void {
         throw error;
       });
     const sftpWriteAuthorizer = createProductionSftpWriteAuthorizer();
+    const agentAuditLog = createAgentAuditLog(context.globalStorageUri);
     sftpAgentService = new SftpAgentService({
       terminalContext,
       // Agent writes never escalate: a denied write stays denied instead of silently
       // becoming a root write through the sudo fallback.
-      createSession: (terminal) =>
-        new SftpSession(terminal.server, configManager, hostKeyVerifier, { allowSudoFallback: false }),
-      authorizer: sftpWriteAuthorizer
+      createSession: (target) =>
+        new SftpSession(target.server, configManager, hostKeyVerifier, { allowSudoFallback: false }),
+      authorizer: sftpWriteAuthorizer,
+      resolveBackgroundServer: (serverId) => configManager.getServer(serverId),
+      audit: agentAuditLog
     });
     const agentToolService = new AgentToolService({
       configManager,
       terminalContext,
       executor: remoteCommandExecutor,
-      sftp: sftpAgentService
+      sftp: sftpAgentService,
+      audit: agentAuditLog
     });
+    context.subscriptions.push(agentAuditLog);
     bridgeServer = new BridgeServer({
       service: agentToolService,
       hostApp,
@@ -222,7 +229,7 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
       try {
-        await syncPackagedHub(context);
+        await syncPackagedHub(context, { force: true });
       } catch (error) {
         const repairAction = t('Repair');
         void showErrorWithActions(
@@ -340,6 +347,7 @@ export function activate(context: vscode.ExtensionContext): void {
           configManager,
           (savedServer) => {
             if (savedServer) {
+              sftpAgentService?.disposeServer(savedServer.id);
               terminalContext.updateServer(savedServer);
               TerminalPanel.updateServer(savedServer);
             }
@@ -367,6 +375,7 @@ export function activate(context: vscode.ExtensionContext): void {
         deleteAction
       );
       if (answer === deleteAction) {
+        sftpAgentService?.disposeServer(server.id);
         await deleteServerAndTrust.remove(server, { configManager, hostKeyStore });
         treeProvider.refresh();
       }
