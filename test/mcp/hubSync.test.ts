@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -97,5 +97,117 @@ describe('syncPackagedHubAt', () => {
 
     expect(result).toEqual({ updated: false, activeVersion: '0.2.0' });
     await expect(readFile(hubJsPath(home), 'utf8')).resolves.toBe(activeContent);
+  });
+
+  describe('fast path', () => {
+    const versions = { hubVersion: '0.1.0', pluginVersion: '0.3.0' };
+
+    async function firstSync(content: string) {
+      const bundlePath = join(bundleDir, 'hub.js');
+      await writeFile(bundlePath, content, 'utf8');
+      const statePath = join(home, 'hub-sync-state.json');
+      const result = await syncPackagedHubAt(bundlePath, versions, home, { statePath });
+      return { bundlePath, statePath, result };
+    }
+
+    /** Same-size tamper of the active hub.js, with the state record updated to its stat. */
+    async function tamperKeepingStatMatch(statePath: string, tampered: string) {
+      await writeFile(hubJsPath(home), tampered, 'utf8');
+      const state = JSON.parse(await readFile(statePath, 'utf8'));
+      const target = await stat(hubJsPath(home));
+      await writeFile(
+        statePath,
+        JSON.stringify({ ...state, targetSize: target.size, targetMtimeMs: target.mtimeMs }),
+        'utf8'
+      );
+    }
+
+    it('skips the full sha256 read when version and size/mtime still match the last sync', async () => {
+      const content = 'a'.repeat(64);
+      const { bundlePath, statePath, result } = await firstSync(content);
+      expect(result).toEqual({ updated: true, activeVersion: '0.1.0' });
+
+      // Only a skipped hash comparison can leave a same-size content change in place.
+      const tampered = 'b'.repeat(64);
+      await tamperKeepingStatMatch(statePath, tampered);
+
+      const second = await syncPackagedHubAt(bundlePath, versions, home, { statePath });
+      expect(second).toEqual({ updated: false, activeVersion: '0.1.0' });
+      await expect(readFile(hubJsPath(home), 'utf8')).resolves.toBe(tampered);
+    });
+
+    it('force runs the full hash election and repairs the bundle', async () => {
+      const content = 'a'.repeat(64);
+      const { bundlePath, statePath } = await firstSync(content);
+      await tamperKeepingStatMatch(statePath, 'b'.repeat(64));
+
+      const repaired = await syncPackagedHubAt(bundlePath, versions, home, { statePath, force: true });
+
+      expect(repaired).toEqual({ updated: true, activeVersion: '0.1.0' });
+      await expect(readFile(hubJsPath(home), 'utf8')).resolves.toBe(content);
+    });
+
+    it('falls back to the full sync when the target size changed', async () => {
+      const content = 'a'.repeat(64);
+      const { bundlePath, statePath } = await firstSync(content);
+
+      await writeFile(hubJsPath(home), 'tampered-with-a-different-size', 'utf8');
+
+      const second = await syncPackagedHubAt(bundlePath, versions, home, { statePath });
+      expect(second).toEqual({ updated: true, activeVersion: '0.1.0' });
+      await expect(readFile(hubJsPath(home), 'utf8')).resolves.toBe(content);
+    });
+
+    it('falls back to the full sync when hub-version.json names another version', async () => {
+      const content = 'a'.repeat(64);
+      const { bundlePath, statePath } = await firstSync(content);
+
+      // Another plugin elected 0.2.0 (metadata consistent with the bytes on disk).
+      await writeFile(
+        hubVersionPath(home),
+        JSON.stringify({
+          version: '0.2.0',
+          protocolVersion: 1,
+          writtenByPluginId: 'at.other',
+          writtenByPluginVersion: '0.2.0',
+          writtenAt: 2,
+          bundleSha256: createHash('sha256').update(Buffer.from(content, 'utf8')).digest('hex')
+        }),
+        'utf8'
+      );
+
+      // A fast-path hit would have reported 0.1.0; the full election defers to 0.2.0.
+      const second = await syncPackagedHubAt(bundlePath, versions, home, { statePath });
+      expect(second).toEqual({ updated: false, activeVersion: '0.2.0' });
+    });
+
+    it('falls back to the full sync when the packaged hub version changed', async () => {
+      const content = 'a'.repeat(64);
+      const { bundlePath, statePath } = await firstSync(content);
+      const upgraded = 'c'.repeat(64);
+      await writeFile(bundlePath, upgraded, 'utf8');
+
+      const second = await syncPackagedHubAt(
+        bundlePath,
+        { hubVersion: '0.2.0', pluginVersion: '0.3.0' },
+        home,
+        { statePath }
+      );
+
+      expect(second).toEqual({ updated: true, activeVersion: '0.2.0' });
+      await expect(readFile(hubJsPath(home), 'utf8')).resolves.toBe(upgraded);
+    });
+
+    it('ignores a corrupt state file and runs the full sync', async () => {
+      const content = 'a'.repeat(64);
+      const { bundlePath, statePath } = await firstSync(content);
+      await writeFile(statePath, 'not json', 'utf8');
+      await writeFile(hubJsPath(home), 'b'.repeat(64), 'utf8');
+
+      const second = await syncPackagedHubAt(bundlePath, versions, home, { statePath });
+
+      expect(second).toEqual({ updated: true, activeVersion: '0.1.0' });
+      await expect(readFile(hubJsPath(home), 'utf8')).resolves.toBe(content);
+    });
   });
 });
