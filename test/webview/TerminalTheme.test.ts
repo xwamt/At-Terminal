@@ -53,7 +53,8 @@ describe('terminal theme integration', () => {
     expect(options).toMatchObject({
       cursorBlink: true,
       cursorStyle: 'bar',
-      allowTransparency: true,
+      // Opaque theme background: transparency would only cost render performance.
+      allowTransparency: false,
       scrollback: 9000,
       fontSize: 16,
       fontFamily: 'JetBrains Mono'
@@ -64,6 +65,15 @@ describe('terminal theme integration', () => {
       cursor: '#569cd6',
       selectionBackground: '#569cd633'
     });
+  });
+
+  it('enables allowTransparency only when the theme background has an alpha channel', () => {
+    const translucent = createTerminalOptions(
+      { scrollback: 1000, fontSize: 14, fontFamily: 'monospace' },
+      (name) => (name === '--vscode-terminal-background' ? '#1e1e1e80' : undefined)
+    );
+
+    expect(translucent.allowTransparency).toBe(true);
   });
 
   it('does not hard-code terminal surface colors in CSS', () => {

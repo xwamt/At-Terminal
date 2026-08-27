@@ -214,13 +214,17 @@ describe('terminal focus recovery', () => {
 });
 
 describe('terminal status classes', () => {
-  it('treats idle disconnect messages as disconnected status', () => {
-    expect(resolveTerminalStatusClass('AT Terminal disconnected after 1 minute(s) of inactivity.')).toBe(
-      'disconnected'
-    );
+  it('maps each structured connection state to its status class', () => {
+    expect(resolveTerminalStatusClass('connected')).toBe('connected');
+    expect(resolveTerminalStatusClass('disconnected')).toBe('disconnected');
+    expect(resolveTerminalStatusClass('connecting')).toBe('connecting');
   });
 
-  it('treats plain disconnect notices as disconnected status', () => {
-    expect(resolveTerminalStatusClass('Disconnected after 30 minute(s) of inactivity.')).toBe('disconnected');
+  it('never derives the class from display text, so localized copy cannot break it', () => {
+    // These are texts, not states: an unknown value falls back to connecting instead of
+    // being substring-matched against English words.
+    expect(resolveTerminalStatusClass('Disconnected after 30 minute(s) of inactivity.')).toBe('connecting');
+    expect(resolveTerminalStatusClass('已断开连接')).toBe('connecting');
+    expect(resolveTerminalStatusClass(undefined)).toBe('connecting');
   });
 });

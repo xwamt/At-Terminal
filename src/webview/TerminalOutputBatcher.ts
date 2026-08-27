@@ -2,7 +2,7 @@ export const TERMINAL_OUTPUT_FLUSH_MS = 8;
 export const TERMINAL_OUTPUT_FLUSH_BYTES = 64 * 1024;
 
 export interface TerminalOutputBatcherOptions {
-  emit(payload: string): void;
+  emit(payload: Uint8Array): void;
   flushIntervalMs?: number;
   flushBytes?: number;
 }
@@ -13,7 +13,7 @@ export interface TerminalOutputBatcherOptions {
  * each message competes with xterm rendering on the same thread.
  */
 export class TerminalOutputBatcher {
-  private readonly emit: (payload: string) => void;
+  private readonly emit: (payload: Uint8Array) => void;
   private readonly flushIntervalMs: number;
   private readonly flushBytes: number;
   private chunks: Buffer[] = [];
@@ -44,9 +44,7 @@ export class TerminalOutputBatcher {
     if (this.pendingBytes === 0) {
       return;
     }
-    const payload = (this.chunks.length === 1 ? this.chunks[0] : Buffer.concat(this.chunks, this.pendingBytes)).toString(
-      'base64'
-    );
+    const payload = concatToStandaloneBytes(this.chunks, this.pendingBytes);
     this.chunks = [];
     this.pendingBytes = 0;
     this.emit(payload);
@@ -63,4 +61,19 @@ export class TerminalOutputBatcher {
     clearTimeout(this.timer);
     this.timer = undefined;
   }
+}
+
+/**
+ * The payload crosses `postMessage` as binary, so it must not stay a view into Node's shared
+ * Buffer pool: a plain, exactly-sized Uint8Array serializes just its own bytes and lets the
+ * pool slab be reclaimed.
+ */
+function concatToStandaloneBytes(chunks: readonly Buffer[], totalBytes: number): Uint8Array {
+  const payload = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    payload.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return payload;
 }

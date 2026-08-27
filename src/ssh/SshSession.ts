@@ -74,6 +74,15 @@ export class SshSession {
     this.shell?.write(data);
   }
 
+  /** Backpressure hook: stop reading from the remote shell while the webview catches up. */
+  pauseOutput(): void {
+    this.shell?.pause();
+  }
+
+  resumeOutput(): void {
+    this.shell?.resume();
+  }
+
   resize(rows: number, cols: number): void {
     if (rows > 0 && cols > 0) {
       this.rows = rows;

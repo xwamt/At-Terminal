@@ -103,13 +103,25 @@ export function installTerminalClipboardPasteHandler(terminal: PasteTerminal, ta
   );
 }
 
-export function resolveTerminalStatusClass(payload: string): 'connected' | 'disconnected' | 'connecting' {
-  if (payload === 'Connected') {
-    return 'connected';
+export type TerminalStatusState = 'connected' | 'disconnected' | 'connecting';
+
+export interface TerminalStatusPayload {
+  state: TerminalStatusState;
+  text: string;
+}
+
+/**
+ * The host always sends a structured `{ state, text }` status. The class comes from the
+ * machine-readable state alone — matching on display text broke as soon as the text was
+ * localized (Chinese 已断开连接 used to render as "connecting").
+ */
+export function resolveTerminalStatusClass(state: unknown): TerminalStatusState {
+  switch (state) {
+    case 'connected':
+      return 'connected';
+    case 'disconnected':
+      return 'disconnected';
+    default:
+      return 'connecting';
   }
-  const lowerPayload = payload.toLowerCase();
-  if (lowerPayload.includes('disconnected')) {
-    return 'disconnected';
-  }
-  return 'connecting';
 }
