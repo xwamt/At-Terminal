@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
+import { t } from '../i18n/t';
 import type { TerminalContextRegistry, TerminalContextSnapshot } from '../terminal/TerminalContext';
 import { formatRemoteCommandConfirmMessage } from '../utils/commandPreview';
+import type { AgentAuditRecorder } from './AgentAuditLog';
 import type { RemoteCommandExecutor, RemoteCommandResult } from './RemoteCommandExecutor';
 import { authorizeRemoteCommand, resolveAgentCommandTrust } from './agentCommandTrust';
 import type { SftpAgentService } from './SftpAgentService';
@@ -12,6 +14,7 @@ export interface AgentToolServiceDependencies {
   terminalContext: TerminalContextRegistry;
   executor: RemoteCommandExecutor;
   sftp?: SftpAgentService;
+  audit?: AgentAuditRecorder;
 }
 
 export interface RunRemoteCommandInput {
@@ -21,6 +24,12 @@ export interface RunRemoteCommandInput {
   timeoutMs?: number;
   maxOutputBytes?: number;
 }
+
+/**
+ * A modal the user never answers must not park the agent forever: after this long the
+ * tool call fails with an instruction to get the human to the IDE.
+ */
+const CONFIRMATION_TIMEOUT_MS = 120_000;
 
 export class AgentToolService {
   constructor(private readonly dependencies: AgentToolServiceDependencies) {}
@@ -50,34 +59,66 @@ export class AgentToolService {
     if (!command) {
       throw new Error('Remote command cannot be empty.');
     }
-    const server = await this.resolveServer(input.serverId);
-    const authorization = await authorizeRemoteCommand({
-      server,
-      command,
-      cwd: input.cwd
-    });
-    if (!authorization.autoApprove) {
-      const answer = await vscode.window.showWarningMessage(
-        formatRemoteCommandConfirmMessage({
-          serverLabel: server.label,
-          host: server.host,
-          command,
-          destructive: authorization.destructive,
-          riskSummaries: authorization.riskSummaries
-        }),
-        { modal: true },
-        'Run Command'
-      );
-      if (answer !== 'Run Command') {
-        throw new Error('Remote command was cancelled.');
+    const started = Date.now();
+    let reasonCode = 'auto_approved';
+    try {
+      const server = await this.resolveServer(input.serverId);
+      const authorization = await authorizeRemoteCommand({
+        server,
+        command,
+        cwd: input.cwd
+      });
+      if (!authorization.autoApprove) {
+        const runCommandLabel = t('Run Command');
+        const answer = await withTimeout(
+          Promise.resolve(
+            vscode.window.showWarningMessage(
+              formatRemoteCommandConfirmMessage({
+                serverLabel: server.label,
+                host: server.host,
+                command,
+                destructive: authorization.destructive,
+                riskSummaries: authorization.riskSummaries
+              }),
+              { modal: true },
+              runCommandLabel
+            )
+          ),
+          CONFIRMATION_TIMEOUT_MS,
+          'Confirmation timed out; ask the user to approve the command dialog in the IDE, then retry.'
+        );
+        if (answer !== runCommandLabel) {
+          reasonCode = 'user_cancelled';
+          throw new Error('Remote command was cancelled.');
+        }
+        reasonCode = 'user_approved';
       }
+      const result = await this.dependencies.executor.execute(server, {
+        command,
+        cwd: input.cwd,
+        timeoutMs: input.timeoutMs,
+        maxOutputBytes: input.maxOutputBytes
+      });
+      this.dependencies.audit?.record({
+        tool: 'run_remote_command',
+        serverId: result.serverId,
+        command,
+        reasonCode: result.timedOut ? 'command_timeout' : reasonCode,
+        exitCode: result.exitCode,
+        durationMs: result.durationMs,
+        truncated: result.truncated
+      });
+      return result;
+    } catch (error) {
+      this.dependencies.audit?.record({
+        tool: 'run_remote_command',
+        serverId: input.serverId,
+        command,
+        reasonCode: auditReasonForError(error, reasonCode),
+        durationMs: Date.now() - started
+      });
+      throw error;
     }
-    return await this.dependencies.executor.execute(server, {
-      command,
-      cwd: input.cwd,
-      timeoutMs: input.timeoutMs,
-      maxOutputBytes: input.maxOutputBytes
-    });
   }
 
   async sftpListDirectory(input: {
@@ -85,6 +126,7 @@ export class AgentToolService {
     serverId?: string;
     path?: string;
     maxEntries?: number;
+    offset?: number;
   }) {
     return await this.requireSftp().listDirectory(input);
   }
@@ -93,7 +135,13 @@ export class AgentToolService {
     return await this.requireSftp().statPath(input);
   }
 
-  async sftpReadFile(input: { terminalId?: string; serverId?: string; path: string; maxBytes?: number }) {
+  async sftpReadFile(input: {
+    terminalId?: string;
+    serverId?: string;
+    path: string;
+    maxBytes?: number;
+    offset?: number;
+  }) {
     return await this.requireSftp().readFile(input);
   }
 
@@ -113,6 +161,14 @@ export class AgentToolService {
 
   async sftpCreateDirectory(input: { terminalId?: string; serverId?: string; path: string }) {
     return await this.requireSftp().createDirectory(input);
+  }
+
+  async sftpRename(input: { terminalId?: string; serverId?: string; path: string; newPath: string }) {
+    return await this.requireSftp().rename(input);
+  }
+
+  async sftpDelete(input: { terminalId?: string; serverId?: string; path: string }) {
+    return await this.requireSftp().deleteFile(input);
   }
 
   private async resolveServer(serverId: string | undefined): Promise<ServerConfig> {
@@ -157,7 +213,11 @@ export class AgentToolService {
 
   private requireBackgroundConnectionAllowed(server: ServerConfig): ServerConfig {
     if (server.backgroundConnectionAllowed !== true) {
-      throw new Error(`SSH server "${server.id}" does not allow background connections.`);
+      throw new Error(
+        `SSH server "${server.id}" does not allow background connections. ` +
+          'Ask the user to enable "Allow background connections" on the AT Terminal server edit form, ' +
+          'or connect an AT Terminal session to that server.'
+      );
     }
     return server;
   }
@@ -167,5 +227,35 @@ export class AgentToolService {
       throw new Error('AT Terminal SFTP agent service is not available.');
     }
     return this.dependencies.sftp;
+  }
+}
+
+function auditReasonForError(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('was cancelled')) {
+    return 'user_cancelled';
+  }
+  if (message.startsWith('Confirmation timed out')) {
+    return 'confirmation_timeout';
+  }
+  if (message.includes('does not allow background connections')) {
+    return 'background_denied';
+  }
+  return fallback === 'user_approved' || fallback === 'auto_approved' ? 'error' : fallback;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
   }
 }
