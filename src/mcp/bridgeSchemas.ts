@@ -19,7 +19,8 @@ export const sftpListDirectoryBridgeSchema = z
   .object({
     ...sftpTargetFields,
     path: z.string().min(1).optional(),
-    maxEntries: z.number().int().positive().optional()
+    maxEntries: z.number().int().positive().optional(),
+    offset: z.number().int().nonnegative().optional()
   })
   .strict();
 
@@ -34,7 +35,24 @@ export const sftpReadFileBridgeSchema = z
   .object({
     ...sftpTargetFields,
     path: z.string().min(1),
-    maxBytes: z.number().int().positive().optional()
+    maxBytes: z.number().int().positive().optional(),
+    // Negative offsets read from the end of the file (tail).
+    offset: z.number().int().optional()
+  })
+  .strict();
+
+export const sftpRenameBridgeSchema = z
+  .object({
+    ...sftpTargetFields,
+    path: z.string().min(1),
+    newPath: z.string().min(1)
+  })
+  .strict();
+
+export const sftpDeleteBridgeSchema = z
+  .object({
+    ...sftpTargetFields,
+    path: z.string().min(1)
   })
   .strict();
 

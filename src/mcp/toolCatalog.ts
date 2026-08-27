@@ -89,7 +89,7 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
     name: 'sftp_list_directory',
     title: 'SFTP List Directory',
     description:
-      'List a remote directory through the selected AT Terminal SFTP session. Returns at most maxEntries entries (default 500, hard cap 5000) plus truncated/total; when truncated, narrow the path or raise maxEntries.',
+      'List a remote directory through the selected AT Terminal SFTP session. Returns at most maxEntries entries (default 500, hard cap 5000) plus truncated/total; when truncated, page through the rest with offset (entry index) or narrow the path.',
     risk: 'read',
     inputSchema: {
       type: 'object',
@@ -103,6 +103,11 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
           type: 'number',
           description:
             'Optional max directory entries to return. Default 500; values above 5000 are capped.'
+        },
+        offset: {
+          type: 'number',
+          description:
+            'Optional index of the first entry to return, for paging when truncated is true. Default 0.'
         }
       }
     }
@@ -122,7 +127,7 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
     name: 'sftp_read_file',
     title: 'SFTP Read File',
     description:
-      'Read bounded UTF-8 text from a remote file through AT Terminal SFTP. Default maxBytes is 65536 (hard cap 262144); when truncated is true, read a smaller range or raise maxBytes explicitly—do not pull whole large configs by default.',
+      'Read bounded UTF-8 text from a remote file through AT Terminal SFTP. Default maxBytes is 65536 (hard cap 262144); when truncated is true, continue from offset (bytes) or raise maxBytes explicitly—do not pull whole large configs by default. A negative offset reads the tail of the file, e.g. offset -4096 for the last 4 KiB of a log.',
     risk: 'read',
     inputSchema: {
       type: 'object',
@@ -132,6 +137,11 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
           type: 'number',
           description:
             'Optional max bytes to read. Default 65536; values above 262144 are capped.'
+        },
+        offset: {
+          type: 'number',
+          description:
+            'Optional byte position to start reading at. Negative values count back from the end of the file (tail). Default 0.'
         }
       },
       required: ['path']
@@ -180,6 +190,36 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
     name: 'sftp_create_directory',
     title: 'SFTP Create Directory',
     description: `Create a new remote directory through AT Terminal SFTP. ${WRITE_AUTHORIZATION_NOTE}`,
+    risk: 'write',
+    inputSchema: {
+      type: 'object',
+      properties: { ...pathProperties },
+      required: ['path']
+    }
+  },
+  {
+    name: 'sftp_rename',
+    title: 'SFTP Rename',
+    description:
+      `Rename or move a remote file or directory through AT Terminal SFTP. Fails if the destination already exists. Both the source and destination paths require write authorization. ${WRITE_AUTHORIZATION_NOTE}`,
+    risk: 'write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...pathProperties,
+        newPath: {
+          type: 'string',
+          description: 'Remote POSIX path to rename or move the source to.'
+        }
+      },
+      required: ['path', 'newPath']
+    }
+  },
+  {
+    name: 'sftp_delete',
+    title: 'SFTP Delete File',
+    description:
+      'Delete a single remote file through AT Terminal SFTP. Directories are refused. Every delete asks the user for confirmation, even on fully trusted servers; an approval covers that one file only and is never remembered as a directory or session grant, and sensitive paths ask twice. Expect a human round-trip on every call.',
     risk: 'write',
     inputSchema: {
       type: 'object',

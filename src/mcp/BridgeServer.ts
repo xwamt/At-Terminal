@@ -16,9 +16,11 @@ import type { AgentToolService } from '../agent/AgentToolService';
 import { formatError } from '../utils/errors';
 import {
   sftpCreateFileBridgeSchema,
+  sftpDeleteBridgeSchema,
   sftpListDirectoryBridgeSchema,
   sftpPathBridgeSchema,
   sftpReadFileBridgeSchema,
+  sftpRenameBridgeSchema,
   sftpWriteFileBridgeSchema,
   runRemoteCommandBridgeSchema
 } from './bridgeSchemas';
@@ -279,12 +281,18 @@ async function handleInvoke(
     }
     return json(200, { ok: true, name, result: result.value });
   } catch (error) {
-    if (error instanceof Error && error.message === 'Remote command was cancelled.') {
+    if (error instanceof Error && USER_CANCELLED_MESSAGES.has(error.message)) {
       return bridgeError(499, 'USER_CANCELLED', error.message);
     }
     throw error;
   }
 }
+
+const USER_CANCELLED_MESSAGES = new Set([
+  'Remote command was cancelled.',
+  'SFTP write was cancelled.',
+  'SFTP delete was cancelled.'
+]);
 
 async function dispatchTool(
   service: AgentToolService,
@@ -354,6 +362,20 @@ async function dispatchTool(
         return { ok: false, response: bridgeError(422, 'VALIDATION_ERROR', parsed.error) };
       }
       return { ok: true, value: await service.sftpCreateDirectory(parsed.data) };
+    }
+    case 'sftp_rename': {
+      const parsed = parseArgsWithSchema(args, sftpRenameBridgeSchema);
+      if (!parsed.ok) {
+        return { ok: false, response: bridgeError(422, 'VALIDATION_ERROR', parsed.error) };
+      }
+      return { ok: true, value: await service.sftpRename(parsed.data) };
+    }
+    case 'sftp_delete': {
+      const parsed = parseArgsWithSchema(args, sftpDeleteBridgeSchema);
+      if (!parsed.ok) {
+        return { ok: false, response: bridgeError(422, 'VALIDATION_ERROR', parsed.error) };
+      }
+      return { ok: true, value: await service.sftpDelete(parsed.data) };
     }
     default:
       return {
