@@ -3,18 +3,14 @@ export interface WebglAddonLike {
   onContextLoss(listener: () => void): { dispose(): void };
 }
 
-interface RendererTerminal {
-  loadAddon(addon: WebglAddonLike): void;
-}
-
 export type TerminalRendererKind = 'webgl' | 'dom';
 
 export type TerminalRendererFallbackReason = 'zebra-stripes' | 'load-failed' | 'context-loss';
 
-export interface TerminalRendererOptions {
+export interface TerminalRendererOptions<TAddon extends WebglAddonLike> {
   /** Zebra stripes restyle the DOM rows, which the WebGL renderer does not produce. */
   zebraStripes: boolean;
-  createWebglAddon: () => WebglAddonLike;
+  createWebglAddon: () => TAddon;
   onFallback?: (reason: TerminalRendererFallbackReason) => void;
 }
 
@@ -23,13 +19,16 @@ export interface TerminalRendererOptions {
  * addon construction, activation, or a later GPU context loss — disposes the addon, which
  * reverts xterm to its DOM renderer, so output keeps flowing either way.
  */
-export function setupTerminalRenderer(terminal: RendererTerminal, options: TerminalRendererOptions): TerminalRendererKind {
+export function setupTerminalRenderer<TAddon extends WebglAddonLike>(
+  terminal: { loadAddon(addon: NoInfer<TAddon>): void },
+  options: TerminalRendererOptions<TAddon>
+): TerminalRendererKind {
   if (options.zebraStripes) {
     options.onFallback?.('zebra-stripes');
     return 'dom';
   }
 
-  let addon: WebglAddonLike | undefined;
+  let addon: TAddon | undefined;
   try {
     addon = options.createWebglAddon();
     addon.onContextLoss(() => {

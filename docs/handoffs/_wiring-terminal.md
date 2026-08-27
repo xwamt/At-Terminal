@@ -78,6 +78,11 @@ enum to `utf-8 | gbk | big5`, no terminal-side change is needed.
 
 ## l10n/bundle.l10n.zh-cn.json (UX slice owns the file)
 
+> **Integrator note:** `test/i18n/nls.test.ts` ("has a zh-cn translation for every one") fails
+> on this branch until the keys below are added to the bundle. The slice-C gates
+> (`npx vitest run test/webview`, `npx tsc --noEmit`) are green; the nls test goes green once
+> slice E merges these entries.
+
 New `t()` strings introduced by this slice that need zh-cn entries:
 
 | English key | Suggested zh-cn |
