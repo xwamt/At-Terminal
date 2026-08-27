@@ -303,3 +303,95 @@ describe('SftpWriteAuthorizer sensitive paths', () => {
     expect(recorder.seen[1].parentDirectory).toBe(WORKSPACE_ROOT);
   });
 });
+
+function deleteRequest(path: string): SftpWriteRequest {
+  return {
+    operation: 'delete_file',
+    path,
+    overwrite: false,
+    workspaceRoot: WORKSPACE_ROOT
+  };
+}
+
+describe('SftpWriteAuthorizer requireDelete', () => {
+  it('still prompts on a fully trusted server', async () => {
+    const recorder = recordingConfirm(['once']);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+    const trusted = { ...server(), agentCommandTrust: 'full' as const };
+
+    await authorizer.requireDelete(trusted, deleteRequest(`${WORKSPACE_ROOT}/old.log`));
+
+    expect(recorder.seen).toHaveLength(1);
+    expect(recorder.seen[0].request.operation).toBe('delete_file');
+  });
+
+  it('only ever offers "once" for a delete', async () => {
+    const recorder = recordingConfirm(['once']);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+
+    await authorizer.requireDelete(server(), deleteRequest(`${WORKSPACE_ROOT}/old.log`));
+
+    expect(recorder.seen[0].allowedScopes).toEqual(['once']);
+  });
+
+  it('never remembers an approval, so every delete asks again', async () => {
+    const recorder = recordingConfirm(['once', 'once']);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+
+    await authorizer.requireDelete(server(), deleteRequest(`${WORKSPACE_ROOT}/old.log`));
+    await authorizer.requireDelete(server(), deleteRequest(`${WORKSPACE_ROOT}/old.log`));
+
+    expect(recorder.seen).toHaveLength(2);
+  });
+
+  it('is not covered by a directory or session grant from a prior write', async () => {
+    const recorder = recordingConfirm(['session', 'once']);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+
+    await authorizer.requireWrite(server(), write(`${WORKSPACE_ROOT}/logs/a.txt`));
+    await authorizer.requireDelete(server(), deleteRequest(`${WORKSPACE_ROOT}/logs/a.txt`));
+
+    expect(recorder.seen).toHaveLength(2);
+    expect(recorder.seen[1].request.operation).toBe('delete_file');
+  });
+
+  it('throws when the user dismisses the prompt', async () => {
+    const authorizer = new SftpWriteAuthorizer({ confirm: async () => undefined });
+
+    await expect(
+      authorizer.requireDelete(server(), deleteRequest(`${WORKSPACE_ROOT}/old.log`))
+    ).rejects.toThrow('SFTP delete was cancelled.');
+  });
+
+  it('asks twice before deleting a sensitive path', async () => {
+    const recorder = recordingConfirm(['once', 'once']);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+
+    await authorizer.requireDelete(server(), deleteRequest('/home/deploy/.ssh/authorized_keys'));
+
+    expect(recorder.seen.map((confirmation) => confirmation.stage)).toEqual([
+      'primary',
+      'sensitive-double-check'
+    ]);
+    expect(recorder.seen[0].sensitive).toBe(true);
+  });
+
+  it('cancels when the sensitive double-check is dismissed', async () => {
+    const recorder = recordingConfirm(['once', undefined]);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+
+    await expect(
+      authorizer.requireDelete(server(), deleteRequest('/etc/cron.d/backup'))
+    ).rejects.toThrow('SFTP delete was cancelled.');
+    expect(recorder.seen).toHaveLength(2);
+  });
+
+  it('flags deletes outside the session working directory', async () => {
+    const recorder = recordingConfirm(['once']);
+    const authorizer = new SftpWriteAuthorizer({ confirm: recorder.confirm });
+
+    await authorizer.requireDelete(server(), deleteRequest('/var/www/html/index.html'));
+
+    expect(recorder.seen[0].outsideWorkspace).toBe(true);
+  });
+});
