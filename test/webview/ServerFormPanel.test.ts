@@ -437,8 +437,10 @@ describe('ServerFormPanel message handling', () => {
     expect(handled).toBe(true);
     expect(testSshConnection).toHaveBeenCalledWith(
       expect.objectContaining({ jumpHostId: 'jump-1' }),
-      expect.objectContaining({ getServer: expect.any(Function) }),
-      hostKeyVerifier
+      expect.objectContaining({ getServer: expect.any(Function), getPassphrase: expect.any(Function) }),
+      hostKeyVerifier,
+      10_000,
+      expect.any(Function)
     );
     const provider = vi.mocked(testSshConnection).mock.calls[0][1] as { getServer(id: string): Promise<ServerConfig | undefined> };
     await expect(provider.getServer('jump-1')).resolves.toMatchObject({ id: 'jump-1', label: 'Bastion' });

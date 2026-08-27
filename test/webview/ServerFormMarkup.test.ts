@@ -40,6 +40,8 @@ describe('ServerFormPanel markup', () => {
     expect(html).toContain('data-mode="create"');
     expect(html).toContain('data-auth-option="password"');
     expect(html).toContain('data-auth-option="privateKey"');
+    expect(html).toContain('data-auth-option="agent"');
+    expect(html).toContain('id="passphrase"');
     expect(html).toContain('id="authType"');
     expect(html).toContain('id="privateKeyBrowse"');
     expect(html).toContain('id="connectionSummary"');
@@ -168,7 +170,7 @@ describe('ServerFormPanel markup', () => {
 
     expect(script).toContain("function isEditMode(): boolean");
     expect(script).toContain("form?.dataset.mode === 'edit'");
-    expect(script).toContain("password?.toggleAttribute('required', !isPrivateKey && !isEditMode())");
+    expect(script).toContain("password?.toggleAttribute('required', isPassword && !isEditMode())");
     expect(script).not.toContain("includes('Leave blank')");
   });
 

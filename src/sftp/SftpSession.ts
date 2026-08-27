@@ -3,6 +3,7 @@ import { mkdir as mkdirLocal, readdir as readdirLocal, stat as statLocal } from 
 import { join as joinLocalPath } from 'node:path';
 import type { Client, ClientChannel, FileEntryWithStats, SFTPWrapper, Stats } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
+import { attachKeyboardInteractive } from '../ssh/KeyboardInteractive';
 import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionHandle } from '../ssh/SshConnectionConfig';
 import { getSsh2 } from '../ssh/ssh2Loader';
 import { runWithConcurrency } from './concurrency';
@@ -63,6 +64,7 @@ export class SftpSession {
       await new Promise<void>((resolve, reject) => {
         client.once('ready', resolve);
         client.once('error', reject);
+        attachKeyboardInteractive(client, undefined, reject);
         client.connect(handle.config);
       });
 

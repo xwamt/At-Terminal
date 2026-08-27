@@ -17,6 +17,8 @@
   "atTerminal.command.refresh.title": "SSH: Refresh",
   "atTerminal.command.viewHostFingerprint.title": "SSH: View Host Fingerprint",
   "atTerminal.command.forgetHostKey.title": "SSH: Forget Host Key",
+  "atTerminal.command.importSshConfig.title": "SSH: Import from SSH Config",
+  "atTerminal.command.forwardLocalPort.title": "SSH: Forward Local Port",
   "atTerminal.command.sftp.refresh.title": "SFTP: Refresh",
   "atTerminal.command.sftp.upload.title": "SFTP: Upload",
   "atTerminal.command.sftp.download.title": "SFTP: Download",

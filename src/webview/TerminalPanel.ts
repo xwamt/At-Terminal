@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import type { HostKeyVerifier } from '../ssh/SshConnectionConfig';
+import { createVscodeKeyboardInteractivePrompt } from '../ssh/VscodeKeyboardInteractivePrompt';
 import { SshSession } from '../ssh/SshSession';
 import type { TerminalContextRegistry } from '../terminal/TerminalContext';
 import { formatError } from '../utils/errors';
@@ -478,7 +479,8 @@ export class TerminalPanel {
         status: (message) => this.handleSessionStatus(message, generation),
         error: (error) => this.postStatus({ state: 'disconnected', text: formatError(error) })
       },
-      this.hostKeyVerifier
+      this.hostKeyVerifier,
+      createVscodeKeyboardInteractivePrompt()
     );
     this.flowController = new TerminalFlowController(session);
     return session;

@@ -17,6 +17,8 @@
   "atTerminal.command.refresh.title": "SSH: 刷新",
   "atTerminal.command.viewHostFingerprint.title": "SSH: 查看主机指纹",
   "atTerminal.command.forgetHostKey.title": "SSH: 忘记主机密钥",
+  "atTerminal.command.importSshConfig.title": "SSH: 从 SSH Config 导入",
+  "atTerminal.command.forwardLocalPort.title": "SSH: 转发本地端口",
   "atTerminal.command.sftp.refresh.title": "SFTP: 刷新",
   "atTerminal.command.sftp.upload.title": "SFTP: 上传文件",
   "atTerminal.command.sftp.download.title": "SFTP: 下载文件",

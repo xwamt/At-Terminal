@@ -353,7 +353,11 @@ select:focus {
 }
 
 .auth-private-key .auth-password-field,
-.auth-password .auth-key-field {
+.auth-password .auth-key-field,
+.auth-password .auth-passphrase-field,
+.auth-agent .auth-password-field,
+.auth-agent .auth-key-field,
+.auth-agent .auth-passphrase-field {
   display: none;
 }
 

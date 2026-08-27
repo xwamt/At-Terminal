@@ -13,8 +13,10 @@ import {
   uninstallAtSeriesConfigForCurrentIde
 } from './mcp/McpConfigInstaller';
 import { detectHostApp } from '@at-series/mcp-hub';
+import { randomUUID } from 'node:crypto';
+import { homedir, userInfo } from 'node:os';
 import { join as joinLocalPath } from 'node:path';
-import { stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { isSftpConflictError } from './sftp/SftpErrors';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
@@ -25,6 +27,12 @@ import { SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore, openRemotePreviewFile } 
 import { SftpSession } from './sftp/SftpSession';
 import { VscodeTransferReporter } from './sftp/VscodeTransferReporter';
 import { HostKeyStore } from './ssh/HostKeyStore';
+import { attachKeyboardInteractive } from './ssh/KeyboardInteractive';
+import { LocalPortForward } from './ssh/LocalPortForward';
+import { parseSshConfig } from './ssh/SshConfigImport';
+import { buildSshConnectionHandle } from './ssh/SshConnectionConfig';
+import { getSsh2 } from './ssh/ssh2Loader';
+import { createVscodeKeyboardInteractivePrompt } from './ssh/VscodeKeyboardInteractivePrompt';
 import { TerminalContextRegistry } from './terminal/TerminalContext';
 import { ServerTreeProvider } from './tree/ServerTreeProvider';
 import { SftpTreeProvider, shouldRefreshOnContextChange } from './tree/SftpTreeProvider';
@@ -41,6 +49,7 @@ let extensionCleanup: { dispose(): void } | undefined;
 export function activate(context: vscode.ExtensionContext): void {
   const configManager = new ConfigManager(context.globalState, context.secrets);
   const hostKeyStore = new HostKeyStore(context.globalState);
+  const localForwards = new Map<string, { stop(): Promise<void> }>();
   const terminalContext = new TerminalContextRegistry();
   const treeProvider = new ServerTreeProvider(configManager, () =>
     serverConnectionStates(terminalContext.getSnapshot().knownTerminals)
@@ -95,6 +104,10 @@ export function activate(context: vscode.ExtensionContext): void {
       TerminalPanel.disconnectAll();
       sftpManager.dispose();
       remoteCommandExecutor.dispose();
+      for (const entry of localForwards.values()) {
+        void entry.stop();
+      }
+      localForwards.clear();
       if (extensionCleanup === cleanup) {
         extensionCleanup = undefined;
       }
@@ -421,6 +434,141 @@ export function activate(context: vscode.ExtensionContext): void {
           port: server.port
         })
       );
+    }),
+    vscode.commands.registerCommand('sshManager.importSshConfig', async () => {
+      const configPath = joinLocalPath(homedir(), '.ssh', 'config');
+      let content: string;
+      try {
+        content = await readFile(configPath, 'utf8');
+      } catch {
+        void vscode.window.showErrorMessage(t('Could not read {path}.', { path: configPath }));
+        return;
+      }
+      const { entries, warnings } = parseSshConfig(content);
+      if (entries.length === 0) {
+        void vscode.window.showInformationMessage(t('No concrete Host entries were found in {path}.', { path: configPath }));
+        return;
+      }
+      const existing = await configManager.listServers();
+      const existingHosts = new Set(existing.map((server) => `${server.host}:${server.port}:${server.username}`));
+      let imported = 0;
+      for (const entry of entries) {
+        const username = entry.draft.username ?? userInfo().username;
+        const key = `${entry.draft.host}:${entry.draft.port}:${username}`;
+        if (existingHosts.has(key)) {
+          continue;
+        }
+        const now = Date.now();
+        const jump = entry.proxyJump
+          ? existing.find(
+              (server) =>
+                server.host === entry.proxyJump?.host &&
+                (entry.proxyJump.port === undefined || server.port === entry.proxyJump.port)
+            )
+          : undefined;
+        await configManager.saveServer({
+          id: randomUUID(),
+          label: entry.draft.label,
+          host: entry.draft.host,
+          port: entry.draft.port,
+          username,
+          authType: entry.draft.authType,
+          privateKeyPath: entry.draft.privateKeyPath,
+          jumpHostId: jump?.id,
+          keepAliveInterval: 30,
+          encoding: 'utf-8',
+          createdAt: now,
+          updatedAt: now
+        });
+        existingHosts.add(key);
+        imported += 1;
+      }
+      treeProvider.refresh();
+      const warningText = warnings.length ? ` ${warnings.join(' ')}` : '';
+      void vscode.window.showInformationMessage(
+        t('Imported {count} servers from SSH config.{warnings}', { count: imported, warnings: warningText })
+      );
+    }),
+    vscode.commands.registerCommand('sshManager.forwardLocalPort', async (item?: ServerTreeItem) => {
+      const server = item?.server ?? (await pickServer(configManager));
+      if (!server) {
+        return;
+      }
+      const existingForward = localForwards.get(server.id);
+      if (existingForward) {
+        await existingForward.stop();
+        localForwards.delete(server.id);
+        void vscode.window.showInformationMessage(t('Stopped local port forward for {label}.', { label: server.label }));
+        return;
+      }
+      const remoteHost =
+        (await vscode.window.showInputBox({
+          prompt: t('Remote host to forward to'),
+          value: '127.0.0.1'
+        })) ?? '';
+      const remotePortText = await vscode.window.showInputBox({
+        prompt: t('Remote port to forward to'),
+        value: '3306'
+      });
+      if (!remoteHost.trim() || !remotePortText) {
+        return;
+      }
+      const remotePort = Number(remotePortText);
+      if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) {
+        void vscode.window.showErrorMessage(t('Remote port must be an integer between 1 and 65535.'));
+        return;
+      }
+      const localPortText = await vscode.window.showInputBox({
+        prompt: t('Local port (0 picks an ephemeral port)'),
+        value: '0'
+      });
+      if (localPortText === undefined) {
+        return;
+      }
+      const localPort = Number(localPortText);
+      if (!Number.isInteger(localPort) || localPort < 0 || localPort > 65535) {
+        void vscode.window.showErrorMessage(t('Local port must be an integer between 0 and 65535.'));
+        return;
+      }
+      const prompt = createVscodeKeyboardInteractivePrompt();
+      const handle = await buildSshConnectionHandle(server, configManager, hostKeyVerifier, {
+        keyboardInteractivePrompt: prompt
+      });
+      const { Client } = await getSsh2();
+      const client = new Client();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          client.once('ready', resolve);
+          client.once('error', reject);
+          attachKeyboardInteractive(client, prompt, reject);
+          client.connect(handle.config);
+        });
+        const forward = new LocalPortForward(client, {
+          remoteHost: remoteHost.trim(),
+          remotePort,
+          localPort
+        });
+        const boundPort = await forward.start();
+        localForwards.set(server.id, {
+          stop: async () => {
+            await forward.stop();
+            client.end();
+            handle.dispose();
+          }
+        });
+        void vscode.window.showInformationMessage(
+          t('Forwarding localhost:{localPort} to {host}:{remotePort} on {label}. Run the command again to stop.', {
+            localPort: boundPort,
+            host: remoteHost.trim(),
+            remotePort,
+            label: server.label
+          })
+        );
+      } catch (error) {
+        client.end();
+        handle.dispose();
+        void vscode.window.showErrorMessage(formatError(error));
+      }
     }),
     vscode.commands.registerCommand('sshManager.refresh', () => {
       treeProvider.refresh();

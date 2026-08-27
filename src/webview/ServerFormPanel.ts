@@ -8,6 +8,7 @@ import {
   resolveAgentCommandTrust,
   type AgentCommandTrust
 } from '../agent/agentCommandTrust';
+import { createVscodeKeyboardInteractivePrompt } from '../ssh/VscodeKeyboardInteractivePrompt';
 import { testSshConnection } from '../ssh/SshConnectionTester';
 import { requireHostKeyVerifier, type HostKeyVerifier } from '../ssh/SshConnectionConfig';
 import { formatError } from '../utils/errors';
@@ -90,6 +91,7 @@ export class ServerFormPanel {
           showPassword: 'Show password',
           privateKey: 'Private Key',
           password: 'Password',
+          sshAgent: 'SSH Agent',
           default: 'Default',
           directConnection: 'Direct connection'
         })
@@ -115,7 +117,7 @@ export class ServerFormPanel {
 export async function handleServerFormMessage(
   message: ServerFormMessage,
   existing: ServerConfig | undefined,
-  configManager: Pick<ConfigManager, 'saveServer' | 'getPassword' | 'getServer'>,
+  configManager: Pick<ConfigManager, 'saveServer' | 'getPassword' | 'getPassphrase' | 'getServer'>,
   onSaved: (server?: ServerConfig) => void,
   panel: Pick<vscode.WebviewPanel, 'dispose' | 'webview'>,
   options: ServerFormMessageOptions = {}
@@ -152,6 +154,7 @@ export async function handleServerFormMessage(
   try {
     const authType = String(message.payload.authType);
     const password = authType === 'password' ? optionalString(message.payload.password) : undefined;
+    const passphrase = authType === 'privateKey' ? optionalString(message.payload.passphrase) : undefined;
     const server = serverFromPayload(message.payload, existing);
     if (!existing && authType === 'password' && !password) {
       await panel.webview.postMessage({
@@ -161,7 +164,11 @@ export async function handleServerFormMessage(
       return true;
     }
 
-    await configManager.saveServer(server, password);
+    if (passphrase) {
+      await configManager.saveServer(server, password, passphrase);
+    } else {
+      await configManager.saveServer(server, password);
+    }
     onSaved(server);
     panel.dispose();
   } catch (error) {
@@ -174,7 +181,7 @@ export async function handleServerFormMessage(
 async function handleConnectionTest(
   payload: SubmitPayload,
   existing: ServerConfig | undefined,
-  configManager: Pick<ConfigManager, 'getPassword' | 'getServer'>,
+  configManager: Pick<ConfigManager, 'getPassword' | 'getPassphrase' | 'getServer'>,
   panel: Pick<vscode.WebviewPanel, 'webview'>,
   options: ServerFormMessageOptions
 ): Promise<void> {
@@ -188,9 +195,14 @@ async function handleConnectionTest(
           candidate,
           {
             getPassword: async () => candidatePassword,
+            getPassphrase: async () =>
+              optionalString(payload.passphrase) ??
+              (existing ? await configManager.getPassphrase(existing.id) : undefined),
             getServer: (id) => configManager.getServer(id)
           },
-          requireHostKeyVerifier(options.hostKeyVerifier)
+          requireHostKeyVerifier(options.hostKeyVerifier),
+          10_000,
+          createVscodeKeyboardInteractivePrompt()
         ));
 
     await runTest(server, password);
@@ -210,7 +222,7 @@ async function passwordForConnectionTest(
   payload: SubmitPayload,
   server: ServerConfig,
   existing: ServerConfig | undefined,
-  configManager: Pick<ConfigManager, 'getPassword'>
+  configManager: Pick<ConfigManager, 'getPassword' | 'getPassphrase'>,
 ): Promise<string | undefined> {
   if (server.authType !== 'password') {
     return undefined;
@@ -245,7 +257,7 @@ function serverFromPayload(payload: SubmitPayload, existing: ServerConfig | unde
       agentCommandTrust !== 'none' &&
       (payload.backgroundConnectionAllowed === 'on' || payload.backgroundConnectionAllowed === true),
     keepAliveInterval: Number(payload.keepAliveInterval ?? 30),
-    encoding: 'utf-8',
+    encoding: payload.encoding === 'gbk' || payload.encoding === 'big5' ? payload.encoding : 'utf-8',
     createdAt: existing?.createdAt ?? now,
     updatedAt: now
   });
@@ -265,6 +277,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
   const authType = server?.authType ?? 'password';
   const isPassword = authType === 'password';
   const isPrivateKey = authType === 'privateKey';
+  const isAgent = authType === 'agent';
   const submitText = server ? t('Save Server') : t('Add Server');
   const passwordHelp = server
     ? t('Leave blank to keep the saved password.')
@@ -310,6 +323,13 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
           <label class="field-stack">${escapeHtml(t('Port'))} <input name="port" type="number" min="1" max="65535" value="${server?.port ?? 22}" required></label>
           <label class="field-stack">${escapeHtml(t('Username'))} <input name="username" value="${escapeAttr(server?.username ?? '')}" required autocomplete="off"></label>
           <label class="field-stack">${escapeHtml(t('Keepalive'))} <input name="keepAliveInterval" type="number" min="0" value="${server?.keepAliveInterval ?? 30}" required></label>
+          <label class="field-stack">${escapeHtml(t('Encoding'))}
+            <select name="encoding">
+              <option value="utf-8"${(server?.encoding ?? 'utf-8') === 'utf-8' ? ' selected' : ''}>UTF-8</option>
+              <option value="gbk"${server?.encoding === 'gbk' ? ' selected' : ''}>GBK</option>
+              <option value="big5"${server?.encoding === 'big5' ? ' selected' : ''}>Big5</option>
+            </select>
+          </label>
           <div class="trust-block field-wide">
             <label class="trust-toggle-row" for="agentCommandTrust">
               <span class="trust-toggle-copy">
@@ -353,6 +373,10 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
               <span class="auth-card-title">${escapeHtml(t('Private Key'))}</span>
               <span class="auth-card-copy">${escapeHtml(t('Save a local key path and read the key only when connecting.'))}</span>
             </button>
+            <button class="auth-card${isAgent ? ' is-selected' : ''}" type="button" data-auth-option="agent" role="radio" aria-checked="${isAgent}">
+              <span class="auth-card-title">${escapeHtml(t('SSH Agent'))}</span>
+              <span class="auth-card-copy">${escapeHtml(t('Use the local SSH agent (SSH_AUTH_SOCK or Windows OpenSSH agent).'))}</span>
+            </button>
           </div>
           <div class="auth-fields">
             <label class="field-stack auth-password-field">${escapeHtml(t('Password'))}
@@ -368,6 +392,12 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
                 <button id="privateKeyBrowse" class="secondary-action" type="button">${escapeHtml(t('Browse...'))}</button>
               </div>
               <span class="field-help">${escapeHtml(t('Only the local path is saved. Key contents are not copied into settings.'))}</span>
+            </label>
+            <label class="field-stack auth-passphrase-field">${escapeHtml(t('Key passphrase'))}
+              <div class="password-input-row">
+                <input id="passphrase" name="passphrase" type="password" autocomplete="new-password">
+              </div>
+              <span class="field-help">${escapeHtml(server ? t('Leave blank to keep the saved passphrase.') : t('Stored securely in VS Code SecretStorage.'))}</span>
             </label>
           </div>
         </section>
@@ -414,7 +444,7 @@ export function renderServerForm(server?: ServerConfig, servers: ServerConfig[] 
         </div>
         <div id="connectionSummary" class="connection-summary">
           <div class="summary-line" data-summary="target">${escapeHtml(t('Enter host and username'))}</div>
-          <div class="summary-line" data-summary="auth">${escapeHtml(t('Authentication: {auth}', { auth: isPrivateKey ? t('Private Key') : t('Password') }))}</div>
+          <div class="summary-line" data-summary="auth">${escapeHtml(t('Authentication: {auth}', { auth: isPrivateKey ? t('Private Key') : isAgent ? t('SSH Agent') : t('Password') }))}</div>
           <div class="summary-line" data-summary="group">${escapeHtml(t('Group: {group}', { group: server?.group?.trim() || t('Default') }))}</div>
           <div class="summary-line" data-summary="route">${escapeHtml(
             selectedJumpHost

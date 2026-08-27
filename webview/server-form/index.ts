@@ -94,7 +94,11 @@ function setTesting(isTesting: boolean): void {
 
 
 function selectedAuth(): string {
-  return authType?.value === 'privateKey' ? 'privateKey' : 'password';
+  const value = authType?.value;
+  if (value === 'privateKey' || value === 'agent') {
+    return value;
+  }
+  return 'password';
 }
 
 function currentAgentCommandTrust(): 'none' | 'policy' | 'full' {
@@ -184,7 +188,7 @@ function isGroupMenuOpen(): boolean {
 }
 
 function selectAuth(value: string): void {
-  const next = value === 'privateKey' ? 'privateKey' : 'password';
+  const next = value === 'privateKey' || value === 'agent' ? value : 'password';
   if (authType) {
     authType.value = next;
   }
@@ -198,18 +202,21 @@ function isEditMode(): boolean {
 }
 
 function updateAuthFields(): void {
-  const isPrivateKey = selectedAuth() === 'privateKey';
+  const auth = selectedAuth();
+  const isPrivateKey = auth === 'privateKey';
+  const isPassword = auth === 'password';
   privateKeyPath?.toggleAttribute('required', isPrivateKey);
-  password?.toggleAttribute('required', !isPrivateKey && !isEditMode());
+  password?.toggleAttribute('required', isPassword && !isEditMode());
 
   for (const card of authCards) {
-    const selected = card.dataset.authOption === selectedAuth();
+    const selected = card.dataset.authOption === auth;
     card.classList.toggle('is-selected', selected);
     card.setAttribute('aria-checked', String(selected));
   }
 
   document.body.classList.toggle('auth-private-key', isPrivateKey);
-  document.body.classList.toggle('auth-password', !isPrivateKey);
+  document.body.classList.toggle('auth-password', isPassword);
+  document.body.classList.toggle('auth-agent', auth === 'agent');
 }
 
 function updateJumpHostFields(): void {
@@ -242,9 +249,13 @@ function updateSummary(): void {
     summaryTarget.textContent = username && host ? `${username}@${host}:${port}` : i18nText('summaryEnterHostUser', 'Enter host and username');
   }
   if (summaryAuth) {
-    const authLabel = selectedAuth() === 'privateKey'
-      ? i18nText('privateKey', 'Private Key')
-      : i18nText('password', 'Password');
+    const auth = selectedAuth();
+    const authLabel =
+      auth === 'privateKey'
+        ? i18nText('privateKey', 'Private Key')
+        : auth === 'agent'
+          ? i18nText('sshAgent', 'SSH Agent')
+          : i18nText('password', 'Password');
     summaryAuth.textContent = i18nText('summaryAuthPrefix', `Authentication: ${authLabel}`).replace('{auth}', authLabel);
   }
   if (summaryGroup) {

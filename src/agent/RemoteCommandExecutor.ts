@@ -2,6 +2,7 @@ import type { Client, ClientChannel } from 'ssh2';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { quotePosixShellPath } from '../sftp/RemotePath';
+import { attachKeyboardInteractive } from '../ssh/KeyboardInteractive';
 import { getSsh2 } from '../ssh/ssh2Loader';
 import {
   buildSshConnectionHandle,
@@ -243,6 +244,7 @@ export class RemoteCommandExecutor {
       await new Promise<void>((resolve, reject) => {
         client.once('ready', resolve);
         client.once('error', reject);
+        attachKeyboardInteractive(client, undefined, reject);
         client.connect(handle.config);
       });
       return client;

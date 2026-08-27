@@ -97,6 +97,16 @@
         "category": "AT Terminal"
       },
       {
+        "command": "sshManager.importSshConfig",
+        "title": "%atTerminal.command.importSshConfig.title%",
+        "category": "AT Terminal"
+      },
+      {
+        "command": "sshManager.forwardLocalPort",
+        "title": "%atTerminal.command.forwardLocalPort.title%",
+        "category": "AT Terminal"
+      },
+      {
         "command": "sshManager.sftp.refresh",
         "title": "%atTerminal.command.sftp.refresh.title%",
         "icon": "$(refresh)",
@@ -210,6 +220,11 @@
           "group": "navigation@4"
         },
         {
+          "command": "sshManager.importSshConfig",
+          "when": "view == sshManager.servers",
+          "group": "navigation@5"
+        },
+        {
           "command": "sshManager.sftp.refresh",
           "when": "view == sshManager.sftpFiles",
           "group": "navigation@1"
@@ -260,6 +275,11 @@
           "command": "sshManager.forgetHostKey",
           "when": "view == sshManager.servers && viewItem == server",
           "group": "management@5"
+        },
+        {
+          "command": "sshManager.forwardLocalPort",
+          "when": "view == sshManager.servers && viewItem == server",
+          "group": "management@6"
         },
         {
           "command": "sshManager.sftp.refresh",

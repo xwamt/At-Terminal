@@ -36,7 +36,7 @@ export class ServerTreeItem extends vscode.TreeItem {
       t('Port: {port}', { port: server.port }),
       t('Username: {username}', { username: server.username }),
       t('Authentication: {auth}', {
-        auth: server.authType === 'privateKey' ? t('Private Key') : t('Password')
+        auth: authLabel(server.authType)
       }),
       t('Keepalive: {interval}s', { interval: server.keepAliveInterval })
     ].join('\n');
@@ -46,4 +46,14 @@ export class ServerTreeItem extends vscode.TreeItem {
       arguments: [this]
     };
   }
+}
+
+function authLabel(authType: ServerConfig['authType']): string {
+  if (authType === 'privateKey') {
+    return t('Private Key');
+  }
+  if (authType === 'agent') {
+    return t('SSH Agent');
+  }
+  return t('Password');
 }
