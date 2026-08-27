@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import { VscodeTransferReporter } from '../../src/sftp/VscodeTransferReporter';
+import {
+  PROGRESS_REPORT_MIN_INTERVAL_MS,
+  VscodeTransferReporter
+} from '../../src/sftp/VscodeTransferReporter';
 
 describe('VscodeTransferReporter', () => {
   it('keeps the progress notification open until the transfer job finishes', async () => {
@@ -49,6 +52,40 @@ describe('VscodeTransferReporter', () => {
         expect.any(Function)
       );
     } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('throttles progress reports to percent changes or the minimum interval', async () => {
+    try {
+      vi.useFakeTimers();
+      const reports: Array<{ increment?: number; message?: string }> = [];
+      vi.spyOn(vscode.window, 'withProgress').mockImplementation(async (_options, task) => {
+        return (await task(
+          {
+            report: (event) => reports.push(event as { increment?: number; message?: string })
+          },
+          {} as never
+        )) as never;
+      });
+      const reporter = new VscodeTransferReporter();
+
+      await reporter.withProgress('Upload /srv/big.bin', async (progress) => {
+        progress.report({ transferredBytes: 500, totalBytes: 100_000 });
+        // Same percent, no time elapsed: suppressed.
+        progress.report({ transferredBytes: 600, totalBytes: 100_000 });
+        progress.report({ transferredBytes: 700, totalBytes: 100_000 });
+        // Same percent but the interval elapsed: passes through.
+        vi.advanceTimersByTime(PROGRESS_REPORT_MIN_INTERVAL_MS);
+        progress.report({ transferredBytes: 800, totalBytes: 100_000 });
+        // Percent changed: passes through immediately.
+        progress.report({ transferredBytes: 50_000, totalBytes: 100_000 });
+      });
+
+      expect(reports.map((event) => event.increment)).toEqual([0, 0, 50]);
+      expect(reports.at(-1)?.message).toBe('48.8 KB / 97.7 KB');
+    } finally {
+      vi.useRealTimers();
       vi.restoreAllMocks();
     }
   });

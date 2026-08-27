@@ -2,7 +2,15 @@ import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as sftpSessionModule from '../../src/sftp/SftpSession';
 import { SftpSession } from '../../src/sftp/SftpSession';
+import { SftpConflictError } from '../../src/sftp/SftpErrors';
 import type { ServerConfig } from '../../src/config/schema';
+
+/** stat that reports the remote path as absent, so upload conflict checks pass. */
+function statNoSuchFile() {
+  return vi.fn((_path: string, callback: (error?: Error) => void) => {
+    callback(Object.assign(new Error('No such file'), { code: 2 }));
+  });
+}
 
 const sshMocks = vi.hoisted(() => ({
   end: vi.fn(),
@@ -121,7 +129,7 @@ describe('SftpSession uploadFile sudo fallback', () => {
       })
     };
     const session = passwordSession();
-    (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink };
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink, stat: statNoSuchFile() };
     (session as unknown as { sftp: unknown; client: unknown }).client = client;
 
     await session.uploadFile('C:/tmp/app.conf', '/etc/app.conf');
@@ -154,13 +162,57 @@ describe('SftpSession uploadFile sudo fallback', () => {
       })
     };
     const session = passwordSession();
-    (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink };
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink, stat: statNoSuchFile() };
     (session as unknown as { sftp: unknown; client: unknown }).client = client;
 
     await expect(session.uploadFile('C:/tmp/app.conf', '/etc/app.conf')).rejects.toThrow(
       'sudo: a password is required'
     );
     expect(unlink).toHaveBeenCalledWith(expect.stringMatching(/^\/tmp\/at-terminal-upload-.+-app\.conf$/), expect.any(Function));
+  });
+});
+
+describe('SftpSession upload conflicts', () => {
+  it('throws a typed conflict instead of silently overwriting an existing remote file', async () => {
+    const stat = vi.fn((_path: string, callback: (error?: Error, stats?: unknown) => void) => {
+      callback(undefined, { size: 12, mtime: 5, isDirectory: () => false });
+    });
+    const fastPut = vi.fn();
+    const session = passwordSession();
+    (session as unknown as { sftp: unknown }).sftp = { stat, fastPut };
+
+    const failure = await session.uploadFile('C:/tmp/app.conf', '/etc/app.conf').then(
+      () => undefined,
+      (error: unknown) => error
+    );
+
+    expect(failure).toBeInstanceOf(SftpConflictError);
+    expect((failure as SftpConflictError).path).toBe('/etc/app.conf');
+    expect(fastPut).not.toHaveBeenCalled();
+  });
+
+  it('overwrites an existing remote file when explicitly allowed', async () => {
+    const stat = vi.fn((_path: string, callback: (error?: Error, stats?: unknown) => void) => {
+      callback(undefined, { size: 12, mtime: 5, isDirectory: () => false });
+    });
+    const fastPut = vi.fn((_localPath, _remotePath, _options, callback) => callback());
+    const session = passwordSession();
+    (session as unknown as { sftp: unknown }).sftp = { stat, fastPut };
+
+    await session.uploadFile('C:/tmp/app.conf', '/etc/app.conf', undefined, { overwrite: true });
+
+    expect(stat).not.toHaveBeenCalled();
+    expect(fastPut).toHaveBeenCalledTimes(1);
+  });
+
+  it('uploads without conflict when the remote path does not exist', async () => {
+    const fastPut = vi.fn((_localPath, _remotePath, _options, callback) => callback());
+    const session = passwordSession();
+    (session as unknown as { sftp: unknown }).sftp = { fastPut, stat: statNoSuchFile() };
+
+    await session.uploadFile('C:/tmp/app.conf', '/etc/app.conf');
+
+    expect(fastPut).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -364,7 +416,7 @@ describe('SftpSession with sudo fallback disabled', () => {
     const unlink = vi.fn((_remotePath, callback) => callback());
     const exec = vi.fn();
     const session = agentSession();
-    (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink };
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink, stat: statNoSuchFile() };
     (session as unknown as { sftp: unknown; client: unknown }).client = { exec };
 
     await expect(session.uploadFile('C:/tmp/app.conf', '/etc/app.conf')).rejects.toThrow(

@@ -324,7 +324,7 @@ describe('SftpEditSessionManager save synchronization', () => {
 
       expect(confirmAutoSync).toHaveBeenCalledTimes(1);
       expect(sftp.uploadFile).toHaveBeenCalledTimes(2);
-      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv', { overwrite: true });
       expect(showStatus).toHaveBeenCalledWith('uploading', 'Uploading remote file...');
       expect(showStatus).toHaveBeenCalledWith('idle', 'Remote file synced');
       expect(withSyncProgressCalls).toEqual(['/srv/app/index.js', '/srv/app/index.js']);
@@ -372,7 +372,7 @@ describe('SftpEditSessionManager save synchronization', () => {
       await settleUpload(session);
 
       expect(sftp.stat).toHaveBeenCalledWith('/srv/app/index.js', 'server-a');
-      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'server-a');
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'server-a', { overwrite: true });
     } finally {
       vi.useRealTimers();
       manager.dispose();
@@ -452,7 +452,7 @@ describe('SftpEditSessionManager conflicts and failures', () => {
       await vi.advanceTimersByTimeAsync(10);
       await settleUpload(session);
 
-      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv', { overwrite: true });
       expect(session.baseRemoteStat).toEqual({ size: 9, modifiedAt: 12 });
     } finally {
       vi.useRealTimers();
@@ -577,7 +577,7 @@ describe('SftpEditSessionManager conflicts and failures', () => {
       await vi.advanceTimersByTimeAsync(10);
       await settleUpload(session);
 
-      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv');
+      expect(sftp.uploadFile).toHaveBeenCalledWith(session.localUri.fsPath, '/srv/app/index.js', 'srv', { overwrite: true });
       expect(sftp.readFile).toHaveBeenCalledWith('/srv/app/index.js', 7, 'srv');
       expect(session.syncState).toBe('failed');
       expect(session.lastError).toContain('remote content does not match local edits');
@@ -762,6 +762,18 @@ describe('SftpEditSessionManager upload verification', () => {
 
     expect(source).not.toContain('readFileSync');
     expect(source).toContain("from 'node:fs/promises'");
+  });
+
+  it('sizes the local file with fs.stat before deciding whether to read it for a byte compare', () => {
+    // Slurping the local file just to learn its length would buffer arbitrarily large files
+    // on every save; the stat must come first and gate the read.
+    const source = readFileSync('src/sftp/SftpEditSessionManager.ts', 'utf8');
+    const statIndex = source.indexOf('await stat(session.localUri.fsPath)');
+    const readIndex = source.indexOf('await readFile(session.localUri.fsPath)');
+
+    expect(statIndex).toBeGreaterThan(-1);
+    expect(readIndex).toBeGreaterThan(-1);
+    expect(statIndex).toBeLessThan(readIndex);
   });
 });
 
