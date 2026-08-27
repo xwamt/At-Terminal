@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { ServerConfig } from '../config/schema';
+import { t } from '../i18n/t';
 import { dirname } from '../sftp/RemotePath';
 import { shouldAutoApproveSftpWrite } from './agentCommandTrust';
 import { isSensitiveRemotePath, isWithinRemoteDirectory, normalizeRemoteDirectory } from './remoteWritePolicy';
@@ -7,7 +8,7 @@ import { isSensitiveRemotePath, isWithinRemoteDirectory, normalizeRemoteDirector
 export type SftpWriteScope = 'once' | 'directory' | 'session';
 
 export interface SftpWriteRequest {
-  operation: 'write_file' | 'create_file' | 'create_directory';
+  operation: 'write_file' | 'create_file' | 'create_directory' | 'rename' | 'delete_file';
   path: string;
   overwrite: boolean;
   /** `realpath('.')` of the SFTP session, i.e. the directory the user actually opened. */
@@ -100,6 +101,40 @@ export class SftpWriteAuthorizer {
     }
   }
 
+  /**
+   * Deletion is never auto-approved and never remembered: full trust covers write
+   * prompts but not deletes, and no directory or session grant may ever cover a
+   * delete. Every call asks the user; sensitive paths ask twice.
+   */
+  async requireDelete(server: ServerConfig, request: SftpWriteRequest): Promise<void> {
+    const parentDirectory = normalizeRemoteDirectory(dirname(request.path));
+    const sensitive = isSensitiveRemotePath(request.path);
+    const outsideWorkspace = !isWithinRemoteDirectory(request.workspaceRoot, request.path);
+    const base = {
+      server,
+      request,
+      parentDirectory,
+      workspaceRoot: normalizeRemoteDirectory(request.workspaceRoot),
+      outsideWorkspace,
+      sensitive
+    };
+
+    const scope = await this.confirm({ ...base, allowedScopes: ['once'], stage: 'primary' });
+    if (scope !== 'once') {
+      throw new Error('SFTP delete was cancelled.');
+    }
+    if (sensitive) {
+      const confirmed = await this.confirm({
+        ...base,
+        allowedScopes: ['once'],
+        stage: 'sensitive-double-check'
+      });
+      if (confirmed !== 'once') {
+        throw new Error('SFTP delete was cancelled.');
+      }
+    }
+  }
+
   private hasLiveGrant(grantKey: string): boolean {
     const expiresAt = this.grants.get(grantKey);
     if (expiresAt === undefined) {
@@ -130,13 +165,21 @@ const SCOPE_LABELS: Record<SftpWriteScope, string> = {
 const SENSITIVE_ACKNOWLEDGEMENT = 'Write It Anyway, Once';
 
 async function confirmWithVscode(confirmation: SftpWriteConfirmation): Promise<SftpWriteScope | undefined> {
+  const isDelete = confirmation.request.operation === 'delete_file';
   if (confirmation.stage === 'sensitive-double-check') {
+    const acknowledgement = isDelete ? t('Delete It Anyway, Once') : SENSITIVE_ACKNOWLEDGEMENT;
     const answer = await vscode.window.showWarningMessage(
-      formatSensitiveDoubleCheck(confirmation),
+      isDelete ? formatSensitiveDeleteDoubleCheck(confirmation) : formatSensitiveDoubleCheck(confirmation),
       { modal: true },
-      SENSITIVE_ACKNOWLEDGEMENT
+      acknowledgement
     );
-    return answer === SENSITIVE_ACKNOWLEDGEMENT ? 'once' : undefined;
+    return answer === acknowledgement ? 'once' : undefined;
+  }
+
+  if (isDelete) {
+    const deleteOnce = t('Delete Once');
+    const answer = await vscode.window.showWarningMessage(formatDeletePrompt(confirmation), { modal: true }, deleteOnce);
+    return answer === deleteOnce ? 'once' : undefined;
   }
 
   // The first item is the focused default, so the least-privilege answer is the one Enter picks.
@@ -177,5 +220,45 @@ function formatSensitiveDoubleCheck(confirmation: SftpWriteConfirmation): string
     'service units all survive the session and run without you.',
     '',
     'Confirm once more to allow this single write. This answer is never remembered.'
+  ].join('\n');
+}
+
+function formatDeletePrompt(confirmation: SftpWriteConfirmation): string {
+  const { server, request } = confirmation;
+  const warnings = [
+    confirmation.outsideWorkspace
+      ? t('WARNING: outside the working directory {root} that this session was opened in.', {
+          root: confirmation.workspaceRoot
+        })
+      : undefined,
+    confirmation.sensitive
+      ? t('WARNING: sensitive system path (SSH keys, service units, cron, or system configuration).')
+      : undefined
+  ].filter((warning): warning is string => warning !== undefined);
+
+  return [
+    t('Allow AT Terminal agent to delete a remote file on {label} ({host})?', {
+      label: server.label,
+      host: server.host
+    }),
+    '',
+    t('Path: {path}', { path: request.path }),
+    t('Folder: {folder}', { folder: confirmation.parentDirectory }),
+    ...(warnings.length > 0 ? ['', ...warnings] : []),
+    '',
+    t('Deleting always asks, even on fully trusted servers, and this answer is never remembered.')
+  ].join('\n');
+}
+
+function formatSensitiveDeleteDoubleCheck(confirmation: SftpWriteConfirmation): string {
+  return [
+    t('{path} is a sensitive system path on {host}.', {
+      path: confirmation.request.path,
+      host: confirmation.server.host
+    }),
+    '',
+    t('Deleting here can break logins, services, or scheduled jobs on the server.'),
+    '',
+    t('Confirm once more to allow this single delete. This answer is never remembered.')
   ].join('\n');
 }

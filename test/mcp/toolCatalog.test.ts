@@ -6,8 +6,9 @@ describe('toolCatalog', () => {
     expect(AT_TERMINAL_PLUGIN_ID).toBe('at.terminal');
   });
 
-  it('declares risk for all nine tools', () => {
+  it('declares risk for all eleven tools', () => {
     const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((t) => [t.name, t.risk]));
+    expect(AT_TERMINAL_TOOL_CATALOG).toHaveLength(11);
     expect(byName.list_ssh_servers).toBe('read');
     expect(byName.get_terminal_context).toBe('read');
     expect(byName.sftp_list_directory).toBe('read');
@@ -16,6 +17,8 @@ describe('toolCatalog', () => {
     expect(byName.sftp_write_file).toBe('write');
     expect(byName.sftp_create_file).toBe('write');
     expect(byName.sftp_create_directory).toBe('write');
+    expect(byName.sftp_rename).toBe('write');
+    expect(byName.sftp_delete).toBe('write');
     expect(byName.run_remote_command).toBe('exec');
   });
 
@@ -36,6 +39,35 @@ describe('toolCatalog', () => {
     expect(byName.run_remote_command.description).toContain('64000');
     expect(byName.run_remote_command.description).toContain('256000');
     expect(byName.run_remote_command.description).toContain('truncated');
+  });
+
+  it('teaches the caller offset continuation and tail reads', () => {
+    const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((t) => [t.name, t]));
+
+    expect(byName.sftp_read_file.description).toContain('offset');
+    expect(byName.sftp_read_file.description).toMatch(/negative/i);
+    expect(byName.sftp_read_file.description).toMatch(/tail/i);
+    expect(byName.sftp_read_file.description).not.toContain('read a smaller range');
+    expect(byName.sftp_read_file.inputSchema.properties).toMatchObject({
+      offset: expect.objectContaining({ type: 'number' })
+    });
+
+    expect(byName.sftp_list_directory.description).toContain('offset');
+    expect(byName.sftp_list_directory.inputSchema.properties).toMatchObject({
+      offset: expect.objectContaining({ type: 'number' })
+    });
+  });
+
+  it('describes rename and delete authorization honestly', () => {
+    const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((t) => [t.name, t]));
+
+    expect(byName.sftp_rename.description).toContain('source and destination');
+    expect(byName.sftp_rename.inputSchema.required).toEqual(['path', 'newPath']);
+
+    expect(byName.sftp_delete.description).toContain('single remote file');
+    expect(byName.sftp_delete.description).toMatch(/directories are refused/i);
+    expect(byName.sftp_delete.description).toContain('even on fully trusted servers');
+    expect(byName.sftp_delete.description).toContain('never remembered');
   });
 
   it('tells the caller that confirmation follows the three server trust levels', () => {
@@ -70,7 +102,7 @@ describe('toolCatalog', () => {
   it('tells the caller that write authorization is per directory, not per server', () => {
     const writeTools = AT_TERMINAL_TOOL_CATALOG.filter((tool) => tool.risk === 'write');
 
-    expect(writeTools).toHaveLength(3);
+    expect(writeTools).toHaveLength(5);
     for (const tool of writeTools) {
       expect(tool.description).toContain('directory');
       expect(tool.description).toContain('sensitive');

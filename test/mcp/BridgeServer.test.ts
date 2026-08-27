@@ -284,6 +284,118 @@ describe('createBridgeRequestHandler', () => {
     });
   });
 
+  it('routes sftp_rename and sftp_delete through invoke', async () => {
+    const service = {
+      sftpRename: vi.fn(async () => ({ path: '/a.txt', newPath: '/b.txt' })),
+      sftpDelete: vi.fn(async () => ({ path: '/a.txt', deleted: true }))
+    };
+    const handler = createHandler({ service });
+
+    await expect(
+      call(handler, {
+        method: 'POST',
+        path: '/invoke',
+        token: 'secret',
+        body: { name: 'sftp_rename', arguments: { path: '/a.txt', newPath: '/b.txt' } }
+      })
+    ).resolves.toEqual({
+      status: 200,
+      body: { ok: true, name: 'sftp_rename', result: { path: '/a.txt', newPath: '/b.txt' } }
+    });
+    expect(service.sftpRename).toHaveBeenCalledWith({ path: '/a.txt', newPath: '/b.txt' });
+
+    await expect(
+      call(handler, {
+        method: 'POST',
+        path: '/invoke',
+        token: 'secret',
+        body: { name: 'sftp_delete', arguments: { path: '/a.txt' } }
+      })
+    ).resolves.toEqual({
+      status: 200,
+      body: { ok: true, name: 'sftp_delete', result: { path: '/a.txt', deleted: true } }
+    });
+    expect(service.sftpDelete).toHaveBeenCalledWith({ path: '/a.txt' });
+  });
+
+  it('rejects sftp_rename without a newPath', async () => {
+    const handler = createHandler({ service: { sftpRename: vi.fn() } });
+
+    await expect(
+      call(handler, {
+        method: 'POST',
+        path: '/invoke',
+        token: 'secret',
+        body: { name: 'sftp_rename', arguments: { path: '/a.txt' } }
+      })
+    ).resolves.toMatchObject({
+      status: 422,
+      body: { error: { code: 'VALIDATION_ERROR' } }
+    });
+  });
+
+  it('passes read and list offsets through to the service', async () => {
+    const service = {
+      sftpReadFile: vi.fn(async () => ({ content: '' })),
+      sftpListDirectory: vi.fn(async () => ({ entries: [] }))
+    };
+    const handler = createHandler({ service });
+
+    await call(handler, {
+      method: 'POST',
+      path: '/invoke',
+      token: 'secret',
+      body: { name: 'sftp_read_file', arguments: { path: '/var/log/app.log', offset: -4096 } }
+    });
+    await call(handler, {
+      method: 'POST',
+      path: '/invoke',
+      token: 'secret',
+      body: { name: 'sftp_list_directory', arguments: { path: '/etc', offset: 500, maxEntries: 500 } }
+    });
+
+    expect(service.sftpReadFile).toHaveBeenCalledWith({ path: '/var/log/app.log', offset: -4096 });
+    expect(service.sftpListDirectory).toHaveBeenCalledWith({ path: '/etc', offset: 500, maxEntries: 500 });
+  });
+
+  it('rejects a negative list offset', async () => {
+    const handler = createHandler({ service: { sftpListDirectory: vi.fn() } });
+
+    await expect(
+      call(handler, {
+        method: 'POST',
+        path: '/invoke',
+        token: 'secret',
+        body: { name: 'sftp_list_directory', arguments: { path: '/etc', offset: -1 } }
+      })
+    ).resolves.toMatchObject({
+      status: 422,
+      body: { error: { code: 'VALIDATION_ERROR' } }
+    });
+  });
+
+  it('returns USER_CANCELLED when the user declines an sftp delete', async () => {
+    const handler = createHandler({
+      service: {
+        sftpDelete: async () => {
+          throw new Error('SFTP delete was cancelled.');
+        }
+      }
+    });
+
+    await expect(
+      call(handler, {
+        method: 'POST',
+        path: '/invoke',
+        token: 'secret',
+        body: { name: 'sftp_delete', arguments: { path: '/a.txt' } }
+      })
+    ).resolves.toMatchObject({
+      status: 499,
+      body: { error: { code: 'USER_CANCELLED', message: 'SFTP delete was cancelled.' } }
+    });
+  });
+
   it('returns USER_CANCELLED when user cancels confirmation', async () => {
     const handler = createHandler({
       service: {

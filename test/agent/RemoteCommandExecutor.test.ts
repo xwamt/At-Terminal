@@ -162,6 +162,32 @@ describe('RemoteCommandExecutor', () => {
     expect(end).not.toHaveBeenCalled();
   });
 
+  it('keeps captured stderr when a command times out instead of replacing it', async () => {
+    vi.useFakeTimers();
+    const stream = createExecStream();
+    exec.mockImplementation((_command: string, callback: Function) => callback(undefined, stream));
+    const executor = new RemoteCommandExecutor({ getPassword: async () => 'secret' } as never, hostKeyVerifier);
+
+    const promise = executor.execute(server(), {
+      command: 'systemctl restart app',
+      timeoutMs: 100,
+      maxOutputBytes: 1024
+    });
+
+    await flushPromises();
+    clients[0].emit('ready');
+    await flushPromises();
+    stream.stderr.emit('data', Buffer.from('Job for app.service failed.\n'));
+    stream.emit('data', Buffer.from('partial stdout'));
+    vi.advanceTimersByTime(100);
+
+    await expect(promise).resolves.toMatchObject({
+      timedOut: true,
+      stdout: 'partial stdout',
+      stderr: 'Job for app.service failed.\nCommand timed out after 100ms.'
+    });
+  });
+
   it('truncates stdout and stderr independently', async () => {
     const stream = createExecStream();
     exec.mockImplementation((_command: string, callback: Function) => callback(undefined, stream));

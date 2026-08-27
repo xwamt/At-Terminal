@@ -144,7 +144,9 @@ export class RemoteCommandExecutor {
           exitCode,
           signal,
           stdout: stdout.text(),
-          stderr: timedOut ? `Command timed out after ${timeoutMs}ms.` : stderr.text(),
+          // A timeout appends its notice instead of replacing stderr: whatever the
+          // command managed to print before it overran is usually the diagnosis.
+          stderr: timedOut ? appendTimeoutNotice(stderr.text(), timeoutMs) : stderr.text(),
           durationMs: Date.now() - started,
           timedOut,
           truncated: stdout.truncated || stderr.truncated
@@ -278,6 +280,14 @@ export class RemoteCommandExecutor {
     connection.client?.end();
     connection.handle?.dispose();
   }
+}
+
+function appendTimeoutNotice(capturedStderr: string, timeoutMs: number): string {
+  const notice = `Command timed out after ${timeoutMs}ms.`;
+  if (!capturedStderr) {
+    return notice;
+  }
+  return capturedStderr.endsWith('\n') ? `${capturedStderr}${notice}` : `${capturedStderr}\n${notice}`;
 }
 
 function wrapCommand(command: string, cwd: string | undefined): string {

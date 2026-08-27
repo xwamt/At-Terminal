@@ -229,7 +229,9 @@ describe('AgentToolService', () => {
       readFile: vi.fn(async () => ({ content: 'x' })),
       writeFile: vi.fn(async () => ({ bytesWritten: 1 })),
       createFile: vi.fn(async () => ({ path: '/x' })),
-      createDirectory: vi.fn(async () => ({ path: '/d' }))
+      createDirectory: vi.fn(async () => ({ path: '/d' })),
+      rename: vi.fn(async () => ({ path: '/x', newPath: '/y' })),
+      deleteFile: vi.fn(async () => ({ path: '/x', deleted: true }))
     };
     const service = new AgentToolService({
       configManager: { listServers: async () => [] } as never,
@@ -238,11 +240,118 @@ describe('AgentToolService', () => {
       sftp: sftp as never
     });
 
-    await service.sftpReadFile({ path: '/x' });
+    await service.sftpReadFile({ path: '/x', offset: -1024 });
     await service.sftpWriteFile({ path: '/x', content: 'next', overwrite: true });
+    await service.sftpListDirectory({ path: '/d', offset: 500 });
+    await service.sftpRename({ path: '/x', newPath: '/y' });
+    await service.sftpDelete({ path: '/x' });
 
-    expect(sftp.readFile).toHaveBeenCalledWith({ path: '/x' });
+    expect(sftp.readFile).toHaveBeenCalledWith({ path: '/x', offset: -1024 });
     expect(sftp.writeFile).toHaveBeenCalledWith({ path: '/x', content: 'next', overwrite: true });
+    expect(sftp.listDirectory).toHaveBeenCalledWith({ path: '/d', offset: 500 });
+    expect(sftp.rename).toHaveBeenCalledWith({ path: '/x', newPath: '/y' });
+    expect(sftp.deleteFile).toHaveBeenCalledWith({ path: '/x' });
+  });
+
+  it('fails a pending confirmation after 120 seconds with an actionable error', async () => {
+    vi.useFakeTimers();
+    try {
+      const untrusted = { ...server(), backgroundConnectionAllowed: true };
+      vi.spyOn(vscode.window, 'showWarningMessage').mockReturnValue(new Promise(() => undefined) as never);
+      const execute = vi.fn();
+      const service = new AgentToolService({
+        configManager: { getServer: async () => untrusted, listServers: async () => [untrusted] } as never,
+        terminalContext: new TerminalContextRegistry(),
+        executor: { execute } as unknown as RemoteCommandExecutor
+      });
+
+      const pending = service.runRemoteCommand({ serverId: 'server-1', command: 'uptime' });
+      const expectation = expect(pending).rejects.toThrow(
+        'Confirmation timed out; ask the user to approve the command dialog in the IDE'
+      );
+      // Let resolveServer + authorization reach the confirmation prompt before advancing.
+      for (let turn = 0; turn < 10; turn += 1) {
+        await Promise.resolve();
+      }
+      await vi.advanceTimersByTimeAsync(120_000);
+
+      await expectation;
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('records approved commands in the audit log', async () => {
+    const record = vi.fn();
+    const trusted = { ...server(), backgroundConnectionAllowed: true, agentCommandAutoApprove: true };
+    const execute = vi.fn(async () => ({
+      serverId: 'server-1',
+      serverLabel: 'Production',
+      host: 'server-1.example.com',
+      command: 'uptime',
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+      durationMs: 7,
+      timedOut: false,
+      truncated: false
+    }));
+    const service = new AgentToolService({
+      configManager: { getServer: async () => trusted, listServers: async () => [trusted] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor,
+      audit: { record }
+    });
+
+    await service.runRemoteCommand({ serverId: 'server-1', command: 'uptime' });
+
+    expect(record).toHaveBeenCalledWith({
+      tool: 'run_remote_command',
+      serverId: 'server-1',
+      command: 'uptime',
+      reasonCode: 'auto_approved',
+      exitCode: 0,
+      durationMs: 7,
+      truncated: false
+    });
+  });
+
+  it('records cancelled commands in the audit log', async () => {
+    const record = vi.fn();
+    const untrusted = { ...server(), backgroundConnectionAllowed: true };
+    vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined);
+    const service = new AgentToolService({
+      configManager: { getServer: async () => untrusted, listServers: async () => [untrusted] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute: vi.fn() } as unknown as RemoteCommandExecutor,
+      audit: { record }
+    });
+
+    await expect(service.runRemoteCommand({ serverId: 'server-1', command: 'uptime' })).rejects.toThrow(
+      'Remote command was cancelled.'
+    );
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tool: 'run_remote_command',
+        serverId: 'server-1',
+        command: 'uptime',
+        reasonCode: 'user_cancelled'
+      })
+    );
+  });
+
+  it('tells the caller how to enable background connections when they are off', async () => {
+    const blocked = { ...server(), backgroundConnectionAllowed: false };
+    const service = new AgentToolService({
+      configManager: { getServer: async () => blocked, listServers: async () => [blocked] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute: vi.fn() } as unknown as RemoteCommandExecutor
+    });
+
+    await expect(service.runRemoteCommand({ serverId: 'server-1', command: 'uptime' })).rejects.toThrow(
+      'Allow background connections'
+    );
   });
 
   it('skips command confirmation for trusted commands that miss the blocklist', async () => {
