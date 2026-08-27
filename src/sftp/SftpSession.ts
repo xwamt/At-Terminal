@@ -242,25 +242,26 @@ export class SftpSession {
     });
   }
 
-  async readFile(path: string, maxBytes: number): Promise<Buffer> {
+  async readFile(path: string, maxBytes: number, offset = 0): Promise<Buffer> {
     const sftp = this.requireSftp();
     const handle = await new Promise<Buffer>((resolve, reject) => {
       sftp.open(path, 'r', (error, fileHandle) => (error ? reject(error) : resolve(fileHandle)));
     });
     try {
       const chunks: Buffer[] = [];
-      let offset = 0;
-      while (offset < maxBytes) {
-        const length = Math.min(32_768, maxBytes - offset);
+      let position = Math.max(0, offset);
+      const end = position + maxBytes;
+      while (position < end) {
+        const length = Math.min(32_768, end - position);
         const buffer = Buffer.alloc(length);
         const bytesRead = await new Promise<number>((resolve, reject) => {
-          sftp.read(handle, buffer, 0, length, offset, (error, read) => (error ? reject(error) : resolve(read)));
+          sftp.read(handle, buffer, 0, length, position, (error, read) => (error ? reject(error) : resolve(read)));
         });
         if (bytesRead <= 0) {
           break;
         }
         chunks.push(buffer.subarray(0, bytesRead));
-        offset += bytesRead;
+        position += bytesRead;
       }
       return Buffer.concat(chunks);
     } finally {
