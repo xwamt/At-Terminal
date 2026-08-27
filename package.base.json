@@ -3,7 +3,7 @@
   "displayName": "%atTerminal.displayName%",
   "description": "%atTerminal.description%",
   "version": "0.3.4",
-  "publisher": "xwamt",
+  "publisher": "local",
   "icon": "media/at-terminal-icon.png",
   "l10n": "./l10n",
   "engines": {
