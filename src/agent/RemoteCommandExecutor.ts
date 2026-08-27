@@ -1,7 +1,8 @@
-import { Client, type ClientChannel } from 'ssh2';
+import type { Client, ClientChannel } from 'ssh2';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { quotePosixShellPath } from '../sftp/RemotePath';
+import { getSsh2 } from '../ssh/ssh2Loader';
 import {
   buildSshConnectionHandle,
   type HostKeyVerifier,
@@ -228,7 +229,7 @@ export class RemoteCommandExecutor {
       // through buildSshConnectionHandle, so host key verification is never skipped.
       const handle = await buildSshConnectionHandle(server, this.configManager, this.hostKeyVerifier);
       self.handle = handle;
-      const client = new Client();
+      const client = new (await getSsh2()).Client();
       // Each in-flight command attaches its own error/close listeners, so the default
       // ceiling of 10 would warn once a handful of channels run at once.
       client.setMaxListeners(64);

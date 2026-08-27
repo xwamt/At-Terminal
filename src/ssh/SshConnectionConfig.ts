@@ -1,9 +1,17 @@
 import { readFile } from 'node:fs/promises';
-import { Client, type ConnectConfig, type VerifyCallback } from 'ssh2';
+import type { ConnectConfig, VerifyCallback } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
+import { attachKeyboardInteractive, type KeyboardInteractivePrompt } from './KeyboardInteractive';
+import { getSsh2 } from './ssh2Loader';
 
 export interface PasswordProvider {
   getPassword(id: string): Promise<string | undefined>;
+  /**
+   * Optional so pre-passphrase implementers (e.g. SftpTypes' PasswordSource) still
+   * satisfy the interface; absent means "no stored passphrase". An encrypted key
+   * without a passphrase fails ssh2's key parse with its own clear error.
+   */
+  getPassphrase?(id: string): Promise<string | undefined>;
 }
 
 export interface ServerLookup {
@@ -11,6 +19,15 @@ export interface ServerLookup {
 }
 
 export type SshConnectionProvider = PasswordProvider & Partial<ServerLookup>;
+
+export interface SshConnectOptions {
+  /**
+   * Answers keyboard-interactive rounds (2FA, PAM). When absent, a server that asks
+   * for one gets its connection aborted with a clear error instead of hanging --
+   * background paths (agent SFTP, pooled command executors) have no UI to prompt.
+   */
+  keyboardInteractivePrompt?: KeyboardInteractivePrompt;
+}
 
 export interface SshConnectionHandle {
   config: ConnectConfig;
@@ -20,6 +37,8 @@ export interface SshConnectionHandle {
 export interface HostKeyVerifier {
   verify(host: string, port: number, hashedKey: string): Promise<boolean>;
 }
+
+const WINDOWS_OPENSSH_AGENT_PIPE = '\\\\.\\pipe\\openssh-ssh-agent';
 
 /**
  * ssh2 accepts any host key when `hostVerifier` is absent, so a missing verifier is a silent
@@ -35,6 +54,25 @@ export function requireHostKeyVerifier(hostKeyVerifier: HostKeyVerifier | undefi
   return hostKeyVerifier;
 }
 
+/**
+ * Where ssh2 should reach the SSH agent. Parameters exist for tests; production callers
+ * use the process defaults.
+ */
+export function resolveAgentSocket(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env
+): string {
+  if (env.SSH_AUTH_SOCK) {
+    return env.SSH_AUTH_SOCK;
+  }
+  if (platform === 'win32') {
+    return WINDOWS_OPENSSH_AGENT_PIPE;
+  }
+  throw new Error(
+    'Missing SSH agent socket. Set the SSH_AUTH_SOCK environment variable or start an SSH agent.'
+  );
+}
+
 export async function buildSshConnectConfig(
   server: ServerConfig,
   passwordProvider: PasswordProvider,
@@ -45,6 +83,10 @@ export async function buildSshConnectConfig(
     port: server.port,
     username: server.username,
     keepaliveInterval: server.keepAliveInterval * 1000,
+    // 2FA-style prompts arrive as keyboard-interactive requests. Opting in is harmless
+    // for servers that never send one, and every connect path attaches
+    // attachKeyboardInteractive so an unanswerable request fails fast instead of hanging.
+    tryKeyboard: true,
     hostHash: 'sha256',
     hostVerifier: createHostVerifier(server, requireHostKeyVerifier(hostKeyVerifier))
   };
@@ -57,20 +99,27 @@ export async function buildSshConnectConfig(
     return { ...base, password };
   }
 
+  if (server.authType === 'agent') {
+    return { ...base, agent: resolveAgentSocket() };
+  }
+
   if (!server.privateKeyPath) {
     throw new Error('Missing private key path.');
   }
 
+  const passphrase = await passwordProvider.getPassphrase?.(server.id);
   return {
     ...base,
-    privateKey: await readFile(server.privateKeyPath, 'utf8')
+    privateKey: await readFile(server.privateKeyPath, 'utf8'),
+    ...(passphrase === undefined ? {} : { passphrase })
   };
 }
 
 export async function buildSshConnectionHandle(
   server: ServerConfig,
   provider: SshConnectionProvider,
-  hostKeyVerifier: HostKeyVerifier
+  hostKeyVerifier: HostKeyVerifier,
+  options: SshConnectOptions = {}
 ): Promise<SshConnectionHandle> {
   requireHostKeyVerifier(hostKeyVerifier);
   if (!server.jumpHostId) {
@@ -89,6 +138,7 @@ export async function buildSshConnectionHandle(
     throw new Error(`Jump host "${server.jumpHostId}" was not found.`);
   }
 
+  const { Client } = await getSsh2();
   const jumpClient = new Client();
   try {
     const jumpConfig = await buildSshConnectConfig({ ...jumpHost, jumpHostId: undefined }, provider, hostKeyVerifier);
@@ -96,6 +146,7 @@ export async function buildSshConnectionHandle(
     await new Promise<void>((resolve, reject) => {
       jumpClient.once('ready', resolve);
       jumpClient.once('error', reject);
+      attachKeyboardInteractive(jumpClient, options.keyboardInteractivePrompt, reject);
       jumpClient.connect(jumpConfig);
     });
 

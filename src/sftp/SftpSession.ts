@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir as mkdirLocal, readdir as readdirLocal, stat as statLocal } from 'node:fs/promises';
 import { join as joinLocalPath } from 'node:path';
-import { Client, type ClientChannel, type FileEntryWithStats, type SFTPWrapper, type Stats } from 'ssh2';
+import type { Client, ClientChannel, FileEntryWithStats, SFTPWrapper, Stats } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
 import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionHandle } from '../ssh/SshConnectionConfig';
+import { getSsh2 } from '../ssh/ssh2Loader';
 import { runWithConcurrency } from './concurrency';
 import { joinRemotePath, quotePosixShellPath, safePreviewName } from './RemotePath';
 import { SftpConflictError } from './SftpErrors';
@@ -53,7 +54,7 @@ export class SftpSession {
   ) {}
 
   async connect(): Promise<void> {
-    const client = new Client();
+    const client = new (await getSsh2()).Client();
     this.client = client;
     const handle = await buildSshConnectionHandle(this.server, this.passwords, this.hostKeyVerifier);
     this.connectionHandle = handle;
