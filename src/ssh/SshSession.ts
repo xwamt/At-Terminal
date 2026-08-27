@@ -1,11 +1,25 @@
-import { Client, type ClientChannel, type ShellOptions } from 'ssh2';
+import type { Client, ClientChannel, ShellOptions } from 'ssh2';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
+import { t } from '../i18n/t';
+import { attachKeyboardInteractive, type KeyboardInteractivePrompt } from './KeyboardInteractive';
 import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionHandle } from './SshConnectionConfig';
+import { getSsh2 } from './ssh2Loader';
+
+export type SshSessionState = 'connecting' | 'connected' | 'disconnected';
+
+/**
+ * Structured so consumers branch on `state` instead of matching English substrings,
+ * which broke as soon as `text` was localized. `text` is display-ready copy from `t()`.
+ */
+export interface SshSessionStatus {
+  state: SshSessionState;
+  text: string;
+}
 
 export interface SshSessionEvents {
   output(data: Buffer): void;
-  status(message: string): void;
+  status(status: SshSessionStatus): void;
   error(error: unknown): void;
 }
 
@@ -21,13 +35,18 @@ export class SshSession {
     private readonly server: ServerConfig,
     private readonly configManager: ConfigManager,
     private readonly events: SshSessionEvents,
-    private readonly hostKeyVerifier: HostKeyVerifier
+    private readonly hostKeyVerifier: HostKeyVerifier,
+    private readonly keyboardInteractivePrompt?: KeyboardInteractivePrompt
   ) {}
 
   async connect(): Promise<void> {
-    this.events.status(`Connecting to ${this.server.host}:${this.server.port}...`);
+    this.events.status({
+      state: 'connecting',
+      text: t('Connecting to {host}:{port}...', { host: this.server.host, port: this.server.port })
+    });
     const handle = await this.buildConnectionHandle();
     this.connectionHandle = handle;
+    const { Client } = await getSsh2();
     const client = new Client();
     this.client = client;
 
@@ -35,6 +54,7 @@ export class SshSession {
       await new Promise<void>((resolve, reject) => {
         client.once('ready', resolve);
         client.once('error', reject);
+        attachKeyboardInteractive(client, this.keyboardInteractivePrompt, reject);
         client.connect(handle.config);
       });
 
@@ -59,10 +79,10 @@ export class SshSession {
     });
     this.shell.on('close', () => {
       this.connected = false;
-      this.events.status('Disconnected');
+      this.events.status({ state: 'disconnected', text: t('Disconnected') });
     });
     this.connected = true;
-    this.events.status('Connected');
+    this.events.status({ state: 'connected', text: t('Connected') });
   }
 
   async reconnect(): Promise<void> {
@@ -72,6 +92,19 @@ export class SshSession {
 
   write(data: string): void {
     this.shell?.write(data);
+  }
+
+  /**
+   * Flow-control hooks for the terminal host's high-water mark: pausing the shell
+   * channel makes the SSH window fill so the remote side stops sending. Both are
+   * no-ops while no shell is open, so callers may invoke them at any point.
+   */
+  pauseOutput(): void {
+    this.shell?.pause();
+  }
+
+  resumeOutput(): void {
+    this.shell?.resume();
   }
 
   resize(rows: number, cols: number): void {
@@ -114,6 +147,8 @@ export class SshSession {
   }
 
   private async buildConnectionHandle(): Promise<SshConnectionHandle> {
-    return buildSshConnectionHandle(this.server, this.configManager, this.hostKeyVerifier);
+    return buildSshConnectionHandle(this.server, this.configManager, this.hostKeyVerifier, {
+      keyboardInteractivePrompt: this.keyboardInteractivePrompt
+    });
   }
 }

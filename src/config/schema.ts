@@ -8,14 +8,14 @@ export const serverConfigSchema = z
     host: z.string().min(1),
     port: z.number().int().min(1).max(65535),
     username: z.string().min(1),
-    authType: z.enum(['password', 'privateKey']),
+    authType: z.enum(['password', 'privateKey', 'agent']),
     privateKeyPath: z.string().min(1).optional(),
     jumpHostId: z.string().min(1).optional(),
     agentCommandTrust: z.enum(['none', 'policy', 'full']).optional(),
     agentCommandAutoApprove: z.boolean().optional(),
     backgroundConnectionAllowed: z.boolean().optional(),
     keepAliveInterval: z.number().int().min(0),
-    encoding: z.literal('utf-8'),
+    encoding: z.enum(['utf-8', 'gbk', 'big5']).default('utf-8'),
     createdAt: z.number().int().nonnegative(),
     updatedAt: z.number().int().nonnegative()
   })

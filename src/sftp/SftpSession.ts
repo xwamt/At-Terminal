@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { Client, type ClientChannel, type FileEntryWithStats, type SFTPWrapper } from 'ssh2';
+import type { Client, ClientChannel, FileEntryWithStats, SFTPWrapper } from 'ssh2';
 import type { ServerConfig } from '../config/schema';
 import { buildSshConnectionHandle, type HostKeyVerifier, type SshConnectionHandle } from '../ssh/SshConnectionConfig';
+import { getSsh2 } from '../ssh/ssh2Loader';
 import { quotePosixShellPath, safePreviewName } from './RemotePath';
 import type { TransferProgress } from './TransferService';
 import type { PasswordSource, SftpEntry, SftpEntryType, SftpFileStat } from './SftpTypes';
@@ -31,7 +32,7 @@ export class SftpSession {
   ) {}
 
   async connect(): Promise<void> {
-    const client = new Client();
+    const client = new (await getSsh2()).Client();
     this.client = client;
     const handle = await buildSshConnectionHandle(this.server, this.passwords, this.hostKeyVerifier);
     this.connectionHandle = handle;

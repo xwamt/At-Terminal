@@ -38,15 +38,50 @@ describe('server config schema', () => {
     expect(parsed.authType).toBe('privateKey');
   });
 
-  it('rejects agent auth and jumpHost fields', () => {
+  it('accepts agent auth without a private key path', () => {
+    const parsed = parseServerConfig({
+      id: 'server-3',
+      label: 'Agent',
+      host: 'agent.example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'agent',
+      keepAliveInterval: 30,
+      encoding: 'utf-8',
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.authType).toBe('agent');
+    expect(parsed.privateKeyPath).toBeUndefined();
+  });
+
+  it('rejects an unknown authType', () => {
     expect(() =>
       parseServerConfig({
-        id: 'server-3',
+        id: 'server-3b',
+        label: 'Bad Auth',
+        host: 'bad.example.com',
+        port: 22,
+        username: 'root',
+        authType: 'kerberos',
+        keepAliveInterval: 30,
+        encoding: 'utf-8',
+        createdAt: 1,
+        updatedAt: 2
+      })
+    ).toThrow();
+  });
+
+  it('rejects inline jumpHost objects', () => {
+    expect(() =>
+      parseServerConfig({
+        id: 'server-3c',
         label: 'Bad',
         host: 'bad.example.com',
         port: 22,
         username: 'root',
-        authType: 'agent',
+        authType: 'password',
         jumpHost: { host: 'jump.example.com' },
         keepAliveInterval: 30,
         encoding: 'utf-8',
@@ -232,6 +267,58 @@ describe('server config schema', () => {
         agentTrustEverything: true,
         keepAliveInterval: 30,
         encoding: 'utf-8',
+        createdAt: 1,
+        updatedAt: 2
+      })
+    ).toThrow();
+  });
+
+  it('accepts gbk and big5 encodings', () => {
+    for (const encoding of ['gbk', 'big5'] as const) {
+      const parsed = parseServerConfig({
+        id: `server-${encoding}`,
+        label: `Encoding ${encoding}`,
+        host: 'cjk.example.com',
+        port: 22,
+        username: 'deploy',
+        authType: 'password',
+        keepAliveInterval: 30,
+        encoding,
+        createdAt: 1,
+        updatedAt: 2
+      });
+
+      expect(parsed.encoding).toBe(encoding);
+    }
+  });
+
+  it('defaults encoding to utf-8 for configs saved before the field existed', () => {
+    const parsed = parseServerConfig({
+      id: 'server-15',
+      label: 'Legacy',
+      host: 'legacy.example.com',
+      port: 22,
+      username: 'deploy',
+      authType: 'password',
+      keepAliveInterval: 30,
+      createdAt: 1,
+      updatedAt: 2
+    });
+
+    expect(parsed.encoding).toBe('utf-8');
+  });
+
+  it('rejects an unsupported encoding', () => {
+    expect(() =>
+      parseServerConfig({
+        id: 'server-16',
+        label: 'Bad Encoding',
+        host: 'bad.example.com',
+        port: 22,
+        username: 'deploy',
+        authType: 'password',
+        keepAliveInterval: 30,
+        encoding: 'latin1',
         createdAt: 1,
         updatedAt: 2
       })

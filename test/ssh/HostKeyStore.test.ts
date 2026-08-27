@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HostKeyStore, type HostKeyMemento } from '../../src/ssh/HostKeyStore';
+import { formatFingerprint, HostKeyStore, type HostKeyMemento } from '../../src/ssh/HostKeyStore';
 
 class MemoryMemento implements HostKeyMemento {
   private data = new Map<string, unknown>();
@@ -36,5 +36,32 @@ describe('HostKeyStore', () => {
     await store.trust('example.com', 22, 'SHA256:abc', 'ssh-ed25519');
     await store.forget('example.com', 22);
     expect(await store.check('example.com', 22, 'SHA256:def')).toBe('unknown');
+  });
+
+  it('describes a trusted host key for display', async () => {
+    const store = new HostKeyStore(new MemoryMemento());
+    await store.trust('example.com', 22, 'abcdef123456', 'ssh-ed25519');
+
+    const description = store.describe('example.com', 22);
+
+    expect(description).toContain('example.com:22');
+    expect(description).toContain('SHA256:abcdef123456');
+    expect(description).toContain('(ssh-ed25519)');
+  });
+
+  it('returns undefined when describing a host with no trusted key', () => {
+    const store = new HostKeyStore(new MemoryMemento());
+    expect(store.describe('example.com', 22)).toBeUndefined();
+  });
+});
+
+describe('formatFingerprint', () => {
+  it('prefixes bare sha256 digests OpenSSH-style', () => {
+    expect(formatFingerprint('abcdef123456')).toBe('SHA256:abcdef123456');
+  });
+
+  it('keeps values that already carry a hash label', () => {
+    expect(formatFingerprint('SHA256:abcdef123456')).toBe('SHA256:abcdef123456');
+    expect(formatFingerprint('MD5:aa:bb:cc')).toBe('MD5:aa:bb:cc');
   });
 });

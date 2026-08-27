@@ -82,6 +82,44 @@ describe('ConfigManager', () => {
     expect(await manager.getPassword('server-1')).toBeUndefined();
   });
 
+  it('stores and returns private key passphrases outside the config', async () => {
+    const secrets = new MemorySecretStore();
+    const manager = new ConfigManager(new MemoryMemento(), secrets);
+    const keyServer = server({ authType: 'privateKey', privateKeyPath: 'C:/keys/prod.pem' });
+
+    await manager.saveServer(keyServer, undefined, 'key-passphrase');
+
+    expect(await manager.listServers()).toEqual([keyServer]);
+    expect(await manager.getPassphrase('server-1')).toBe('key-passphrase');
+    expect(secrets.data.get('sshManager.passphrase.server-1')).toBe('key-passphrase');
+    expect(await manager.getPassword('server-1')).toBeUndefined();
+  });
+
+  it('keeps an existing passphrase when saving without one', async () => {
+    const manager = new ConfigManager(new MemoryMemento(), new MemorySecretStore());
+    const keyServer = server({ authType: 'privateKey', privateKeyPath: 'C:/keys/prod.pem' });
+
+    await manager.saveServer(keyServer, undefined, 'key-passphrase');
+    await manager.saveServer({ ...keyServer, label: 'Renamed', updatedAt: 2 });
+
+    expect(await manager.getPassphrase('server-1')).toBe('key-passphrase');
+  });
+
+  it('deletes the passphrase together with the server', async () => {
+    const secrets = new MemorySecretStore();
+    const manager = new ConfigManager(new MemoryMemento(), secrets);
+
+    await manager.saveServer(
+      server({ authType: 'privateKey', privateKeyPath: 'C:/keys/prod.pem' }),
+      undefined,
+      'key-passphrase'
+    );
+    await manager.deleteServer('server-1');
+
+    expect(await manager.getPassphrase('server-1')).toBeUndefined();
+    expect(secrets.data.size).toBe(0);
+  });
+
   it('finds servers that reference a jump host', async () => {
     const manager = new ConfigManager(new MemoryMemento(), new MemorySecretStore());
 

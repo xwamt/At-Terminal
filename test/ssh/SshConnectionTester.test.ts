@@ -44,9 +44,15 @@ function server(): ServerConfig {
   };
 }
 
-async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+/**
+ * The tester loads ssh2 through the async ssh2Loader, so the fake client appears a few
+ * microtasks after testSshConnection is called; poll for it instead of counting ticks.
+ */
+async function waitForClient(): Promise<FakeClient> {
+  await vi.waitFor(() => {
+    expect(clients.length).toBeGreaterThan(0);
+  });
+  return clients[0];
 }
 
 beforeEach(() => {
@@ -62,8 +68,8 @@ describe('testSshConnection', () => {
   it('resolves when ssh2 reports ready and closes the temporary client', async () => {
     const promise = testSshConnection(server(), { getPassword: async () => 'secret' }, { verify: async () => true }, 5_000);
 
-    await flushPromises();
-    clients[0].emit('ready');
+    const client = await waitForClient();
+    client.emit('ready');
 
     await expect(promise).resolves.toBeUndefined();
     expect(connect).toHaveBeenCalledWith({ host: 'example.com', port: 22, readyTimeout: 5_000 });
@@ -75,11 +81,71 @@ describe('testSshConnection', () => {
     const promise = testSshConnection(server(), { getPassword: async () => 'secret' }, { verify: async () => true }, 5_000);
     const error = new Error('Authentication failed');
 
-    await flushPromises();
-    clients[0].emit('error', error);
+    const client = await waitForClient();
+    client.emit('error', error);
 
     await expect(promise).rejects.toThrow('Authentication failed');
     expect(end).toHaveBeenCalledTimes(1);
     expect(disposeHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers keyboard-interactive rounds through the injected prompt', async () => {
+    const prompt = vi.fn(async () => ['123456']);
+    const promise = testSshConnection(
+      server(),
+      { getPassword: async () => 'secret' },
+      { verify: async () => true },
+      5_000,
+      prompt
+    );
+
+    const client = await waitForClient();
+    client.emit(
+      'keyboard-interactive',
+      '2FA',
+      '',
+      'en',
+      [{ prompt: 'Verification code:', echo: false }],
+      (responses: string[]) => {
+        expect(responses).toEqual(['123456']);
+        client.emit('ready');
+      }
+    );
+
+    await expect(promise).resolves.toBeUndefined();
+    expect(prompt).toHaveBeenCalledWith({
+      name: '2FA',
+      instructions: '',
+      prompts: [{ prompt: 'Verification code:', echo: false }]
+    });
+  });
+
+  it('rejects a cancelled keyboard-interactive prompt instead of hanging', async () => {
+    const promise = testSshConnection(
+      server(),
+      { getPassword: async () => 'secret' },
+      { verify: async () => true },
+      5_000,
+      async () => undefined
+    );
+
+    const client = await waitForClient();
+    client.emit('keyboard-interactive', '2FA', '', 'en', [{ prompt: 'Code:', echo: false }], () => undefined);
+
+    await expect(promise).rejects.toThrow('Keyboard-interactive authentication was cancelled.');
+    expect(end).toHaveBeenCalled();
+    expect(disposeHandle).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects keyboard-interactive requests with a clear error when no prompt exists', async () => {
+    const promise = testSshConnection(server(), { getPassword: async () => 'secret' }, { verify: async () => true }, 5_000);
+
+    const client = await waitForClient();
+    client.emit('keyboard-interactive', '2FA', '', 'en', [{ prompt: 'Code:', echo: false }], () => undefined);
+
+    await expect(promise).rejects.toThrow(
+      'The server requested keyboard-interactive authentication, but no interactive prompt is available in this context.'
+    );
+    expect(end).toHaveBeenCalled();
   });
 });
