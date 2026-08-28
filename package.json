@@ -454,8 +454,8 @@
     "package:mcp": "npm run build:mcp && node scripts/package-variant.mjs mcp"
   },
   "dependencies": {
-    "@at-series/command-policy": "0.1.0",
-    "@at-series/mcp-hub": "^0.3.2",
+    "@at-series/command-policy": "0.1.1",
+    "@at-series/mcp-hub": "^0.3.3",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.15.0",
     "@xterm/addon-web-links": "^0.11.0",

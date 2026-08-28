@@ -13,7 +13,7 @@ describe('MCP hub packaging metadata', () => {
     expect(packageJson).toContain('copy:hub');
     expect(packageJson).toContain('copy:policy-assets');
     expect(packageJson).toContain('@at-series/mcp-hub');
-    expect(packageJson).toContain('"@at-series/command-policy": "0.1.0"');
+    expect(packageJson).toContain('"@at-series/command-policy": "0.1.1"');
     expect(packageJson).not.toContain('"@at-series/command-policy": "^');
     expect(packageJson).not.toContain('file:../at-series-command-policy');
     expect(copyHubScript).toContain("join('dist', 'hub.js')");
