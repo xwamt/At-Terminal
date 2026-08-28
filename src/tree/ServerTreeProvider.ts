@@ -24,7 +24,28 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<GroupTreeItem
     return element;
   }
 
+  /** Required by TreeView.reveal: groups are roots, servers sit under their group. */
+  getParent(element: GroupTreeItem | ServerTreeItem): GroupTreeItem | undefined {
+    if (element instanceof ServerTreeItem) {
+      return new GroupTreeItem(this.groupName(element.server));
+    }
+    return undefined;
+  }
+
   async getChildren(element?: GroupTreeItem | ServerTreeItem): Promise<Array<GroupTreeItem | ServerTreeItem>> {
+    try {
+      return await this.loadChildren(element);
+    } catch (error) {
+      // A throwing getChildren leaves the whole view stuck on an error; an empty
+      // result keeps the tree alive so a later refresh can show the real servers.
+      console.error('AT Terminal: failed to load the servers tree:', error);
+      return [];
+    }
+  }
+
+  private async loadChildren(
+    element?: GroupTreeItem | ServerTreeItem
+  ): Promise<Array<GroupTreeItem | ServerTreeItem>> {
     const servers = await this.source.listServers();
     if (!element) {
       const groups = Array.from(new Set(servers.map((server) => this.groupName(server)))).sort((a, b) =>

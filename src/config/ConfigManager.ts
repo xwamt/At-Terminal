@@ -22,12 +22,16 @@ export class ConfigManager {
   ) {}
 
   async listServers(): Promise<ServerConfig[]> {
-    const raw = this.globalState.get<unknown[]>(SERVERS_KEY, []);
+    const raw = this.globalState.get<unknown>(SERVERS_KEY, []);
     const servers = parseServerConfigList(raw);
     // Persist migrated records (e.g. a backfilled encoding) so later reads see
     // the canonical shape. Writing only on an actual change avoids an update
-    // on every list call.
-    if (JSON.stringify(servers) !== JSON.stringify(raw)) {
+    // on every list call. Never write back when parsing produced nothing from
+    // a non-empty or non-array stored value: that would replace the user's
+    // data with [] on a transient parse failure instead of leaving it intact
+    // for a later, fixed read.
+    const safeToPersist = Array.isArray(raw) && (servers.length > 0 || raw.length === 0);
+    if (safeToPersist && JSON.stringify(servers) !== JSON.stringify(raw)) {
       await this.globalState.update(SERVERS_KEY, servers);
     }
     return servers;
