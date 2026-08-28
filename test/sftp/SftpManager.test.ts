@@ -387,6 +387,21 @@ describe('SftpManager listing cache', () => {
     expect(listDirectory).toHaveBeenCalledTimes(2);
   });
 
+  it('invalidateAllListings drops every cached listing so an explicit refresh hits the server', async () => {
+    const listDirectory = vi.fn(async () => []);
+    const session = sessionStub({ listDirectory });
+    const manager = new SftpManager({ createSession: () => session });
+    manager.setTerminalContext(context(true));
+
+    await manager.listDirectory('/home/deploy');
+    await manager.listDirectory('/home/deploy/app');
+    manager.invalidateAllListings();
+    await manager.listDirectory('/home/deploy');
+    await manager.listDirectory('/home/deploy/app');
+
+    expect(listDirectory).toHaveBeenCalledTimes(4);
+  });
+
   it('caches per terminal', async () => {
     const firstList = vi.fn(async () => []);
     const secondList = vi.fn(async () => []);

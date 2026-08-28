@@ -53,6 +53,11 @@ export class Uri {
     return new Uri(path);
   }
 
+  static parse(value: string): Uri {
+    const withoutScheme = value.replace(/^file:\/\//, '');
+    return new Uri(decodeURIComponent(withoutScheme));
+  }
+
   static joinPath(base: Uri, ...paths: string[]): Uri {
     return new Uri([base.fsPath, ...paths].join('/'));
   }
