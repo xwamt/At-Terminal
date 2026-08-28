@@ -72,6 +72,41 @@ describe('SftpTreeProvider', () => {
     expect(children.map((child) => child.contextValue)).toEqual(['sftpDisconnectedDirectory', 'sftpDisconnectedFile']);
   });
 
+  it('renders an error row when the active root listing fails instead of rejecting', async () => {
+    // A rejected getChildren makes VS Code keep the previous children — right after a
+    // connect that is still the "No active SSH terminal" placeholder.
+    const provider = new SftpTreeProvider({
+      getState: () => ({ kind: 'active', rootPath: '/home/deploy' }),
+      listDirectory: async () => {
+        throw new Error('SFTP channel could not be opened');
+      }
+    });
+
+    const children = await provider.getChildren();
+
+    expect(children).toHaveLength(1);
+    expect(children[0]).toBeInstanceOf(SftpPlaceholderTreeItem);
+    expect(children[0].label).toBe('SFTP error: SFTP channel could not be opened');
+  });
+
+  it('renders an error row when expanding a directory fails', async () => {
+    const provider = new SftpTreeProvider({
+      getState: () => ({ kind: 'active', rootPath: '/home/deploy' }),
+      listDirectory: async (path) => {
+        if (path === '/home/deploy/app') {
+          throw new Error('Permission denied');
+        }
+        return entries;
+      }
+    });
+    const [, appDirectory] = await provider.getChildren();
+
+    const children = await provider.getChildren(appDirectory as SftpDirectoryTreeItem);
+
+    expect(children).toHaveLength(1);
+    expect(children[0].label).toBe('SFTP error: Permission denied');
+  });
+
   it('renders a symlink to a directory as an expandable directory item', async () => {
     const listedPaths: string[] = [];
     const symlinkEntries: SftpEntry[] = [
@@ -121,9 +156,14 @@ describe('shouldRefreshOnContextChange', () => {
     expect(shouldRefreshOnContextChange(base, { ...base, connected: false })).toBe(true);
   });
 
-  it('refreshes when either side has no descriptor', () => {
+  it('refreshes when exactly one side has no descriptor', () => {
     expect(shouldRefreshOnContextChange(undefined, base)).toBe(true);
     expect(shouldRefreshOnContextChange(base, undefined)).toBe(true);
-    expect(shouldRefreshOnContextChange(undefined, undefined)).toBe(true);
+  });
+
+  it('skips the refresh when there was no descriptor before or after', () => {
+    // Placeholder before, placeholder after: repainting would be a no-op, and background
+    // terminal context changes flow through this check on every event.
+    expect(shouldRefreshOnContextChange(undefined, undefined)).toBe(false);
   });
 });

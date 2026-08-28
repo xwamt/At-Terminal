@@ -169,6 +169,7 @@
   "Select SSH private key": "选择 SSH 私钥",
   "Server configuration": "服务器配置",
   "SFTP connection was superseded by another active terminal.": "SFTP 连接已被另一个活动终端取代。",
+  "SFTP error: {message}": "SFTP 错误：{message}",
   "Show": "显示",
   "Show all groups": "显示所有分组",
   "Show password": "显示密码",
