@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { SftpEntry } from '../sftp/SftpTypes';
+import { formatError } from '../utils/errors';
 import {
   SftpDirectoryTreeItem,
   SftpFileTreeItem,
@@ -31,7 +32,9 @@ export function shouldRefreshOnContextChange(
   next: SftpViewDescriptor | undefined
 ): boolean {
   if (!previous || !next) {
-    return true;
+    // Both missing: the view showed the placeholder before and still does, so a repaint
+    // would be a no-op. Gaining or losing the descriptor always repaints.
+    return Boolean(previous) !== Boolean(next);
   }
   return (
     previous.terminalId !== next.terminalId ||
@@ -75,7 +78,16 @@ export class SftpTreeProvider implements vscode.TreeDataProvider<SftpTreeNode> {
       return element ? [] : state.entries.map((entry) => this.toTreeItem(entry, true));
     }
     const path = element instanceof SftpDirectoryTreeItem ? element.entry.path : state.rootPath;
-    const entries = await this.source.listDirectory?.(path);
+    let entries: SftpEntry[] | undefined;
+    try {
+      entries = await this.source.listDirectory?.(path);
+    } catch (error) {
+      // When getChildren rejects, VS Code keeps the previous children — right after a
+      // connect that is still the "No active SSH terminal" placeholder, which lies about a
+      // live terminal whose SFTP channel failed (its own second SSH connection, e.g. on
+      // keyboard-interactive servers). Render the failure instead so refresh can retry.
+      return [new SftpPlaceholderTreeItem(t('SFTP error: {message}', { message: formatError(error) }))];
+    }
     const children = (entries ?? []).map((entry) => this.toTreeItem(entry, false));
     return element || state.rootPath === '/' ? children : [new SftpParentDirectoryTreeItem(), ...children];
   }

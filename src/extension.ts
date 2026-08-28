@@ -131,28 +131,18 @@ export function activate(context: vscode.ExtensionContext): void {
   };
   extensionCleanup = cleanup;
 
-  terminalContext.onDidChangeActiveContext((activeContext) => {
-    const previousView = sftpManager.getActiveViewDescriptor();
-    sftpManager.setTerminalContext(activeContext);
-    if (shouldRefreshOnContextChange(previousView, sftpManager.getActiveViewDescriptor())) {
-      sftpTreeProvider.refresh();
-    }
-  });
-  terminalContext.onDidChangeContext((changedContext) => {
-    if (terminalContext.getActive()?.terminalId !== changedContext.terminalId) {
-      sftpManager.syncTerminalContext(changedContext);
-    }
-    // Connection state feeds the Servers tree icon/description.
-    treeProvider.refresh();
-    // Connect/disconnect must reach the ~/.at-series registry immediately, not on the
-    // next 30s heartbeat, or hub routing sees 0 connected terminals.
-    void bridgeServer?.refreshCapabilities();
-  });
-  terminalContext.onDidRemoveContext((terminalId) => {
-    sftpManager.removeTerminalContext(terminalId);
-    sftpAgentService?.disposeTerminal(terminalId);
-    treeProvider.refresh();
-    void bridgeServer?.refreshCapabilities();
+  registerSftpContextWiring({
+    terminalContext,
+    sftpManager,
+    refreshSftpTree: () => sftpTreeProvider.refresh(),
+    onTerminalsChanged: () => {
+      // Connection state feeds the Servers tree icon/description.
+      treeProvider.refresh();
+      // Connect/disconnect must reach the ~/.at-series registry immediately, not on the
+      // next 30s heartbeat, or hub routing sees 0 connected terminals.
+      void bridgeServer?.refreshCapabilities();
+    },
+    onTerminalRemoved: (terminalId) => sftpAgentService?.disposeTerminal(terminalId)
   });
 
   let bridgeServer: BridgeServer | undefined;
@@ -854,6 +844,57 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   extensionCleanup?.dispose();
   TerminalPanel.disconnectAll();
+}
+
+export interface SftpContextWiringOptions {
+  terminalContext: Pick<
+    TerminalContextRegistry,
+    'onDidChangeActiveContext' | 'onDidChangeContext' | 'onDidRemoveContext'
+  >;
+  sftpManager: Pick<
+    SftpManager,
+    'setTerminalContext' | 'syncTerminalContext' | 'removeTerminalContext' | 'getActiveViewDescriptor'
+  >;
+  refreshSftpTree(): void;
+  /** Servers-tree repaint and MCP capability push; runs on every context change or removal. */
+  onTerminalsChanged(): void;
+  onTerminalRemoved?(terminalId: string): void;
+}
+
+/**
+ * Keeps the SFTP view in lockstep with the terminal registry. Exported so regression tests
+ * exercise the exact production wiring instead of a copy.
+ *
+ * Every registry mutation fires `onDidChangeContext`, so the SFTP state is synced there —
+ * including for the focused terminal. `TerminalContext.setActive` skips
+ * `onDidChangeActiveContext` when it considers the republished context unchanged, so an
+ * active-event-only sync can miss a connect and leave the tree on the
+ * "No active SSH terminal" placeholder while the terminal is live.
+ */
+export function registerSftpContextWiring(options: SftpContextWiringOptions): void {
+  const { terminalContext, sftpManager } = options;
+  const refreshSftpTreeIfViewChanged = (sync: () => void): void => {
+    const previousView = sftpManager.getActiveViewDescriptor();
+    sync();
+    if (shouldRefreshOnContextChange(previousView, sftpManager.getActiveViewDescriptor())) {
+      options.refreshSftpTree();
+    }
+  };
+  terminalContext.onDidChangeActiveContext((activeContext) => {
+    refreshSftpTreeIfViewChanged(() => sftpManager.setTerminalContext(activeContext));
+  });
+  terminalContext.onDidChangeContext((changedContext) => {
+    refreshSftpTreeIfViewChanged(() => sftpManager.syncTerminalContext(changedContext));
+    options.onTerminalsChanged();
+  });
+  terminalContext.onDidRemoveContext((terminalId) => {
+    // The registry clears the active context after this event, so the descriptor must be
+    // compared here: by the time onDidChangeActiveContext(undefined) runs the removal has
+    // already emptied the view state on both sides of that comparison.
+    refreshSftpTreeIfViewChanged(() => sftpManager.removeTerminalContext(terminalId));
+    options.onTerminalRemoved?.(terminalId);
+    options.onTerminalsChanged();
+  });
 }
 
 async function runSftpCommand(command: () => Promise<void>): Promise<void> {
