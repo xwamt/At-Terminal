@@ -186,7 +186,7 @@ describe('package variants', () => {
     expect(packageScript).toContain('RUNTIME_DEPENDENCIES');
     expect(packageScript).toContain("'ssh2'");
     expect(packageScript).toContain("'--omit=optional'");
-    expect(packageScript).toContain("join(root, 'docs', 'images')");
+    expect(packageScript).not.toContain("join(root, 'docs', 'images')");
     expect(packageScript).toContain("join(root, 'docs', 'features.md')");
     expect(packageScript).toContain("join(root, 'docs', 'features.zh-CN.md')");
     expect(packageScript).toContain("join(root, 'docs', 'usage.zh-CN.md')");
