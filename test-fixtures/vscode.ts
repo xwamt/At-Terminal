@@ -53,6 +53,11 @@ export class Uri {
     return new Uri(path);
   }
 
+  static parse(value: string): Uri {
+    const withoutScheme = value.replace(/^file:\/\//, '');
+    return new Uri(decodeURIComponent(withoutScheme));
+  }
+
   static joinPath(base: Uri, ...paths: string[]): Uri {
     return new Uri([base.fsPath, ...paths].join('/'));
   }
@@ -156,7 +161,7 @@ export const window = {
     task({
       report: () => undefined
     }, {}),
-  createTreeView: () => ({ dispose: () => undefined }),
+  createTreeView: () => ({ dispose: () => undefined, reveal: async () => undefined }),
   createWebviewPanel: () => ({ dispose: () => undefined }),
   showTextDocument: async (document: TextDocument) => document,
   createStatusBarItem: (_alignment?: StatusBarAlignment, _priority?: number) => new StatusBarItem(),

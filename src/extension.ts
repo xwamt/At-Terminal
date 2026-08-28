@@ -87,6 +87,21 @@ export function activate(context: vscode.ExtensionContext): void {
     getState: () => sftpManager.getState(),
     listDirectory: (path) => sftpManager.listDirectory(path)
   });
+  // Attach the tree data providers before any other activation work (MCP wiring,
+  // command registration). Until a provider is attached, VS Code shows the
+  // viewsWelcome placeholder ("no servers configured"), so a slow activation —
+  // typical right after a VSIX install/update — made persisted servers look
+  // lost until the window was reloaded. The instances are pushed into
+  // context.subscriptions below so disposal is unchanged.
+  const serversTreeView = vscode.window.createTreeView('sshManager.servers', {
+    treeDataProvider: treeProvider,
+    showCollapseAll: true
+  });
+  const sftpTreeView = vscode.window.createTreeView('sshManager.sftpFiles', {
+    treeDataProvider: sftpTreeProvider,
+    dragAndDropController: new SftpDragAndDropController(sftpManager),
+    showCollapseAll: true
+  });
   const sftpPreviewStore = new SftpPreviewDocumentStore();
   const sftpEditStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   const sftpEditManager = new SftpEditSessionManager({
@@ -129,11 +144,15 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     // Connection state feeds the Servers tree icon/description.
     treeProvider.refresh();
+    // Connect/disconnect must reach the ~/.at-series registry immediately, not on the
+    // next 30s heartbeat, or hub routing sees 0 connected terminals.
+    void bridgeServer?.refreshCapabilities();
   });
   terminalContext.onDidRemoveContext((terminalId) => {
     sftpManager.removeTerminalContext(terminalId);
     sftpAgentService?.disposeTerminal(terminalId);
     treeProvider.refresh();
+    void bridgeServer?.refreshCapabilities();
   });
 
   let bridgeServer: BridgeServer | undefined;
@@ -283,15 +302,8 @@ export function activate(context: vscode.ExtensionContext): void {
     ...(sftpAgentService ? [sftpAgentService] : []),
     ...(installMcpConfigCommand ? [installMcpConfigCommand] : []),
     ...(uninstallMcpConfigCommand ? [uninstallMcpConfigCommand] : []),
-    vscode.window.createTreeView('sshManager.servers', {
-      treeDataProvider: treeProvider,
-      showCollapseAll: true
-    }),
-    vscode.window.createTreeView('sshManager.sftpFiles', {
-      treeDataProvider: sftpTreeProvider,
-      dragAndDropController: new SftpDragAndDropController(sftpManager),
-      showCollapseAll: true
-    }),
+    serversTreeView,
+    sftpTreeView,
     sftpEditStatus,
     sftpEditManager,
     cleanup,
@@ -617,6 +629,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await active.reconnect();
     }),
     vscode.commands.registerCommand('sshManager.sftp.refresh', () => {
+      sftpManager.invalidateAllListings();
       sftpTreeProvider.refresh();
     }),
     vscode.commands.registerCommand('sshManager.sftp.goToPath', async () => {
@@ -719,8 +732,10 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
         const deleteAction = t('Delete');
+        // Symlinked directories stay expandable in the tree, but deleteEntry only
+        // unlinks the symlink. Count-through-target copy would overstate the damage.
         const message =
-          item.entry.type === 'directory' || item.entry.targetType === 'directory'
+          item.entry.type === 'directory'
             ? t('Delete remote directory "{path}"? {count} entries will be permanently deleted.', {
                 path: item.entry.path,
                 count: await sftpManager.countDeletableEntries(item.entry.path)
@@ -811,6 +826,29 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     })
   );
+
+  // Activation is complete: repaint the servers view so it leaves the
+  // viewsWelcome placeholder, and reveal a lone group expanded — VS Code often
+  // ignores CollapsibleState.Expanded on the first paint after an update, which
+  // left existing servers hidden behind a collapsed "Default" group.
+  treeProvider.refresh();
+  void configManager
+    .listServers()
+    .then(async (servers) => {
+      treeProvider.refresh();
+      if (servers.length === 0) {
+        return;
+      }
+      const roots = await treeProvider.getChildren();
+      const firstGroup = roots[0];
+      if (roots.length === 1 && firstGroup instanceof GroupTreeItem) {
+        await serversTreeView.reveal(firstGroup, { expand: true, focus: false, select: false });
+      }
+    })
+    .catch((error) => {
+      // The reveal is cosmetic; never let it surface as an activation failure.
+      console.error('AT Terminal: initial servers tree reveal failed:', formatError(error));
+    });
 }
 
 export function deactivate(): void {

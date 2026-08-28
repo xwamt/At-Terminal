@@ -36,17 +36,30 @@ export class AgentToolService {
 
   async listServers() {
     const servers = await this.dependencies.configManager.listServers();
+    // A live UI terminal is as good as background authorization: the user connected it
+    // themselves, so the agent must be able to discover and target that server.
+    const connectedServerIds = new Set(
+      this.dependencies.terminalContext
+        .getSnapshot()
+        .connectedTerminals.map((terminal) => terminal.serverId)
+    );
     return {
-      servers: servers.filter((server) => server.backgroundConnectionAllowed === true).map((server) => ({
-        id: server.id,
-        label: server.label,
-        host: server.host,
-        port: server.port,
-        username: server.username,
-        authType: server.authType,
-        agentCommandTrust: resolveAgentCommandTrust(server),
-        agentCommandAutoApprove: resolveAgentCommandTrust(server) !== 'none'
-      }))
+      servers: servers
+        .filter(
+          (server) =>
+            server.backgroundConnectionAllowed === true || connectedServerIds.has(server.id)
+        )
+        .map((server) => ({
+          id: server.id,
+          label: server.label,
+          host: server.host,
+          port: server.port,
+          username: server.username,
+          authType: server.authType,
+          connected: connectedServerIds.has(server.id),
+          agentCommandTrust: resolveAgentCommandTrust(server),
+          agentCommandAutoApprove: resolveAgentCommandTrust(server) !== 'none'
+        }))
     };
   }
 
@@ -70,23 +83,40 @@ export class AgentToolService {
       });
       if (!authorization.autoApprove) {
         const runCommandLabel = t('Run Command');
-        const answer = await withTimeout(
-          Promise.resolve(
-            vscode.window.showWarningMessage(
-              formatRemoteCommandConfirmMessage({
-                serverLabel: server.label,
-                host: server.host,
-                command,
-                destructive: authorization.destructive,
-                riskSummaries: authorization.riskSummaries
-              }),
-              { modal: true },
-              runCommandLabel
-            )
-          ),
-          CONFIRMATION_TIMEOUT_MS,
-          'Confirmation timed out; ask the user to approve the command dialog in the IDE, then retry.'
+        const confirmation = Promise.resolve(
+          vscode.window.showWarningMessage(
+            formatRemoteCommandConfirmMessage({
+              serverLabel: server.label,
+              host: server.host,
+              command,
+              destructive: authorization.destructive,
+              riskSummaries: authorization.riskSummaries
+            }),
+            { modal: true },
+            runCommandLabel
+          )
         );
+        let answer: string | undefined;
+        try {
+          answer = await withTimeout(
+            confirmation,
+            CONFIRMATION_TIMEOUT_MS,
+            'Confirmation timed out; ask the user to approve the command dialog in the IDE, then retry.'
+          );
+        } catch (error) {
+          // VS Code cannot dismiss the modal; a click after the timeout must not look
+          // like the command ran.
+          void confirmation.then((lateAnswer) => {
+            if (lateAnswer === runCommandLabel) {
+              void vscode.window.showInformationMessage(
+                t(
+                  'The approval arrived after the request timed out — the command was not run. Ask the agent to retry.'
+                )
+              );
+            }
+          });
+          throw error;
+        }
         if (answer !== runCommandLabel) {
           reasonCode = 'user_cancelled';
           throw new Error('Remote command was cancelled.');

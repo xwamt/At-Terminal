@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
+import { t } from '../i18n/t';
 import { SftpDirectoryTreeItem, SftpFileTreeItem } from '../tree/SftpTreeItems';
 import type { SftpTreeNode } from '../tree/SftpTreeProvider';
 import { dirname, joinRemotePath, safePreviewName } from './RemotePath';
+import { isSftpConflictError } from './SftpErrors';
 import type { SftpManager } from './SftpManager';
 
 export function localUploadFileName(localPath: string): string {
@@ -51,9 +53,34 @@ export class SftpDragAndDropController implements vscode.TreeDragAndDropControll
         ? resolveDropTargetPath(target, state.rootPath)
         : state.rootPath;
 
+    // Uploads raise SftpConflictError when the remote name exists, and TransferService
+    // deliberately shows no failure toast for conflicts because the caller is expected
+    // to prompt. Without this prompt a drop onto an existing name would fail silently.
+    let overwriteAll = false;
     for (const uri of uris) {
       const localUri = vscode.Uri.parse(uri);
-      await this.manager.uploadFile(localUri.fsPath, joinRemotePath(targetPath, localUploadFileName(localUri.fsPath)));
+      const remotePath = joinRemotePath(targetPath, localUploadFileName(localUri.fsPath));
+      try {
+        await this.manager.uploadFile(localUri.fsPath, remotePath, undefined, { overwrite: overwriteAll });
+      } catch (error) {
+        if (!isSftpConflictError(error)) {
+          throw error;
+        }
+        const overwrite = t('Overwrite');
+        const overwriteEverything = t('Overwrite All');
+        const skip = t('Skip');
+        const choice = await vscode.window.showWarningMessage(
+          error.message,
+          { modal: true },
+          overwrite,
+          overwriteEverything,
+          skip
+        );
+        if (choice === overwrite || choice === overwriteEverything) {
+          overwriteAll = choice === overwriteEverything;
+          await this.manager.uploadFile(localUri.fsPath, remotePath, undefined, { overwrite: true });
+        }
+      }
     }
   }
 }

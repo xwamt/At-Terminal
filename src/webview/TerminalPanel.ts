@@ -346,14 +346,16 @@ export class TerminalPanel {
       this.connected = true;
       this.userDisconnected = false;
       this.autoReconnectAttempts = 0;
-      this.terminalContext?.markConnected(this.terminalId);
+      // publishContext (not markConnected): markConnected no-ops when the terminal is not
+      // in the registry yet, leaving MCP tools blind to a live UI connection.
+      this.publishContext();
       this.scheduleIdleDisconnect();
     } catch (error) {
       if (generation !== this.connectionGeneration) {
         return;
       }
       this.connected = false;
-      this.terminalContext?.markDisconnected(this.terminalId);
+      this.publishContext();
       this.clearIdleDisconnect();
       this.postStatus({ state: 'disconnected', text: formatError(error) });
     }
@@ -376,14 +378,14 @@ export class TerminalPanel {
       }
       this.connected = true;
       this.autoReconnectAttempts = 0;
-      this.terminalContext?.markConnected(this.terminalId);
+      this.publishContext();
       this.scheduleIdleDisconnect();
     } catch (error) {
       if (generation !== this.connectionGeneration) {
         return;
       }
       this.connected = false;
-      this.terminalContext?.markDisconnected(this.terminalId);
+      this.publishContext();
       this.clearIdleDisconnect();
       this.postStatus({ state: 'disconnected', text: formatError(error) });
       if (isHostVerificationError(error)) {
@@ -410,7 +412,7 @@ export class TerminalPanel {
     this.outputBatcher?.dispose();
     this.flowController?.dispose();
     this.connected = false;
-    this.terminalContext?.markDisconnected(this.terminalId);
+    this.publishContext();
     this.postStatus({ state: 'disconnected', text: statusMessage });
     this.postTerminalNotice(terminalNotice);
   }
@@ -502,7 +504,7 @@ export class TerminalPanel {
     if (status.state === 'disconnected' && generation === this.connectionGeneration) {
       const wasConnected = this.connected;
       this.connected = false;
-      this.terminalContext?.markDisconnected(this.terminalId);
+      this.publishContext();
       this.clearIdleDisconnect();
       this.postTerminalNotice(t('Connection disconnected'));
       if (wasConnected) {

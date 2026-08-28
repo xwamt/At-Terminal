@@ -64,6 +64,28 @@ describe('ServerTreeProvider', () => {
     }
   });
 
+  it('returns an empty list instead of killing the view when listServers throws', async () => {
+    const provider = new ServerTreeProvider({
+      listServers: async () => {
+        throw new Error('globalState unavailable');
+      }
+    });
+
+    await expect(provider.getChildren()).resolves.toEqual([]);
+  });
+
+  it('resolves parents for reveal: servers point at their group, groups are roots', async () => {
+    const provider = new ServerTreeProvider({
+      listServers: async () => [server('a', 'A', 'prod')]
+    });
+
+    const roots = (await provider.getChildren()) as GroupTreeItem[];
+    const children = (await provider.getChildren(roots[0])) as ServerTreeItem[];
+
+    expect(provider.getParent(roots[0])).toBeUndefined();
+    expect(provider.getParent(children[0])?.groupName).toBe('prod');
+  });
+
   it('marks connected servers with the active icon and a Connected description suffix', () => {
     const item = new ServerTreeItem(server('a', 'A', 'prod'), 'connected');
 

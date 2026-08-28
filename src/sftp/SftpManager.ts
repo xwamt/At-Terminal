@@ -450,6 +450,17 @@ export class SftpManager {
   }
 
   /**
+   * Drops every cached listing so the next read hits the server. An explicit user
+   * refresh exists to see changes made outside this extension (another SSH session,
+   * cron); serving it from the TTL cache would make the refresh button a no-op for up
+   * to {@link LISTING_CACHE_TTL_MS}. Wire this into the `sshManager.sftp.refresh`
+   * command before the tree refresh.
+   */
+  invalidateAllListings(): void {
+    this.listingCache.clear();
+  }
+
+  /**
    * Drops cached listings for the mutated path, its parent (whose listing names it), and any
    * cached descendants. Keys are matched across every terminal because two terminals on the
    * same server see the same filesystem; over-invalidating an unrelated terminal only costs a

@@ -143,6 +143,47 @@ describe('ConfigManager', () => {
     expect((await manager.listServers()).map((entry) => entry.id)).toEqual(['server-1']);
   });
 
+  it('does not write back when a record fails migration, so the raw data survives', async () => {
+    const good = server({ id: 'a' });
+    const corrupt = { ...server({ id: 'b' }), keepAliveInterval: 'thirty' };
+    const stored = [good, corrupt];
+    const memento = new MemoryMemento();
+    await memento.update('sshManager.servers', stored);
+    const manager = new ConfigManager(memento, new MemorySecretStore());
+    const updatesBefore = memento.updateCalls;
+
+    const servers = await manager.listServers();
+
+    expect(servers.map((entry) => entry.id)).toEqual(['a']);
+    expect(memento.updateCalls).toBe(updatesBefore);
+    expect(memento.get<unknown[]>('sshManager.servers', [])).toHaveLength(2);
+  });
+
+  it('never persists an empty list over stored records that all failed to parse', async () => {
+    const memento = new MemoryMemento();
+    const unreadable = [{ junk: true }, { alsoJunk: 1 }];
+    await memento.update('sshManager.servers', unreadable);
+    const manager = new ConfigManager(memento, new MemorySecretStore());
+    const updatesBefore = memento.updateCalls;
+
+    expect(await manager.listServers()).toEqual([]);
+
+    expect(memento.updateCalls).toBe(updatesBefore);
+    expect(memento.get<unknown[]>('sshManager.servers', [])).toEqual(unreadable);
+  });
+
+  it('does not wipe a corrupt non-array stored value', async () => {
+    const memento = new MemoryMemento();
+    await memento.update('sshManager.servers', { corrupt: 'not-an-array' });
+    const manager = new ConfigManager(memento, new MemorySecretStore());
+    const updatesBefore = memento.updateCalls;
+
+    expect(await manager.listServers()).toEqual([]);
+
+    expect(memento.updateCalls).toBe(updatesBefore);
+    expect(memento.get<unknown>('sshManager.servers', [])).toEqual({ corrupt: 'not-an-array' });
+  });
+
   it('persists the migrated list once and stops rewriting after that', async () => {
     const memento = new MemoryMemento();
     const legacy = { ...server(), legacyFlag: true } as Record<string, unknown>;

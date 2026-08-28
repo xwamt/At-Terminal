@@ -32,7 +32,7 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
     name: 'list_ssh_servers',
     title: 'List SSH Servers',
     description:
-      'List AT Terminal SSH servers authorized for background connections without exposing credentials.',
+      'List AT Terminal SSH servers authorized for background connections, plus servers that currently have a live connected UI terminal (connected: true), without exposing credentials.',
     risk: 'read',
     inputSchema: {
       type: 'object',
