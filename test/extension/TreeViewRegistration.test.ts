@@ -18,6 +18,7 @@ vi.mock('../../src/mcp/BridgeServer', () => ({
     }
     dispose = mocks.bridgeDispose;
     start = mocks.bridgeStart;
+    refreshCapabilities = async () => undefined;
   }
 }));
 
