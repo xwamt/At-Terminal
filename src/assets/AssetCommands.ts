@@ -5,7 +5,11 @@ import * as vscode from 'vscode';
 import type { ConfigManager } from '../config/ConfigManager';
 import { formatError } from '../utils/errors';
 import { decryptAssetPayload, encryptAssetPayload } from './AssetCrypto';
-import { ASSET_PACKAGE_EXTENSION, parseAssetPackageEnvelope } from './AssetPackage';
+import {
+  ASSET_PACKAGE_EXTENSION,
+  ASSET_PACKAGE_UNREADABLE_MESSAGE,
+  parseAssetPackageEnvelope
+} from './AssetPackage';
 import { createAssetExportPayload } from './AssetExportService';
 import { applyAssetImport, type AssetConflictStrategy } from './AssetImportService';
 import { t } from '../i18n/t';
@@ -142,11 +146,16 @@ export async function importAssetsCommand(options: ImportAssetsCommandOptions): 
  * AssetCrypto and the envelope parser throw English messages; the command layer maps
  * the known recoverable case (wrong password / corrupted package) to a localized
  * message and wraps everything else so the user still sees a translated frame.
+ * An unreadable payload after a successful decrypt is a distinct case: the
+ * password was right, so telling the user to retype it would be misleading.
  */
 export function localizeAssetImportError(error: unknown): string {
   const message = formatError(error);
   if (message.includes('Invalid package password or corrupted asset package')) {
     return t('Import failed: the package password is wrong or the package file is corrupted.');
+  }
+  if (message.includes(ASSET_PACKAGE_UNREADABLE_MESSAGE)) {
+    return t('Import failed: the asset package is from an older format and could not be read.');
   }
   return t('Import failed: {message}', { message });
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as vscode from 'vscode';
 import { ServerTreeProvider } from '../../src/tree/ServerTreeProvider';
 import { GroupTreeItem, ServerTreeItem } from '../../src/tree/TreeItems';
 import type { ServerConfig } from '../../src/config/schema';
@@ -37,6 +38,30 @@ describe('ServerTreeProvider', () => {
 
     const prodChildren = (await provider.getChildren(roots[1])) as ServerTreeItem[];
     expect(prodChildren.map((item) => item.server.label)).toEqual(['A', 'C']);
+  });
+
+  it('expands a lone Default group so imported servers are visible right away', async () => {
+    const provider = new ServerTreeProvider({
+      listServers: async () => [server('a', 'A'), server('b', 'B')]
+    });
+
+    const roots = (await provider.getChildren()) as GroupTreeItem[];
+
+    expect(roots.map((item) => item.groupName)).toEqual(['Default']);
+    expect(roots[0].collapsibleState).toBe(vscode.TreeItemCollapsibleState.Expanded);
+  });
+
+  it('keeps multiple groups collapsed', async () => {
+    const provider = new ServerTreeProvider({
+      listServers: async () => [server('a', 'A', 'prod'), server('b', 'B', 'staging')]
+    });
+
+    const roots = (await provider.getChildren()) as GroupTreeItem[];
+
+    expect(roots).toHaveLength(2);
+    for (const root of roots) {
+      expect(root.collapsibleState).toBe(vscode.TreeItemCollapsibleState.Collapsed);
+    }
   });
 
   it('marks connected servers with the active icon and a Connected description suffix', () => {

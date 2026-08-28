@@ -1,9 +1,17 @@
 import { z } from 'zod';
-import { serverConfigSchema } from '../config/schema';
+import { migrateServerConfig, serverConfigSchema, type ServerConfig } from '../config/schema';
 
 export const ASSET_PACKAGE_FORMAT = 'at-terminal-assets';
 export const ASSET_PACKAGE_VERSION = 1;
 export const ASSET_PACKAGE_EXTENSION = '.at-terminal-assets';
+
+/**
+ * Thrown when the package decrypted fine (so the password was right) but the
+ * payload does not match any shape this version can read. Callers must keep
+ * this distinct from the wrong-password error.
+ */
+export const ASSET_PACKAGE_UNREADABLE_MESSAGE =
+  'Asset package payload is from an unsupported or older format.';
 
 const base64Schema = z.string().min(1);
 
@@ -71,5 +79,27 @@ export function parseAssetPackageEnvelope(value: unknown): AssetPackageEnvelope 
 }
 
 export function parseAssetPackagePayload(value: unknown): AssetPackagePayload {
-  return assetPackagePayloadSchema.parse(value);
+  return assetPackagePayloadSchema.parse(migratePayloadServers(value));
+}
+
+/**
+ * Packages exported by 0.3.x hold servers saved before `encoding` existed or
+ * with keys this version dropped. Each entry is migrated to the canonical
+ * shape before the strict payload parse; entries that cannot be migrated are
+ * skipped instead of failing the whole package.
+ */
+function migratePayloadServers(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.servers)) {
+    return value;
+  }
+  return {
+    ...record,
+    servers: record.servers
+      .map((server) => migrateServerConfig(server))
+      .filter((server): server is ServerConfig => server !== undefined)
+  };
 }

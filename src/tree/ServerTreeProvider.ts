@@ -27,9 +27,14 @@ export class ServerTreeProvider implements vscode.TreeDataProvider<GroupTreeItem
   async getChildren(element?: GroupTreeItem | ServerTreeItem): Promise<Array<GroupTreeItem | ServerTreeItem>> {
     const servers = await this.source.listServers();
     if (!element) {
-      return Array.from(new Set(servers.map((server) => this.groupName(server))))
-        .sort((a, b) => a.localeCompare(b))
-        .map((group) => new GroupTreeItem(group));
+      const groups = Array.from(new Set(servers.map((server) => this.groupName(server)))).sort((a, b) =>
+        a.localeCompare(b)
+      );
+      // A lone collapsed group (usually "Default") makes the view look empty
+      // right after an import; expand it so the servers are visible at once.
+      const state =
+        groups.length === 1 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed;
+      return groups.map((group) => new GroupTreeItem(group, state));
     }
     if (element instanceof GroupTreeItem) {
       const states = this.connectionStates?.();

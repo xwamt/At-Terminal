@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseServerConfig, serverConfigSchema } from '../../src/config/schema';
+import {
+  migrateServerConfig,
+  parseServerConfig,
+  parseServerConfigList,
+  serverConfigSchema
+} from '../../src/config/schema';
 
 describe('server config schema', () => {
   it('accepts password auth server configs', () => {
@@ -340,5 +345,88 @@ describe('server config schema', () => {
         updatedAt: 2
       })
     ).toThrow();
+  });
+});
+
+function legacyServer(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  // A 0.3.x record: no encoding field yet.
+  return {
+    id: 'legacy-1',
+    label: 'Legacy',
+    host: 'legacy.example.com',
+    port: 22,
+    username: 'deploy',
+    authType: 'password',
+    keepAliveInterval: 30,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides
+  };
+}
+
+describe('migrateServerConfig', () => {
+  it('defaults encoding to utf-8 when the field is missing', () => {
+    expect(migrateServerConfig(legacyServer())?.encoding).toBe('utf-8');
+  });
+
+  it('defaults encoding to utf-8 when the stored value is invalid', () => {
+    expect(migrateServerConfig(legacyServer({ encoding: 'latin1' }))?.encoding).toBe('utf-8');
+  });
+
+  it('strips unknown keys instead of rejecting the record', () => {
+    const migrated = migrateServerConfig(legacyServer({ legacyFlag: true, colorTheme: 'dark' }));
+
+    expect(migrated).toBeDefined();
+    expect(migrated).not.toHaveProperty('legacyFlag');
+    expect(migrated).not.toHaveProperty('colorTheme');
+  });
+
+  it('defaults keepAliveInterval to 30 when missing', () => {
+    const record = legacyServer();
+    delete record.keepAliveInterval;
+
+    expect(migrateServerConfig(record)?.keepAliveInterval).toBe(30);
+  });
+
+  it('skips records with an unknown authType', () => {
+    expect(migrateServerConfig(legacyServer({ authType: 'kerberos' }))).toBeUndefined();
+  });
+
+  it('skips values that are not objects', () => {
+    expect(migrateServerConfig('not-a-server')).toBeUndefined();
+    expect(migrateServerConfig(null)).toBeUndefined();
+    expect(migrateServerConfig([legacyServer()])).toBeUndefined();
+  });
+
+  it('keeps all three auth types', () => {
+    expect(migrateServerConfig(legacyServer({ authType: 'agent' }))?.authType).toBe('agent');
+    expect(
+      migrateServerConfig(legacyServer({ authType: 'privateKey', privateKeyPath: '/keys/id_ed25519' }))?.authType
+    ).toBe('privateKey');
+  });
+});
+
+describe('parseServerConfigList', () => {
+  it('parses legacy entries without encoding as utf-8', () => {
+    const parsed = parseServerConfigList([legacyServer()]);
+
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].encoding).toBe('utf-8');
+  });
+
+  it('keeps good entries when one entry is invalid', () => {
+    const parsed = parseServerConfigList([
+      legacyServer({ id: 'good-1' }),
+      { totally: 'broken' },
+      legacyServer({ id: 'good-2', authType: 'kerberos' }),
+      legacyServer({ id: 'good-3' })
+    ]);
+
+    expect(parsed.map((server) => server.id)).toEqual(['good-1', 'good-3']);
+  });
+
+  it('returns an empty list for non-array input', () => {
+    expect(parseServerConfigList(undefined)).toEqual([]);
+    expect(parseServerConfigList({ servers: [] })).toEqual([]);
   });
 });

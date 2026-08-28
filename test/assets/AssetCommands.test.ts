@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { exportAssetsCommand, importAssetsCommand, localizeAssetImportError } from '../../src/assets/AssetCommands';
 import { encryptAssetPayload } from '../../src/assets/AssetCrypto';
-import { ASSET_PACKAGE_FORMAT, ASSET_PACKAGE_VERSION } from '../../src/assets/AssetPackage';
+import {
+  ASSET_PACKAGE_FORMAT,
+  ASSET_PACKAGE_UNREADABLE_MESSAGE,
+  ASSET_PACKAGE_VERSION
+} from '../../src/assets/AssetPackage';
 import type { ConfigManager } from '../../src/config/ConfigManager';
 import type { ServerConfig } from '../../src/config/schema';
 
@@ -170,5 +174,15 @@ describe('AssetCommands', () => {
       'Import failed: the package password is wrong or the package file is corrupted.'
     );
     expect(localizeAssetImportError(new Error('boom'))).toBe('Import failed: boom');
+  });
+
+  it('distinguishes an unreadable old-format package from a wrong password', () => {
+    const formatMessage = localizeAssetImportError(new Error(ASSET_PACKAGE_UNREADABLE_MESSAGE));
+
+    expect(formatMessage).toBe('Import failed: the asset package is from an older format and could not be read.');
+    expect(formatMessage).not.toContain('password');
+    expect(localizeAssetImportError(new Error('Invalid package password or corrupted asset package.'))).not.toBe(
+      formatMessage
+    );
   });
 });
