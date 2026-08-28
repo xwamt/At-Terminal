@@ -36,7 +36,7 @@ import { getSsh2 } from './ssh/ssh2Loader';
 import { createVscodeKeyboardInteractivePrompt } from './ssh/VscodeKeyboardInteractivePrompt';
 import { TerminalContextRegistry } from './terminal/TerminalContext';
 import { ServerTreeProvider } from './tree/ServerTreeProvider';
-import { SftpTreeProvider, shouldRefreshOnContextChange } from './tree/SftpTreeProvider';
+import { SftpTreeProvider, shouldRefreshOnContextChange, type SftpTreeSource } from './tree/SftpTreeProvider';
 import { SftpDirectoryTreeItem, SftpFileTreeItem } from './tree/SftpTreeItems';
 import { GroupTreeItem, ServerTreeItem } from './tree/TreeItems';
 import { formatError } from './utils/errors';
@@ -83,10 +83,9 @@ export function activate(context: vscode.ExtensionContext): void {
       new SftpSession(terminal.server, configManager, hostKeyVerifier, { allowSudoFallback: true }),
     reporter: new VscodeTransferReporter()
   });
-  const sftpTreeProvider = new SftpTreeProvider({
-    getState: () => sftpManager.getState(),
-    listDirectory: (path) => sftpManager.listDirectory(path)
-  });
+  const sftpTreeProvider = new SftpTreeProvider(
+    createRegistryBackedSftpTreeSource(terminalContext, sftpManager)
+  );
   // Attach the tree data providers before any other activation work (MCP wiring,
   // command registration). Until a provider is attached, VS Code shows the
   // viewsWelcome placeholder ("no servers configured"), so a slow activation —
@@ -619,8 +618,11 @@ export function activate(context: vscode.ExtensionContext): void {
       await active.reconnect();
     }),
     vscode.commands.registerCommand('sshManager.sftp.refresh', () => {
-      sftpManager.invalidateAllListings();
-      sftpTreeProvider.refresh();
+      refreshSftpFilesView({
+        terminalContext,
+        sftpManager,
+        refreshSftpTree: () => sftpTreeProvider.refresh()
+      });
     }),
     vscode.commands.registerCommand('sshManager.sftp.goToPath', async () => {
       await runSftpCommand(async () => {
@@ -895,6 +897,63 @@ export function registerSftpContextWiring(options: SftpContextWiringOptions): vo
     options.onTerminalRemoved?.(terminalId);
     options.onTerminalsChanged();
   });
+}
+
+/** The registry views the SFTP tree may re-read directly; what MCP tools already read. */
+export type SftpTerminalRegistrySource = Pick<TerminalContextRegistry, 'getConnectedTerminal' | 'getActive'>;
+
+/**
+ * SFTP state is a copy of the terminal registry maintained by event listeners; a missed
+ * event leaves the copy on "No active SSH terminal" while the registry — the source of
+ * truth MCP tools read — has a live connection. Re-syncing on the placeholder path makes
+ * every tree read self-healing instead of trusting that no event was ever dropped.
+ */
+export function adoptRegistryTerminalIfSftpInactive(
+  terminalContext: SftpTerminalRegistrySource,
+  sftpManager: Pick<SftpManager, 'getState' | 'setTerminalContext'>
+): void {
+  if (sftpManager.getState().kind !== 'none') {
+    return;
+  }
+  const live = terminalContext.getConnectedTerminal() ?? terminalContext.getActive();
+  if (live) {
+    sftpManager.setTerminalContext(live);
+  }
+}
+
+/** Tree source used by `activate()`: every getChildren re-checks the registry first. */
+export function createRegistryBackedSftpTreeSource(
+  terminalContext: SftpTerminalRegistrySource,
+  sftpManager: Pick<SftpManager, 'getState' | 'setTerminalContext' | 'listDirectory'>
+): SftpTreeSource {
+  return {
+    getState: () => {
+      adoptRegistryTerminalIfSftpInactive(terminalContext, sftpManager);
+      return sftpManager.getState();
+    },
+    listDirectory: (path) => sftpManager.listDirectory(path)
+  };
+}
+
+export interface RefreshSftpFilesViewOptions {
+  terminalContext: SftpTerminalRegistrySource;
+  sftpManager: Pick<SftpManager, 'setTerminalContext' | 'invalidateAllListings'>;
+  refreshSftpTree(): void;
+}
+
+/**
+ * Handler for `sshManager.sftp.refresh`. Refresh must heal, not just repaint: it re-reads
+ * the live registry into the SFTP manager before invalidating listings, so a connected
+ * terminal plus Refresh can never keep showing the "No active SSH terminal" placeholder
+ * even when every context event was missed.
+ */
+export function refreshSftpFilesView(options: RefreshSftpFilesViewOptions): void {
+  const live = options.terminalContext.getConnectedTerminal() ?? options.terminalContext.getActive();
+  if (live) {
+    options.sftpManager.setTerminalContext(live);
+  }
+  options.sftpManager.invalidateAllListings();
+  options.refreshSftpTree();
 }
 
 async function runSftpCommand(command: () => Promise<void>): Promise<void> {

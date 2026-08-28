@@ -100,6 +100,7 @@ export class SftpManager {
     const existing = this.connections.get(context.terminalId);
     if (!existing) {
       this.connections.set(context.terminalId, this.createManagedConnection(context));
+      this.adoptAsActiveIfViewEmpty(context);
       return;
     }
 
@@ -119,6 +120,23 @@ export class SftpManager {
     }
     if (!context.connected) {
       this.disposeManagedConnection(existing);
+    }
+    this.adoptAsActiveIfViewEmpty(context);
+  }
+
+  /**
+   * A connected context that only ever reaches SFTP through syncTerminalContext (the
+   * onDidChangeContext path) must still become visible: with activeTerminalId unset the
+   * view renders "No active SSH terminal" forever even though a terminal is live.
+   * Adoption is limited to the cases where the view has nothing to show, so an explicit
+   * setTerminalContext choice is never overridden by a background context update.
+   */
+  private adoptAsActiveIfViewEmpty(context: TerminalContext): void {
+    if (!context.connected) {
+      return;
+    }
+    if (!this.activeTerminalId || this.getState().kind === 'none') {
+      this.activeTerminalId = context.terminalId;
     }
   }
 
