@@ -87,6 +87,7 @@
   "Host": "主机",
   "Host key for {host}:{port} changed. The connection stays blocked until you trust the new key or forget the stored one. New fingerprint: {fingerprint}": "主机 {host}:{port} 的主机密钥已变更。在信任新密钥或忘记旧密钥之前，连接保持阻断。新指纹：{fingerprint}",
   "Host: {host}": "主机：{host}",
+  "Import failed: the asset package is from an older format and could not be read.": "导入失败：资产包来自旧版格式，无法读取。",
   "Import failed: the package password is wrong or the package file is corrupted.": "导入失败：资产包密码错误或文件已损坏。",
   "Import failed: {message}": "导入失败：{message}",
   "Imported {count} AT Terminal server assets.": "已导入 {count} 个 AT Terminal 服务器资产。",

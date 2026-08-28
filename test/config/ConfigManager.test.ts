@@ -4,12 +4,14 @@ import type { ServerConfig } from '../../src/config/schema';
 
 class MemoryMemento implements ExtensionMemento {
   private data = new Map<string, unknown>();
+  updateCalls = 0;
 
   get<T>(key: string, defaultValue: T): T {
     return (this.data.has(key) ? this.data.get(key) : defaultValue) as T;
   }
 
   async update(key: string, value: unknown): Promise<void> {
+    this.updateCalls += 1;
     if (value === undefined) {
       this.data.delete(key);
     } else {
@@ -118,6 +120,43 @@ describe('ConfigManager', () => {
 
     expect(await manager.getPassphrase('server-1')).toBeUndefined();
     expect(secrets.data.size).toBe(0);
+  });
+
+  it('lists legacy records saved before the encoding field existed', async () => {
+    const memento = new MemoryMemento();
+    const legacy = { ...server() } as Record<string, unknown>;
+    delete legacy.encoding;
+    await memento.update('sshManager.servers', [legacy]);
+    const manager = new ConfigManager(memento, new MemorySecretStore());
+
+    const listed = await manager.listServers();
+
+    expect(listed).toHaveLength(1);
+    expect(listed[0].encoding).toBe('utf-8');
+  });
+
+  it('keeps valid servers when the stored list also holds an unreadable record', async () => {
+    const memento = new MemoryMemento();
+    await memento.update('sshManager.servers', [server(), { junk: true }]);
+    const manager = new ConfigManager(memento, new MemorySecretStore());
+
+    expect((await manager.listServers()).map((entry) => entry.id)).toEqual(['server-1']);
+  });
+
+  it('persists the migrated list once and stops rewriting after that', async () => {
+    const memento = new MemoryMemento();
+    const legacy = { ...server(), legacyFlag: true } as Record<string, unknown>;
+    delete legacy.encoding;
+    await memento.update('sshManager.servers', [legacy]);
+    const manager = new ConfigManager(memento, new MemorySecretStore());
+    const updatesBefore = memento.updateCalls;
+
+    await manager.listServers();
+    expect(memento.updateCalls).toBe(updatesBefore + 1);
+    expect(memento.get<unknown[]>('sshManager.servers', [])).toEqual([server()]);
+
+    await manager.listServers();
+    expect(memento.updateCalls).toBe(updatesBefore + 1);
   });
 
   it('finds servers that reference a jump host', async () => {

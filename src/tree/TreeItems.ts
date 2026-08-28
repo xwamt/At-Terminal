@@ -5,8 +5,11 @@ import { t } from '../i18n/t';
 export type ServerConnectionState = 'connected' | 'disconnected';
 
 export class GroupTreeItem extends vscode.TreeItem {
-  constructor(public readonly groupName: string) {
-    super(groupName, vscode.TreeItemCollapsibleState.Collapsed);
+  constructor(
+    public readonly groupName: string,
+    collapsibleState: vscode.TreeItemCollapsibleState = vscode.TreeItemCollapsibleState.Collapsed
+  ) {
+    super(groupName, collapsibleState);
     this.contextValue = 'group';
   }
 }
