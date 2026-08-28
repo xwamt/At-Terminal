@@ -55,6 +55,49 @@ describe('AgentToolService', () => {
     });
   });
 
+  it('includes a server with a live connected UI terminal even without background authorization', async () => {
+    const background = { ...server('server-1'), backgroundConnectionAllowed: true };
+    const connectedOnly = { ...server('server-2'), backgroundConnectionAllowed: false };
+    const hidden = server('server-3');
+    const terminalContext = new TerminalContextRegistry();
+    terminalContext.setActive({
+      terminalId: 'terminal-1',
+      server: connectedOnly,
+      connected: true,
+      write: vi.fn()
+    });
+    const service = new AgentToolService({
+      configManager: { listServers: async () => [background, connectedOnly, hidden] } as never,
+      terminalContext,
+      executor: { execute: vi.fn() } as unknown as RemoteCommandExecutor
+    });
+
+    const result = await service.listServers();
+
+    expect(result.servers.map((listed) => listed.id)).toEqual(['server-1', 'server-2']);
+    expect(result.servers.find((listed) => listed.id === 'server-1')?.connected).toBe(false);
+    expect(result.servers.find((listed) => listed.id === 'server-2')?.connected).toBe(true);
+  });
+
+  it('hides a connected-only server again once its UI terminal disconnects', async () => {
+    const connectedOnly = { ...server('server-2'), backgroundConnectionAllowed: false };
+    const terminalContext = new TerminalContextRegistry();
+    terminalContext.setActive({
+      terminalId: 'terminal-1',
+      server: connectedOnly,
+      connected: true,
+      write: vi.fn()
+    });
+    terminalContext.markDisconnected('terminal-1');
+    const service = new AgentToolService({
+      configManager: { listServers: async () => [connectedOnly] } as never,
+      terminalContext,
+      executor: { execute: vi.fn() } as unknown as RemoteCommandExecutor
+    });
+
+    await expect(service.listServers()).resolves.toEqual({ servers: [] });
+  });
+
   it('exposes the resolved trust level on listed servers', async () => {
     const full = {
       ...server('server-1'),

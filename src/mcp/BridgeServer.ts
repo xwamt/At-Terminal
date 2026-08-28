@@ -158,6 +158,16 @@ export class BridgeServer {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 
+  /**
+   * Republish `capabilities.connectedTargets` right now instead of waiting for the next
+   * 30s heartbeat. Hub election reads this count, so a terminal the user just connected
+   * (or disconnected) must not stay invisible for up to a full heartbeat window.
+   * Safe to call before `start()` or after `dispose()` — it is a no-op then.
+   */
+  async refreshCapabilities(): Promise<void> {
+    await this.tickHeartbeat();
+  }
+
   private async tickHeartbeat(): Promise<void> {
     const publisher = this.publisher;
     if (!publisher) {

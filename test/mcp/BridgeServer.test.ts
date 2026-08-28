@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { AT_SERIES_TOKEN_HEADER } from '@at-series/mcp-hub';
-import { createBridgeRequestHandler, readLimitedBody } from '../../src/mcp/BridgeServer';
+import { BridgeServer, createBridgeRequestHandler, readLimitedBody } from '../../src/mcp/BridgeServer';
 import { BRIDGE_MAX_BODY_BYTES, BRIDGE_TOKEN_HEADER } from '../../src/mcp/BridgeProtocol';
 import { AT_TERMINAL_PLUGIN_ID, AT_TERMINAL_TOOL_CATALOG } from '../../src/mcp/toolCatalog';
 
@@ -468,6 +471,61 @@ describe('createBridgeRequestHandler', () => {
       status: 404,
       body: { error: { code: 'NOT_FOUND' } }
     });
+  });
+});
+
+describe('BridgeServer.refreshCapabilities', () => {
+  it('republishes the connected terminal count immediately instead of waiting for the 30s heartbeat', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'at-terminal-bridge-refresh-'));
+    const connectedTerminals: Array<{ terminalId: string }> = [];
+    const getTerminalContext = vi.fn(async () => ({ connectedTerminals, knownTerminals: [] }));
+    const server = new BridgeServer({
+      service: {
+        listServers: async () => ({ servers: [] }),
+        getTerminalContext,
+        runRemoteCommand: vi.fn()
+      } as never,
+      home,
+      hostApp: 'cursor',
+      pluginVersion: '0.3.0'
+    });
+    try {
+      await server.start();
+      const bridgesDir = join(home, '.at-series', 'bridges', 'cursor');
+      const readRecord = async () => {
+        const files = (await readdir(bridgesDir)).filter((name) => name.endsWith('.json'));
+        expect(files).toHaveLength(1);
+        return JSON.parse(await readFile(join(bridgesDir, files[0]!), 'utf8')) as {
+          capabilities?: { connectedTargets?: number };
+        };
+      };
+      expect((await readRecord()).capabilities?.connectedTargets).toBe(0);
+
+      connectedTerminals.push({ terminalId: 't1' });
+      await server.refreshCapabilities();
+
+      expect(getTerminalContext).toHaveBeenCalled();
+      expect((await readRecord()).capabilities?.connectedTargets).toBe(1);
+    } finally {
+      await server.dispose();
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
+  it('is a safe no-op before start and after dispose', async () => {
+    const server = new BridgeServer({
+      service: {
+        listServers: async () => ({ servers: [] }),
+        getTerminalContext: async () => ({ connectedTerminals: [], knownTerminals: [] }),
+        runRemoteCommand: vi.fn()
+      } as never,
+      home: join(tmpdir(), 'at-terminal-bridge-never-started'),
+      hostApp: 'cursor'
+    });
+
+    await expect(server.refreshCapabilities()).resolves.toBeUndefined();
+    await server.dispose();
+    await expect(server.refreshCapabilities()).resolves.toBeUndefined();
   });
 });
 

@@ -300,6 +300,43 @@ describe('TerminalPanel rendering helpers', () => {
     expect(listener).toHaveBeenLastCalledWith(registry.getActive());
   });
 
+  it('publishes connected context on connect success even if the terminal is not yet registered', async () => {
+    const registry = new TerminalContextRegistry();
+    const pendingConnect = deferred<void>();
+    connect.mockReturnValueOnce(pendingConnect.promise);
+
+    TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
+    const terminalId = registry.getActive()!.terminalId;
+    // Simulate the registry losing the entry before the connection resolves; the old
+    // markConnected call would no-op here and MCP tools would never see the terminal.
+    registry.clearIfActive(terminalId);
+    expect(registry.getActive()).toBeUndefined();
+
+    pendingConnect.resolve();
+    await flushPromises();
+
+    expect(registry.getActive()?.connected).toBe(true);
+    expect(registry.getSnapshot().connectedTerminals.map((terminal) => terminal.terminalId)).toEqual([
+      terminalId
+    ]);
+  });
+
+  it('re-registers the terminal context on reconnect after the registry lost it', async () => {
+    const registry = new TerminalContextRegistry();
+
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
+    await flushPromises();
+    const terminalId = registry.getActive()!.terminalId;
+    registry.clearIfActive(terminalId);
+    expect(registry.getActive()).toBeUndefined();
+
+    await terminal.reconnect();
+    await flushPromises();
+
+    expect(registry.getActive()?.connected).toBe(true);
+    expect(registry.getSnapshot().connectedTerminals).toHaveLength(1);
+  });
+
   it('marks the active context disconnected on connect error and disconnect', async () => {
     connect.mockRejectedValueOnce(new Error('connect failed'));
     const registry = new TerminalContextRegistry();

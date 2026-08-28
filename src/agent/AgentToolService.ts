@@ -36,17 +36,30 @@ export class AgentToolService {
 
   async listServers() {
     const servers = await this.dependencies.configManager.listServers();
+    // A live UI terminal is as good as background authorization: the user connected it
+    // themselves, so the agent must be able to discover and target that server.
+    const connectedServerIds = new Set(
+      this.dependencies.terminalContext
+        .getSnapshot()
+        .connectedTerminals.map((terminal) => terminal.serverId)
+    );
     return {
-      servers: servers.filter((server) => server.backgroundConnectionAllowed === true).map((server) => ({
-        id: server.id,
-        label: server.label,
-        host: server.host,
-        port: server.port,
-        username: server.username,
-        authType: server.authType,
-        agentCommandTrust: resolveAgentCommandTrust(server),
-        agentCommandAutoApprove: resolveAgentCommandTrust(server) !== 'none'
-      }))
+      servers: servers
+        .filter(
+          (server) =>
+            server.backgroundConnectionAllowed === true || connectedServerIds.has(server.id)
+        )
+        .map((server) => ({
+          id: server.id,
+          label: server.label,
+          host: server.host,
+          port: server.port,
+          username: server.username,
+          authType: server.authType,
+          connected: connectedServerIds.has(server.id),
+          agentCommandTrust: resolveAgentCommandTrust(server),
+          agentCommandAutoApprove: resolveAgentCommandTrust(server) !== 'none'
+        }))
     };
   }
 

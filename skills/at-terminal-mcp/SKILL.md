@@ -27,7 +27,7 @@ Default stdout/stderr 64000 bytes (cap 256000). When `truncated`, narrow—never
 4. Use SFTP for inspection/edits: stat then read before write; POSIX paths. `sftp_read_file` default 64KiB (cap 256KiB); byte `offset` resumes a read, negative `offset` tails a log. `sftp_list_directory` pages with `offset` plus `maxEntries` (default 500, cap 5000). When `truncated`, page with `offset` or narrow. `sftp_rename` needs write approval for both paths; `sftp_delete` removes files only and always prompts, even at full trust.
 5. Report target, evidence, actions, exit status, verification, remaining risk; never claim unverified results.
 
-`list_ssh_servers` returns only servers with **Allow background connections**; those servers accept `run_remote_command` and `sftp_*` tools without an open UI terminal.
+`list_ssh_servers` returns background-allowed servers plus any with a live UI terminal (`connected: true`); only the former accept `run_remote_command`/`sftp_*` without an open terminal.
 
 ## Load detailed guidance only when needed
 
