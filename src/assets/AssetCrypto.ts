@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes, scrypt as scryptCallback
 import { promisify } from 'node:util';
 import {
   ASSET_PACKAGE_FORMAT,
+  ASSET_PACKAGE_UNREADABLE_MESSAGE,
   ASSET_PACKAGE_VERSION,
   parseAssetPackageEnvelope,
   parseAssetPackagePayload,
@@ -43,6 +44,9 @@ export async function decryptAssetPayload(
   packagePassword: string
 ): Promise<AssetPackagePayload> {
   const parsedEnvelope = parseAssetPackageEnvelope(envelope);
+  // Only crypto failures may map to the wrong-password error. The GCM auth
+  // tag check in decipher.final() catches both wrong passwords and tampering.
+  let plaintext: string;
   try {
     const salt = Buffer.from(parsedEnvelope.salt, 'base64');
     const iv = Buffer.from(parsedEnvelope.iv, 'base64');
@@ -51,9 +55,16 @@ export async function decryptAssetPayload(
     const key = (await scrypt(packagePassword, salt, KEY_BYTES)) as Buffer;
     const decipher = createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(authTag);
-    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
-    return parseAssetPackagePayload(JSON.parse(plaintext));
+    plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
   } catch {
     throw new Error('Invalid package password or corrupted asset package.');
+  }
+  // Past this point the password was right; a parse failure means the payload
+  // shape is unreadable, which must surface as a different error than a wrong
+  // password so the user does not keep retyping a correct password.
+  try {
+    return parseAssetPackagePayload(JSON.parse(plaintext));
+  } catch {
+    throw new Error(ASSET_PACKAGE_UNREADABLE_MESSAGE);
   }
 }
