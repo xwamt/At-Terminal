@@ -68,7 +68,7 @@ describe('MCP documentation', () => {
 
     expect(usage).toContain('sshManager.idleDisconnectMinutes');
     expect(chineseUsage).toContain('sshManager.idleDisconnectMinutes');
-    expect(usage).toContain('at-terminal-mcp-0.3.4.vsix');
-    expect(chineseUsage).toContain('at-terminal-mcp-0.3.4.vsix');
+    expect(usage).toContain('at-terminal-mcp-0.3.5.vsix');
+    expect(chineseUsage).toContain('at-terminal-mcp-0.3.5.vsix');
   });
 });
