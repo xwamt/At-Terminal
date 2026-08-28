@@ -629,6 +629,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await active.reconnect();
     }),
     vscode.commands.registerCommand('sshManager.sftp.refresh', () => {
+      sftpManager.invalidateAllListings();
       sftpTreeProvider.refresh();
     }),
     vscode.commands.registerCommand('sshManager.sftp.goToPath', async () => {
@@ -731,8 +732,10 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
         const deleteAction = t('Delete');
+        // Symlinked directories stay expandable in the tree, but deleteEntry only
+        // unlinks the symlink. Count-through-target copy would overstate the damage.
         const message =
-          item.entry.type === 'directory' || item.entry.targetType === 'directory'
+          item.entry.type === 'directory'
             ? t('Delete remote directory "{path}"? {count} entries will be permanently deleted.', {
                 path: item.entry.path,
                 count: await sftpManager.countDeletableEntries(item.entry.path)

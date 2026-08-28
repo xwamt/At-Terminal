@@ -83,23 +83,40 @@ export class AgentToolService {
       });
       if (!authorization.autoApprove) {
         const runCommandLabel = t('Run Command');
-        const answer = await withTimeout(
-          Promise.resolve(
-            vscode.window.showWarningMessage(
-              formatRemoteCommandConfirmMessage({
-                serverLabel: server.label,
-                host: server.host,
-                command,
-                destructive: authorization.destructive,
-                riskSummaries: authorization.riskSummaries
-              }),
-              { modal: true },
-              runCommandLabel
-            )
-          ),
-          CONFIRMATION_TIMEOUT_MS,
-          'Confirmation timed out; ask the user to approve the command dialog in the IDE, then retry.'
+        const confirmation = Promise.resolve(
+          vscode.window.showWarningMessage(
+            formatRemoteCommandConfirmMessage({
+              serverLabel: server.label,
+              host: server.host,
+              command,
+              destructive: authorization.destructive,
+              riskSummaries: authorization.riskSummaries
+            }),
+            { modal: true },
+            runCommandLabel
+          )
         );
+        let answer: string | undefined;
+        try {
+          answer = await withTimeout(
+            confirmation,
+            CONFIRMATION_TIMEOUT_MS,
+            'Confirmation timed out; ask the user to approve the command dialog in the IDE, then retry.'
+          );
+        } catch (error) {
+          // VS Code cannot dismiss the modal; a click after the timeout must not look
+          // like the command ran.
+          void confirmation.then((lateAnswer) => {
+            if (lateAnswer === runCommandLabel) {
+              void vscode.window.showInformationMessage(
+                t(
+                  'The approval arrived after the request timed out — the command was not run. Ask the agent to retry.'
+                )
+              );
+            }
+          });
+          throw error;
+        }
         if (answer !== runCommandLabel) {
           reasonCode = 'user_cancelled';
           throw new Error('Remote command was cancelled.');

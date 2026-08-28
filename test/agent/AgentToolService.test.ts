@@ -325,6 +325,49 @@ describe('AgentToolService', () => {
     }
   });
 
+  it('tells the user when they approve after the confirmation timed out', async () => {
+    vi.useFakeTimers();
+    try {
+      const untrusted = { ...server(), backgroundConnectionAllowed: true };
+      let resolveConfirm: ((value: string) => void) | undefined;
+      vi.spyOn(vscode.window, 'showWarningMessage').mockReturnValue(
+        new Promise<string>((resolve) => {
+          resolveConfirm = resolve;
+        }) as never
+      );
+      const showInformationMessage = vi
+        .spyOn(vscode.window, 'showInformationMessage')
+        .mockResolvedValue(undefined);
+      const execute = vi.fn();
+      const service = new AgentToolService({
+        configManager: { getServer: async () => untrusted, listServers: async () => [untrusted] } as never,
+        terminalContext: new TerminalContextRegistry(),
+        executor: { execute } as unknown as RemoteCommandExecutor
+      });
+
+      const pending = service.runRemoteCommand({ serverId: 'server-1', command: 'uptime' });
+      const expectation = expect(pending).rejects.toThrow(
+        'Confirmation timed out; ask the user to approve the command dialog in the IDE'
+      );
+      for (let turn = 0; turn < 10; turn += 1) {
+        await Promise.resolve();
+      }
+      await vi.advanceTimersByTimeAsync(120_000);
+      await expectation;
+
+      resolveConfirm!('Run Command');
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(showInformationMessage).toHaveBeenCalledWith(
+        'The approval arrived after the request timed out — the command was not run. Ask the agent to retry.'
+      );
+      expect(execute).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('records approved commands in the audit log', async () => {
     const record = vi.fn();
     const trusted = { ...server(), backgroundConnectionAllowed: true, agentCommandAutoApprove: true };

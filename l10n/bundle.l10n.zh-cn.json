@@ -188,6 +188,7 @@
   "Testing connection via {name}...": "正在通过 {name} 测试连接...",
   "Testing connection...": "正在测试连接...",
   "Testing...": "正在测试...",
+  "The approval arrived after the request timed out — the command was not run. Ask the agent to retry.": "审批在请求超时后才到达 — 命令未执行。请让 Agent 重试。",
   "The passwords do not match.": "两次输入的密码不一致。",
   "Trust agent remote commands": "信任 Agent 远程命令",
   "Trust and Connect": "信任并连接",
