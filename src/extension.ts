@@ -144,11 +144,15 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     // Connection state feeds the Servers tree icon/description.
     treeProvider.refresh();
+    // Connect/disconnect must reach the ~/.at-series registry immediately, not on the
+    // next 30s heartbeat, or hub routing sees 0 connected terminals.
+    void bridgeServer?.refreshCapabilities();
   });
   terminalContext.onDidRemoveContext((terminalId) => {
     sftpManager.removeTerminalContext(terminalId);
     sftpAgentService?.disposeTerminal(terminalId);
     treeProvider.refresh();
+    void bridgeServer?.refreshCapabilities();
   });
 
   let bridgeServer: BridgeServer | undefined;
