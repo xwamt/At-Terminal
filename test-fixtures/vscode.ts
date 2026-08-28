@@ -156,7 +156,7 @@ export const window = {
     task({
       report: () => undefined
     }, {}),
-  createTreeView: () => ({ dispose: () => undefined }),
+  createTreeView: () => ({ dispose: () => undefined, reveal: async () => undefined }),
   createWebviewPanel: () => ({ dispose: () => undefined }),
   showTextDocument: async (document: TextDocument) => document,
   createStatusBarItem: (_alignment?: StatusBarAlignment, _priority?: number) => new StatusBarItem(),
