@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'vscode';
 import type { ServerConfig } from '../../src/config/schema';
-import { registerSftpContextWiring } from '../../src/extension';
+import {
+  createRegistryBackedSftpTreeSource,
+  refreshSftpFilesView,
+  registerSftpContextWiring
+} from '../../src/extension';
 import { SftpManager, type SftpSessionLike } from '../../src/sftp/SftpManager';
 import { TerminalContextRegistry, type TerminalContext } from '../../src/terminal/TerminalContext';
 import { SftpPlaceholderTreeItem } from '../../src/tree/SftpTreeItems';
@@ -182,6 +186,93 @@ describe('SFTP view wiring for the active terminal', () => {
       'sftpDisconnectedDirectory',
       'sftpDisconnectedFile'
     ]);
+  });
+
+  it('heals through the Refresh command when the registry has a connected terminal SFTP never saw', async () => {
+    // The user report: terminal connected (registry/MCP see it), SFTP still says
+    // 「无活动的 SSH 终端」, and Refresh changes nothing. Simulate the missed events by
+    // never wiring the listeners: SftpManager.getState() is stuck on { kind: 'none' }.
+    const terminalContext = new TerminalContextRegistry();
+    const sftpManager = new SftpManager({ createSession: () => sessionStub() });
+    const sftpTreeProvider = new SftpTreeProvider({
+      getState: () => sftpManager.getState(),
+      listDirectory: (path) => sftpManager.listDirectory(path)
+    });
+    terminalContext.setActive(context(true));
+    expect(terminalContext.getSnapshot().connectedTerminals).toHaveLength(1);
+    expect(sftpManager.getState()).toEqual({ kind: 'none' });
+
+    // The production sshManager.sftp.refresh handler.
+    refreshSftpFilesView({
+      terminalContext,
+      sftpManager,
+      refreshSftpTree: () => sftpTreeProvider.refresh()
+    });
+
+    expect(sftpManager.getState()).toEqual({ kind: 'active', rootPath: '.' });
+    const children = await sftpTreeProvider.getChildren();
+    expect(children.map((child) => child.label)).not.toContain(PLACEHOLDER);
+    expect(children.map((child) => child.label)).toEqual(['..', 'app', 'readme.txt']);
+  });
+
+  it('heals on every tree read: getChildren re-checks the registry before rendering the placeholder', async () => {
+    const terminalContext = new TerminalContextRegistry();
+    const sftpManager = new SftpManager({ createSession: () => sessionStub() });
+    // The exact source activate() hands to SftpTreeProvider.
+    const sftpTreeProvider = new SftpTreeProvider(
+      createRegistryBackedSftpTreeSource(terminalContext, sftpManager)
+    );
+    terminalContext.setActive(context(true));
+    expect(sftpManager.getState()).toEqual({ kind: 'none' });
+
+    const children = await sftpTreeProvider.getChildren();
+
+    expect(children.map((child) => child.label)).not.toContain(PLACEHOLDER);
+    // Listing the root resolves rootPath, so only the kind matters here.
+    expect(sftpManager.getState()).toMatchObject({ kind: 'active' });
+  });
+
+  it('adopts a connected context that only ever arrives through syncTerminalContext', async () => {
+    // setTerminalContext is never called: the connected terminal reaches SFTP only via
+    // onDidChangeContext → syncTerminalContext. Before the fix syncTerminalContext left
+    // activeTerminalId unset, so the view stayed on the placeholder forever.
+    const activeEmitter = new EventEmitter<TerminalContext | undefined>();
+    const contextEmitter = new EventEmitter<TerminalContext>();
+    const removedEmitter = new EventEmitter<string>();
+    const sftpManager = new SftpManager({ createSession: () => sessionStub() });
+    const sftpTreeProvider = new SftpTreeProvider({
+      getState: () => sftpManager.getState(),
+      listDirectory: (path) => sftpManager.listDirectory(path)
+    });
+    const refreshSftpTree = vi.fn(() => sftpTreeProvider.refresh());
+    registerSftpContextWiring({
+      terminalContext: {
+        onDidChangeActiveContext: activeEmitter.event,
+        onDidChangeContext: contextEmitter.event,
+        onDidRemoveContext: removedEmitter.event
+      },
+      sftpManager,
+      refreshSftpTree,
+      onTerminalsChanged: vi.fn()
+    });
+
+    contextEmitter.fire(context(true));
+
+    expect(sftpManager.getState()).toEqual({ kind: 'active', rootPath: '.' });
+    expect(refreshSftpTree).toHaveBeenCalledTimes(1);
+    const children = await sftpTreeProvider.getChildren();
+    expect(children.map((child) => child.label)).not.toContain(PLACEHOLDER);
+  });
+
+  it('does not let a background context update steal the view from an explicitly active terminal', async () => {
+    const { terminalContext, sftpManager } = harness();
+
+    terminalContext.setActive(context(true, 'terminal-a', 'srv-a'));
+    // Another connected terminal only syncs; the active choice must stand.
+    sftpManager.syncTerminalContext(context(true, 'terminal-b', 'srv-b'));
+
+    expect(sftpManager.getActiveServerId()).toBe('srv-a');
+    expect(sftpManager.getState()).toEqual({ kind: 'active', rootPath: '.' });
   });
 
   it('returns to the placeholder when the active terminal panel is disposed', async () => {

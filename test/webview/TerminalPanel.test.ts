@@ -23,6 +23,7 @@ import {
   TERMINAL_FLOW_PAUSE_BYTES,
   TerminalFlowController,
   TerminalPanel,
+  type SessionStatusEvent,
   type TerminalSettings
 } from '../../src/webview/TerminalPanel';
 
@@ -33,7 +34,7 @@ const write = vi.fn<(data: string) => void>();
 const resize = vi.fn<(rows: number, cols: number) => void>();
 const pauseOutput = vi.fn<() => void>();
 const resumeOutput = vi.fn<() => void>();
-const sessionEvents: Array<{ output(data: Buffer): void; status(message: string): void }> = [];
+const sessionEvents: Array<{ output(data: Buffer): void; status(message: SessionStatusEvent): void }> = [];
 
 vi.mock('../../src/ssh/SshSession', () => ({
   SshSession: vi.fn().mockImplementation((_server, _configManager, events) => {
@@ -335,6 +336,41 @@ describe('TerminalPanel rendering helpers', () => {
 
     expect(registry.getActive()?.connected).toBe(true);
     expect(registry.getSnapshot().connectedTerminals).toHaveLength(1);
+  });
+
+  it('publishes registry connected:true when the session reports connected before connect() resolves', async () => {
+    const registry = new TerminalContextRegistry();
+    const pendingConnect = deferred<void>();
+    connect.mockReturnValueOnce(pendingConnect.promise);
+
+    TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
+    expect(registry.getActive()?.connected).toBe(false);
+
+    // SshSession emits { state: 'connected' } from inside connect(); the webview shows
+    // "Connected" off this status. The registry — what MCP tools and the SFTP view read —
+    // must flip with it, not only when the connect() promise tail eventually runs.
+    sessionEvents.at(-1)!.status({ state: 'connected', text: 'Connected' });
+
+    expect(registry.getActive()?.connected).toBe(true);
+    expect(registry.getSnapshot().connectedTerminals).toHaveLength(1);
+
+    pendingConnect.resolve();
+    await flushPromises();
+    expect(registry.getActive()?.connected).toBe(true);
+  });
+
+  it('ignores a stale connected status from a superseded session generation', async () => {
+    const registry = new TerminalContextRegistry();
+    const pendingConnect = deferred<void>();
+    connect.mockReturnValueOnce(pendingConnect.promise);
+
+    const terminal = TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
+    const oldSessionEvents = sessionEvents.at(-1)!;
+    terminal.disconnect();
+
+    oldSessionEvents.status({ state: 'connected', text: 'Connected' });
+
+    expect(registry.getActive()?.connected).toBe(false);
   });
 
   it('marks the active context disconnected on connect error and disconnect', async () => {

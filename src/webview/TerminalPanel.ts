@@ -501,6 +501,15 @@ export class TerminalPanel {
 
   private handleSessionStatus(message: SessionStatusEvent, generation: number): void {
     const status = normalizeSessionStatus(message);
+    if (status.state === 'connected' && generation === this.connectionGeneration && !this.connected) {
+      // The session reports connected before the connect() promise tail runs, and this
+      // same status flips the webview status bar to "Connected". The registry (which
+      // feeds the SFTP view and MCP tools) must flip here too; publishing only from the
+      // connect() tail let the two diverge whenever that tail was delayed or skipped.
+      this.connected = true;
+      this.publishContext();
+      this.scheduleIdleDisconnect();
+    }
     if (status.state === 'disconnected' && generation === this.connectionGeneration) {
       const wasConnected = this.connected;
       this.connected = false;
