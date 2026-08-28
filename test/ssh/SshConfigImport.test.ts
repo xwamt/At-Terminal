@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseSshConfig } from '../../src/ssh/SshConfigImport';
+import type { readFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { defaultSshConfigPath, parseSshConfig, readSshConfigFile } from '../../src/ssh/SshConfigImport';
 
 describe('parseSshConfig', () => {
   it('maps a full host entry to a server draft', () => {
@@ -156,5 +160,58 @@ describe('parseSshConfig', () => {
   it('returns no entries for an empty or comment-only file', () => {
     expect(parseSshConfig('').entries).toEqual([]);
     expect(parseSshConfig('# nothing here\n\n').entries).toEqual([]);
+  });
+});
+
+describe('defaultSshConfigPath', () => {
+  it('joins the provided home directory with .ssh/config', () => {
+    expect(defaultSshConfigPath('/home/deploy')).toBe(join('/home/deploy', '.ssh', 'config'));
+  });
+
+  it('falls back to os.homedir() when no home directory is given', () => {
+    expect(defaultSshConfigPath()).toBe(join(homedir(), '.ssh', 'config'));
+  });
+});
+
+describe('readSshConfigFile', () => {
+  it('returns the file content when the file is readable', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ssh-config-import-'));
+    const path = join(dir, 'config');
+    await writeFile(path, 'Host prod\n  HostName prod.example.com\n', 'utf8');
+    try {
+      await expect(readSshConfigFile(path)).resolves.toEqual({
+        ok: true,
+        content: 'Host prod\n  HostName prod.example.com\n'
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns ok:false with the error code instead of throwing for a missing file', async () => {
+    const path = join(tmpdir(), 'ssh-config-import-does-not-exist', 'config');
+
+    await expect(readSshConfigFile(path)).resolves.toEqual({ ok: false, path, code: 'ENOENT' });
+  });
+
+  it('surfaces the error code from an injected read implementation', async () => {
+    const denied = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    const readFileImpl = (() => Promise.reject(denied)) as unknown as typeof readFile;
+
+    await expect(readSshConfigFile('/root/.ssh/config', readFileImpl)).resolves.toEqual({
+      ok: false,
+      path: '/root/.ssh/config',
+      code: 'EACCES'
+    });
+  });
+
+  it('omits the code when the failure carries no string code', async () => {
+    const readFileImpl = (() => Promise.reject(new Error('boom'))) as unknown as typeof readFile;
+
+    await expect(readSshConfigFile('/somewhere/config', readFileImpl)).resolves.toEqual({
+      ok: false,
+      path: '/somewhere/config',
+      code: undefined
+    });
   });
 });

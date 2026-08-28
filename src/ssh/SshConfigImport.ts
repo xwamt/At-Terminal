@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { ServerConfig } from '../config/schema';
@@ -53,6 +54,33 @@ interface HostBlock {
   aliases: string[];
   /** Lowercased keyword -> first value seen, matching OpenSSH's first-wins rule. */
   values: Map<string, string>;
+}
+
+/** Absolute path of the default OpenSSH client config: `~/.ssh/config`. */
+export function defaultSshConfigPath(homeDir?: string): string {
+  return join(homeDir ?? homedir(), '.ssh', 'config');
+}
+
+export type SshConfigReadResult =
+  | { ok: true; content: string }
+  | { ok: false; path: string; code?: string };
+
+/**
+ * Reads an OpenSSH config file without throwing. A missing or unreadable file is an
+ * expected state -- many machines never create `~/.ssh/config` -- so the caller gets
+ * the Node error code (ENOENT, EACCES, ...) back as data and can offer a fallback
+ * such as a file picker instead of catching.
+ */
+export async function readSshConfigFile(
+  path: string,
+  readFileImpl: typeof readFile = readFile
+): Promise<SshConfigReadResult> {
+  try {
+    return { ok: true, content: await readFileImpl(path, 'utf8') };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    return { ok: false, path, code: typeof code === 'string' ? code : undefined };
+  }
 }
 
 /**

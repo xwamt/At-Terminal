@@ -15,9 +15,9 @@ import {
 } from './mcp/McpConfigInstaller';
 import { detectHostApp } from '@at-series/mcp-hub';
 import { randomUUID } from 'node:crypto';
-import { homedir, userInfo } from 'node:os';
-import { join as joinLocalPath } from 'node:path';
-import { readFile, stat } from 'node:fs/promises';
+import { userInfo } from 'node:os';
+import { dirname as localDirname, join as joinLocalPath } from 'node:path';
+import { stat } from 'node:fs/promises';
 import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
 import { isSftpConflictError } from './sftp/SftpErrors';
 import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
@@ -30,7 +30,7 @@ import { VscodeTransferReporter } from './sftp/VscodeTransferReporter';
 import { HostKeyStore } from './ssh/HostKeyStore';
 import { attachKeyboardInteractive } from './ssh/KeyboardInteractive';
 import { LocalPortForward } from './ssh/LocalPortForward';
-import { parseSshConfig } from './ssh/SshConfigImport';
+import { defaultSshConfigPath, parseSshConfig, readSshConfigFile } from './ssh/SshConfigImport';
 import { buildSshConnectionHandle } from './ssh/SshConnectionConfig';
 import { getSsh2 } from './ssh/ssh2Loader';
 import { createVscodeKeyboardInteractivePrompt } from './ssh/VscodeKeyboardInteractivePrompt';
@@ -445,15 +445,33 @@ export function activate(context: vscode.ExtensionContext): void {
       );
     }),
     vscode.commands.registerCommand('sshManager.importSshConfig', async () => {
-      const configPath = joinLocalPath(homedir(), '.ssh', 'config');
-      let content: string;
-      try {
-        content = await readFile(configPath, 'utf8');
-      } catch {
-        void vscode.window.showErrorMessage(t('Could not read {path}.', { path: configPath }));
-        return;
+      let configPath = defaultSshConfigPath();
+      let read = await readSshConfigFile(configPath);
+      if (!read.ok) {
+        // The default config is often missing or unreadable; let the user point at
+        // the real file instead of dead-ending on an error toast.
+        const picked = await vscode.window.showOpenDialog({
+          title: t('OpenSSH config file was not readable at {path}. Choose a file to import.', { path: configPath }),
+          defaultUri: vscode.Uri.file(localDirname(configPath)),
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          filters: {
+            [t('OpenSSH config')]: ['', 'config'],
+            [t('All files')]: ['*']
+          }
+        });
+        if (!picked || picked.length === 0) {
+          return;
+        }
+        configPath = picked[0].fsPath;
+        read = await readSshConfigFile(configPath);
+        if (!read.ok) {
+          void vscode.window.showErrorMessage(t('Could not read {path}.', { path: configPath }));
+          return;
+        }
       }
-      const { entries, warnings } = parseSshConfig(content);
+      const { entries, warnings } = parseSshConfig(read.content);
       if (entries.length === 0) {
         void vscode.window.showInformationMessage(t('No concrete Host entries were found in {path}.', { path: configPath }));
         return;
