@@ -44,7 +44,8 @@ describe('asset import/export package contributions', () => {
           expect.objectContaining({ command: 'sshManager.addServer', icon: '$(add)' }),
           expect.objectContaining({ command: 'sshManager.refresh', icon: '$(refresh)' }),
           expect.objectContaining({ command: 'sshManager.exportAssets', icon: '$(cloud-upload)' }),
-          expect.objectContaining({ command: 'sshManager.importAssets', icon: '$(cloud-download)' })
+          expect.objectContaining({ command: 'sshManager.importAssets', icon: '$(cloud-download)' }),
+          expect.objectContaining({ command: 'sshManager.importSshConfig', icon: '$(file-code)' })
         ])
       );
     }
