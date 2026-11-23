@@ -29,6 +29,7 @@ AT Terminal 是一个面向 VS Code 系列 IDE 的 SSH 终端和 SFTP 工作区�
 - 每个 SSH 连接以独立终端标签页打开。
 - 支持断开和重连。
 - 支持终端字体、滚动缓冲、语义高亮和 keep-alive 设置。
+- 支持本地端口转发；单服务器可同时开启多条，状态栏可统一查看和停止。
 
 #### SFTP 文件管理
 
@@ -40,11 +41,11 @@ AT Terminal 是一个面向 VS Code 系列 IDE 的 SSH 终端和 SFTP 工作区�
 - 刷新当前目录。
 - 跳转到父目录或输入远程路径。
 - 上传文件。
-- 从 VS Code Explorer 拖拽文件到 SFTP 视图上传。
+- 从 VS Code Explorer 拖拽文件或文件夹（递归）到 SFTP 视图上传，完成后自动刷新。
 - 下载远程文件或目录。
 - 新建文件和目录。
 - 重命名、删除、复制远程路径。
-- 预览远程文件。
+- 预览远程文件；大文件或二进制文件打开前会提示确认。
 - 从远程目录向当前 SSH 终端发送 `cd` 命令。
 
 #### 远程文件本地编辑
@@ -99,6 +100,8 @@ AT Terminal 是一个面向 VS Code 系列 IDE 的 SSH 终端和 SFTP 工作区�
 - `SSH: Reconnect`
 - `SSH: Copy Host`
 - `SSH: Refresh`
+- `SSH: Forward Local Port`
+- `Manage Port Forwards`
 
 SFTP 命令：
 
@@ -139,7 +142,7 @@ npm run package:base
 生成的基础版 VSIX：
 
 ```text
-at-terminal-0.3.5.vsix
+at-terminal-0.3.6.vsix
 ```
 
 ## English
@@ -167,6 +170,7 @@ This README belongs to the base `AT Terminal` build. The base build does not inc
 - One terminal tab per SSH connection.
 - Disconnect and reconnect.
 - Terminal font, scrollback, semantic highlighting, and keep-alive settings.
+- Local port forwarding, including multiple simultaneous forwards per server with status-bar management.
 
 #### SFTP File Management
 
@@ -178,11 +182,11 @@ Supported actions:
 - Refresh the current directory.
 - Go to the parent directory or jump to a typed remote path.
 - Upload files.
-- Drag files from VS Code Explorer into the SFTP view.
+- Drag files or folders (recursively) from VS Code Explorer into the SFTP view; the tree refreshes after upload.
 - Download remote files or folders.
 - Create files and folders.
 - Rename, delete, and copy remote paths.
-- Preview remote files.
+- Preview remote files; large or binary-looking files ask for confirmation first.
 - Send `cd` commands from a remote directory to the active SSH terminal.
 
 #### Local Editing For Remote Files
@@ -233,5 +237,5 @@ npm run package:base
 Generated base VSIX:
 
 ```text
-at-terminal-0.3.5.vsix
+at-terminal-0.3.6.vsix
 ```

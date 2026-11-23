@@ -1,82 +1,76 @@
 import * as vscode from 'vscode';
-import { createAgentAuditLog } from './agent/AgentAuditLog';
-import { AgentToolService } from './agent/AgentToolService';
+import { AgentSshClientPool } from './agent/AgentSshClientPool';
 import { RemoteCommandExecutor } from './agent/RemoteCommandExecutor';
-import { SftpAgentService } from './agent/SftpAgentService';
-import { createProductionSftpWriteAuthorizer } from './agent/createSftpWriteAuthorizer';
-import { assetPrivateKeyDirectory, exportAssetsCommand, importAssetsCommand } from './assets/AssetCommands';
 import { ConfigManager } from './config/ConfigManager';
-import type { ServerConfig } from './config/schema';
-import { BridgeServer } from './mcp/BridgeServer';
-import { syncPackagedHub } from './mcp/hubSync';
-import {
-  ensureAtSeriesConfigForCurrentIde,
-  uninstallAtSeriesConfigForCurrentIde
-} from './mcp/McpConfigInstaller';
-import { detectHostApp } from '@at-series/mcp-hub';
-import { randomUUID } from 'node:crypto';
-import { userInfo } from 'node:os';
-import { dirname as localDirname, join as joinLocalPath } from 'node:path';
-import { stat } from 'node:fs/promises';
-import { dirname, joinRemotePath, quotePosixShellPath, safePreviewName } from './sftp/RemotePath';
-import { isSftpConflictError } from './sftp/SftpErrors';
-import { SftpDragAndDropController, localUploadFileName } from './sftp/SftpDragAndDropController';
-import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
-import { SftpManager } from './sftp/SftpManager';
-import { createRemoteFileForEditing } from './sftp/SftpNewFile';
-import { SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore, openRemotePreviewFile } from './sftp/SftpPreview';
-import { SftpSession } from './sftp/SftpSession';
-import { VscodeTransferReporter } from './sftp/VscodeTransferReporter';
+import type { CommandContext } from './commands/commandContext';
+import { registerMcpCommands } from './commands/mcpCommands';
+import { refreshPortForwardStatusBar, registerPortForwardCommands } from './commands/portForwardCommands';
+import { registerServerCommands } from './commands/serverCommands';
+import { registerSftpCommands } from './commands/sftpCommands';
+import { activateMcp, type McpActivationResult } from './mcp/activateMcp';
 import { HostKeyStore } from './ssh/HostKeyStore';
 import { attachKeyboardInteractive } from './ssh/KeyboardInteractive';
-import { LocalPortForward } from './ssh/LocalPortForward';
-import { defaultSshConfigPath, parseSshConfig, readSshConfigFile } from './ssh/SshConfigImport';
-import { buildSshConnectionHandle } from './ssh/SshConnectionConfig';
+import { buildSshConnectionHandle, disposeJumpHostConnections } from './ssh/SshConnectionConfig';
 import { getSsh2 } from './ssh/ssh2Loader';
 import { createVscodeKeyboardInteractivePrompt } from './ssh/VscodeKeyboardInteractivePrompt';
+import { PortForwardManager } from './ssh/PortForwardManager';
 import { TerminalContextRegistry } from './terminal/TerminalContext';
+import { createHostKeyVerifier, serverConnectionStates } from './extension/serverHelpers';
 import { ServerTreeProvider } from './tree/ServerTreeProvider';
-import { SftpTreeProvider, shouldRefreshOnContextChange, type SftpTreeSource } from './tree/SftpTreeProvider';
-import { SftpDirectoryTreeItem, SftpFileTreeItem } from './tree/SftpTreeItems';
-import { GroupTreeItem, ServerTreeItem } from './tree/TreeItems';
-import { formatError } from './utils/errors';
-import { showErrorWithActions, showTimedNotification } from './utils/notifications';
-import { ServerFormPanel } from './webview/ServerFormPanel';
+import { SftpTreeProvider } from './tree/SftpTreeProvider';
+import { GroupTreeItem } from './tree/TreeItems';
+import { createVscodeSftpEditUi, resolveEditStorageUri, SftpEditSessionManager } from './sftp/SftpEditSessionManager';
+import { SftpManager } from './sftp/SftpManager';
+import { cleanupPreviewCache, SFTP_PREVIEW_SCHEME, SftpPreviewDocumentStore } from './sftp/SftpPreview';
+import { SftpSession } from './sftp/SftpSession';
+import { SftpDragAndDropController } from './sftp/SftpDragAndDropController';
+import { VscodeTransferReporter } from './sftp/VscodeTransferReporter';
 import { TerminalPanel } from './webview/TerminalPanel';
-import { t } from './i18n/t';
-
+import { SftpDirectoryTreeItem } from './tree/SftpTreeItems';
+import { formatError } from './utils/errors';
+import { createRegistryBackedSftpTreeSource, registerSftpContextWiring } from './extension/wiring';
 let extensionCleanup: { dispose(): void } | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const configManager = new ConfigManager(context.globalState, context.secrets);
   const hostKeyStore = new HostKeyStore(context.globalState);
-  const localForwards = new Map<string, { stop(): Promise<void> }>();
   const terminalContext = new TerminalContextRegistry();
   const treeProvider = new ServerTreeProvider(configManager, () =>
     serverConnectionStates(terminalContext.getSnapshot().knownTerminals)
   );
-  const hostKeyVerifier = {
-    async verify(host: string, port: number, fingerprint: string): Promise<boolean> {
-      const status = await hostKeyStore.check(host, port, fingerprint);
-      if (status === 'trusted') {
-        return true;
-      }
-      if (status === 'changed') {
-        return promptChangedHostKey(host, port, fingerprint, hostKeyStore);
-      }
-      const trustAction = t('Trust and Connect');
-      const answer = await vscode.window.showWarningMessage(
-        t('Trust SSH host {host}:{port}? Fingerprint: {fingerprint}', { host, port, fingerprint }),
-        { modal: true },
-        trustAction
-      );
-      if (answer === trustAction) {
-        await hostKeyStore.trust(host, port, fingerprint);
-        return true;
-      }
-      return false;
-    }
+  const hostKeyVerifier = createHostKeyVerifier(hostKeyStore);
+
+  const portForwardStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 90);
+  const refreshPortForwardStatus = (): void => {
+    refreshPortForwardStatusBar(portForwardStatus, portForwardManager.list());
   };
+  const portForwardManager = new PortForwardManager({
+    createConnection: async (server) => {
+      const prompt = createVscodeKeyboardInteractivePrompt();
+      const handle = await buildSshConnectionHandle(server, configManager, hostKeyVerifier, {
+        keyboardInteractivePrompt: prompt
+      });
+      const { Client } = await getSsh2();
+      const client = new Client();
+      client.on('error', () => undefined);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          client.once('ready', resolve);
+          client.once('error', reject);
+          attachKeyboardInteractive(client, prompt, reject);
+          client.connect(handle.config);
+        });
+      } catch (error) {
+        client.end();
+        handle.dispose();
+        throw error;
+      }
+      return { client, handle };
+    },
+    onChange: () => refreshPortForwardStatus(),
+    notify: (message) => void vscode.window.showWarningMessage(message)
+  });
+
   const sftpManager = new SftpManager({
     // The SFTP view is driven by the user, so a denied write may retry under sudo.
     createSession: (terminal) =>
@@ -90,15 +84,17 @@ export function activate(context: vscode.ExtensionContext): void {
   // command registration). Until a provider is attached, VS Code shows the
   // viewsWelcome placeholder ("no servers configured"), so a slow activation —
   // typical right after a VSIX install/update — made persisted servers look
-  // lost until the window was reloaded. The instances are pushed into
-  // context.subscriptions below so disposal is unchanged.
+  // lost until the window was reloaded.
   const serversTreeView = vscode.window.createTreeView('sshManager.servers', {
     treeDataProvider: treeProvider,
     showCollapseAll: true
   });
   const sftpTreeView = vscode.window.createTreeView('sshManager.sftpFiles', {
     treeDataProvider: sftpTreeProvider,
-    dragAndDropController: new SftpDragAndDropController(sftpManager),
+    dragAndDropController: new SftpDragAndDropController(sftpManager, {
+      onUploaded: (target) =>
+        sftpTreeProvider.refresh(target instanceof SftpDirectoryTreeItem ? target : undefined)
+    }),
     showCollapseAll: true
   });
   const sftpPreviewStore = new SftpPreviewDocumentStore();
@@ -108,7 +104,10 @@ export function activate(context: vscode.ExtensionContext): void {
     sftp: sftpManager,
     ui: createVscodeSftpEditUi(sftpEditStatus)
   });
-  const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier);
+  const agentSshClientPool = new AgentSshClientPool(configManager, hostKeyVerifier);
+  const remoteCommandExecutor = new RemoteCommandExecutor(configManager, hostKeyVerifier, agentSshClientPool);
+
+  let mcp: McpActivationResult | undefined;
   let disposed = false;
   const cleanup = {
     dispose(): void {
@@ -119,10 +118,11 @@ export function activate(context: vscode.ExtensionContext): void {
       TerminalPanel.disconnectAll();
       sftpManager.dispose();
       remoteCommandExecutor.dispose();
-      for (const entry of localForwards.values()) {
-        void entry.stop();
-      }
-      localForwards.clear();
+      disposeJumpHostConnections();
+      // Preview downloads are a cache; leaving them behind after an uninstall/update
+      // otherwise accumulates copies of sensitive remote files in global storage.
+      void cleanupPreviewCache(context.globalStorageUri.fsPath);
+      void portForwardManager.dispose();
       if (extensionCleanup === cleanup) {
         extensionCleanup = undefined;
       }
@@ -139,162 +139,60 @@ export function activate(context: vscode.ExtensionContext): void {
       treeProvider.refresh();
       // Connect/disconnect must reach the ~/.at-series registry immediately, not on the
       // next 30s heartbeat, or hub routing sees 0 connected terminals.
-      void bridgeServer?.refreshCapabilities();
+      void mcp?.bridgeServer.refreshCapabilities();
     },
-    onTerminalRemoved: (terminalId) => sftpAgentService?.disposeTerminal(terminalId)
+    onTerminalRemoved: (terminalId) => mcp?.sftpAgentService.disposeTerminal(terminalId)
   });
 
-  let bridgeServer: BridgeServer | undefined;
-  let sftpAgentService: SftpAgentService | undefined;
-  let installMcpConfigCommand: vscode.Disposable | undefined;
-  let uninstallMcpConfigCommand: vscode.Disposable | undefined;
   if (MCP_ENABLED) {
-    // MCP activate order: detectHostApp → syncPackagedHub → AgentToolService →
-    // BridgeServer.start (publish) → ensureAtSeriesConfig → install/uninstall commands.
-    // Dispose (via BridgeServer in subscriptions) only unpublishes; never uninstalls MCP
-    // config or deletes hub.js.
-    const hostEnv = {
-      appName: vscode.env.appName,
-      appRoot: vscode.env.appRoot,
-      uriScheme: vscode.env.uriScheme,
-      extensionPath: context.extensionUri.fsPath
-    };
-    const hostApp = detectHostApp(hostEnv);
-    const currentWorkspaceFolder = () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    // Await hub sync before writing MCP config so node can resolve ~/.at-series/mcp/hub.js.
-    const hubReady = syncPackagedHub(context)
-      .then((result) => {
-        console.log(
-          `AT Terminal hub sync ok (updated=${result.updated}, active=${result.activeVersion})`
-        );
-        return result;
-      })
-      .catch((error) => {
-        console.error('AT Terminal hub sync failed:', formatError(error));
-        const repairAction = t('Repair');
-        void showErrorWithActions(
-          t('AT Series hub sync failed: {message}. MCP may not start until Repair succeeds.', {
-            message: formatError(error)
-          }),
-          repairAction
-        ).then((choice) => {
-          if (choice === repairAction) {
-            void vscode.commands.executeCommand('sshManager.installMcpConfig');
-          }
-        });
-        throw error;
-      });
-    const sftpWriteAuthorizer = createProductionSftpWriteAuthorizer();
-    const agentAuditLog = createAgentAuditLog(context.globalStorageUri);
-    sftpAgentService = new SftpAgentService({
-      terminalContext,
-      // Agent writes never escalate: a denied write stays denied instead of silently
-      // becoming a root write through the sudo fallback.
-      createSession: (target) =>
-        new SftpSession(target.server, configManager, hostKeyVerifier, { allowSudoFallback: false }),
-      authorizer: sftpWriteAuthorizer,
-      resolveBackgroundServer: (serverId) => configManager.getServer(serverId),
-      audit: agentAuditLog
-    });
-    const agentToolService = new AgentToolService({
+    mcp = activateMcp({
+      context,
       configManager,
+      hostKeyVerifier,
       terminalContext,
-      executor: remoteCommandExecutor,
-      sftp: sftpAgentService,
-      audit: agentAuditLog
-    });
-    context.subscriptions.push(agentAuditLog);
-    bridgeServer = new BridgeServer({
-      service: agentToolService,
-      hostApp,
-      pluginVersion:
-        typeof context.extension?.packageJSON?.version === 'string'
-          ? context.extension.packageJSON.version
-          : undefined
-    });
-    void bridgeServer.start().catch((error) => {
-      void showErrorWithActions(
-        t('AT Terminal MCP bridge failed to start: {message}', { message: formatError(error) })
-      );
-    });
-    void hubReady
-      .then(() =>
-        ensureAtSeriesConfigForCurrentIde({
-          ...hostEnv,
-          workspaceFolder: currentWorkspaceFolder()
-        })
-      )
-      .catch((error) => {
-        const repairAction = t('Repair');
-        void showErrorWithActions(
-          t('AT Series MCP config could not be updated: {message}', { message: formatError(error) }),
-          repairAction
-        ).then((choice) => {
-          if (choice === repairAction) {
-            void vscode.commands.executeCommand('sshManager.installMcpConfig');
-          }
-        });
-      });
-    installMcpConfigCommand = vscode.commands.registerCommand('sshManager.installMcpConfig', async () => {
-      try {
-        await syncPackagedHub(context, { force: true });
-      } catch (error) {
-        const repairAction = t('Repair');
-        void showErrorWithActions(
-          t('AT Series hub sync failed: {message}', { message: formatError(error) }),
-          repairAction
-        ).then((choice) => {
-          if (choice === repairAction) {
-            void vscode.commands.executeCommand('sshManager.installMcpConfig');
-          }
-        });
-        return;
-      }
-      const result = await ensureAtSeriesConfigForCurrentIde({
-        ...hostEnv,
-        workspaceFolder: currentWorkspaceFolder()
-      });
-      if (result) {
-        showTimedNotification(
-          result.updated
-            ? t('AT Series MCP config installed/repaired.')
-            : t('AT Series MCP config is already up to date.')
-        );
-        return;
-      }
-      void vscode.window.showWarningMessage(
-        t('No supported IDE MCP config target was detected. Open a workspace to install Continue config.')
-      );
-    });
-    uninstallMcpConfigCommand = vscode.commands.registerCommand('sshManager.uninstallAtSeriesMcpConfig', async () => {
-      const result = await uninstallAtSeriesConfigForCurrentIde({
-        ...hostEnv,
-        workspaceFolder: currentWorkspaceFolder()
-      });
-      if (result?.removed) {
-        showTimedNotification(t('AT Series MCP config uninstalled.'));
-        return;
-      }
-      if (result) {
-        showTimedNotification(t('AT Series MCP config was not present.'));
-        return;
-      }
-      void vscode.window.showWarningMessage(
-        t('No supported IDE MCP config target was detected. Open a workspace to uninstall Continue config.')
-      );
+      remoteCommandExecutor,
+      agentSshClientPool
     });
   }
 
+  const commandContext: CommandContext = {
+    context,
+    configManager,
+    hostKeyStore,
+    hostKeyVerifier,
+    terminalContext,
+    treeProvider,
+    sftpManager,
+    sftpTreeProvider,
+    sftpEditManager,
+    sftpPreviewStore,
+    portForwardManager,
+    getSftpAgentService: () => mcp?.sftpAgentService,
+    getRemoteCommandExecutor: () => remoteCommandExecutor
+  };
+  const commandDisposables = [
+    ...registerServerCommands(commandContext),
+    ...registerSftpCommands(commandContext),
+    ...registerPortForwardCommands(commandContext)
+  ];
+  if (MCP_ENABLED && mcp) {
+    commandDisposables.push(
+      ...registerMcpCommands({
+        context,
+        hostEnv: mcp.hostEnv,
+        currentWorkspaceFolder: mcp.currentWorkspaceFolder
+      })
+    );
+  }
 
   context.subscriptions.push(
-    ...(bridgeServer ? [bridgeServer] : []),
-    ...(sftpAgentService ? [sftpAgentService] : []),
-    ...(installMcpConfigCommand ? [installMcpConfigCommand] : []),
-    ...(uninstallMcpConfigCommand ? [uninstallMcpConfigCommand] : []),
+    ...(mcp ? [mcp.bridgeServer, mcp.sftpAgentService, mcp.agentAuditLog] : []),
+    ...commandDisposables,
     serversTreeView,
     sftpTreeView,
     sftpEditStatus,
     sftpEditManager,
+    portForwardStatus,
     cleanup,
     vscode.workspace.registerTextDocumentContentProvider(SFTP_PREVIEW_SCHEME, sftpPreviewStore),
     vscode.workspace.onDidCloseTextDocument((document) => {
@@ -304,525 +202,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.window.tabGroups.onDidChangeTabs((event) => {
       void sftpPreviewStore.deletePreviewFilesForClosedTabs(event.closed);
-    }),
-    vscode.commands.registerCommand('sshManager.exportAssets', async () => {
-      await exportAssetsCommand({
-        configManager,
-        extensionName: context.extension.packageJSON.name,
-        extensionVersion: context.extension.packageJSON.version
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.importAssets', async () => {
-      await importAssetsCommand({
-        configManager,
-        privateKeyDirectory: assetPrivateKeyDirectory(context),
-        refreshServers: () => treeProvider.refresh()
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.addServer', (item?: GroupTreeItem) => {
-      const initialGroup = item instanceof GroupTreeItem ? item.groupName : undefined;
-      void ServerFormPanel.open(
-        context,
-        configManager,
-        (savedServer) => {
-          if (savedServer) {
-            terminalContext.updateServer(savedServer);
-            TerminalPanel.updateServer(savedServer);
-          }
-          treeProvider.refresh();
-        },
-        undefined,
-        hostKeyVerifier,
-        initialGroup
-      );
-    }),
-    vscode.commands.registerCommand('sshManager.editServer', async (item?: ServerTreeItem) => {
-      const picked = item?.server ?? (await pickServer(configManager));
-      if (!picked) {
-        return;
-      }
-      const server = await configManager.getServer(picked.id);
-      if (server) {
-        await ServerFormPanel.open(
-          context,
-          configManager,
-          (savedServer) => {
-            if (savedServer) {
-              sftpAgentService?.disposeServer(savedServer.id);
-              terminalContext.updateServer(savedServer);
-              TerminalPanel.updateServer(savedServer);
-            }
-            treeProvider.refresh();
-          },
-          server,
-          hostKeyVerifier
-        );
-      }
-    }),
-    vscode.commands.registerCommand('sshManager.deleteServer', async (item?: ServerTreeItem) => {
-      const server = item?.server ?? (await pickServer(configManager));
-      if (!server) {
-        return;
-      }
-      const references = await configManager.findJumpHostReferences(server.id);
-      if (references.length > 0) {
-        void vscode.window.showWarningMessage(formatJumpHostDeleteBlockMessage(server, references));
-        return;
-      }
-      const deleteAction = t('Delete');
-      const answer = await vscode.window.showWarningMessage(
-        t('Delete SSH server "{label}"?', { label: server.label }),
-        { modal: true },
-        deleteAction
-      );
-      if (answer === deleteAction) {
-        sftpAgentService?.disposeServer(server.id);
-        await deleteServerAndTrust.remove(server, { configManager, hostKeyStore });
-        treeProvider.refresh();
-      }
-    }),
-    vscode.commands.registerCommand('sshManager.connect', async (item?: ServerTreeItem) => {
-      const server = item?.server ?? (await pickServer(configManager));
-      if (!server) {
-        return;
-      }
-      TerminalPanel.open(context, server, configManager, hostKeyVerifier, terminalContext);
-    }),
-    vscode.commands.registerCommand('sshManager.copyHost', async (item?: ServerTreeItem) => {
-      const server = item?.server ?? (await pickServer(configManager));
-      if (!server) {
-        return;
-      }
-      await vscode.env.clipboard.writeText(`${server.username}@${server.host}:${server.port}`);
-    }),
-    vscode.commands.registerCommand('sshManager.viewHostFingerprint', async (item?: ServerTreeItem) => {
-      const server = item?.server ?? (await pickServer(configManager));
-      if (!server) {
-        return;
-      }
-      const trusted = hostKeyStore.getTrusted(server.host, server.port);
-      if (!trusted) {
-        void vscode.window.showInformationMessage(
-          t('No trusted host key is stored for {host}:{port}. The next connection will ask to trust the fingerprint.', {
-            host: server.host,
-            port: server.port
-          })
-        );
-        return;
-      }
-      const copyAction = t('Copy Fingerprint');
-      const choice = await vscode.window.showInformationMessage(
-        t('Stored fingerprint for {host}:{port}: {fingerprint}', {
-          host: server.host,
-          port: server.port,
-          fingerprint: trusted.fingerprint
-        }),
-        copyAction
-      );
-      if (choice === copyAction) {
-        await vscode.env.clipboard.writeText(trusted.fingerprint);
-      }
-    }),
-    vscode.commands.registerCommand('sshManager.forgetHostKey', async (item?: ServerTreeItem) => {
-      const server = item?.server ?? (await pickServer(configManager));
-      if (!server) {
-        return;
-      }
-      if (!hostKeyStore.getTrusted(server.host, server.port)) {
-        void vscode.window.showInformationMessage(
-          t('No trusted host key is stored for {host}:{port}. The next connection will ask to trust the fingerprint.', {
-            host: server.host,
-            port: server.port
-          })
-        );
-        return;
-      }
-      await hostKeyStore.forget(server.host, server.port);
-      showTimedNotification(
-        t('Forgot the host key for {host}:{port}. The next connection will ask to trust the fingerprint again.', {
-          host: server.host,
-          port: server.port
-        })
-      );
-    }),
-    vscode.commands.registerCommand('sshManager.importSshConfig', async () => {
-      let configPath = defaultSshConfigPath();
-      let read = await readSshConfigFile(configPath);
-      if (!read.ok) {
-        // The default config is often missing or unreadable; let the user point at
-        // the real file instead of dead-ending on an error toast.
-        const picked = await vscode.window.showOpenDialog({
-          title: t('OpenSSH config file was not readable at {path}. Choose a file to import.', { path: configPath }),
-          defaultUri: vscode.Uri.file(localDirname(configPath)),
-          canSelectFiles: true,
-          canSelectFolders: false,
-          canSelectMany: false,
-          filters: {
-            [t('OpenSSH config')]: ['', 'config'],
-            [t('All files')]: ['*']
-          }
-        });
-        if (!picked || picked.length === 0) {
-          return;
-        }
-        configPath = picked[0].fsPath;
-        read = await readSshConfigFile(configPath);
-        if (!read.ok) {
-          void vscode.window.showErrorMessage(t('Could not read {path}.', { path: configPath }));
-          return;
-        }
-      }
-      const { entries, warnings } = parseSshConfig(read.content);
-      if (entries.length === 0) {
-        void vscode.window.showInformationMessage(t('No concrete Host entries were found in {path}.', { path: configPath }));
-        return;
-      }
-      const existing = await configManager.listServers();
-      const existingHosts = new Set(existing.map((server) => `${server.host}:${server.port}:${server.username}`));
-      let imported = 0;
-      for (const entry of entries) {
-        const username = entry.draft.username ?? userInfo().username;
-        const key = `${entry.draft.host}:${entry.draft.port}:${username}`;
-        if (existingHosts.has(key)) {
-          continue;
-        }
-        const now = Date.now();
-        const jump = entry.proxyJump
-          ? existing.find(
-              (server) =>
-                server.host === entry.proxyJump?.host &&
-                (entry.proxyJump.port === undefined || server.port === entry.proxyJump.port)
-            )
-          : undefined;
-        await configManager.saveServer({
-          id: randomUUID(),
-          label: entry.draft.label,
-          host: entry.draft.host,
-          port: entry.draft.port,
-          username,
-          authType: entry.draft.authType,
-          privateKeyPath: entry.draft.privateKeyPath,
-          jumpHostId: jump?.id,
-          keepAliveInterval: 30,
-          encoding: 'utf-8',
-          createdAt: now,
-          updatedAt: now
-        });
-        existingHosts.add(key);
-        imported += 1;
-      }
-      treeProvider.refresh();
-      const warningText = warnings.length ? ` ${warnings.join(' ')}` : '';
-      void vscode.window.showInformationMessage(
-        t('Imported {count} servers from SSH config.{warnings}', { count: imported, warnings: warningText })
-      );
-    }),
-    vscode.commands.registerCommand('sshManager.forwardLocalPort', async (item?: ServerTreeItem) => {
-      const server = item?.server ?? (await pickServer(configManager));
-      if (!server) {
-        return;
-      }
-      const existingForward = localForwards.get(server.id);
-      if (existingForward) {
-        await existingForward.stop();
-        localForwards.delete(server.id);
-        void vscode.window.showInformationMessage(t('Stopped local port forward for {label}.', { label: server.label }));
-        return;
-      }
-      const remoteHost =
-        (await vscode.window.showInputBox({
-          prompt: t('Remote host to forward to'),
-          value: '127.0.0.1'
-        })) ?? '';
-      const remotePortText = await vscode.window.showInputBox({
-        prompt: t('Remote port to forward to'),
-        value: '3306'
-      });
-      if (!remoteHost.trim() || !remotePortText) {
-        return;
-      }
-      const remotePort = Number(remotePortText);
-      if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) {
-        void vscode.window.showErrorMessage(t('Remote port must be an integer between 1 and 65535.'));
-        return;
-      }
-      const localPortText = await vscode.window.showInputBox({
-        prompt: t('Local port (0 picks an ephemeral port)'),
-        value: '0'
-      });
-      if (localPortText === undefined) {
-        return;
-      }
-      const localPort = Number(localPortText);
-      if (!Number.isInteger(localPort) || localPort < 0 || localPort > 65535) {
-        void vscode.window.showErrorMessage(t('Local port must be an integer between 0 and 65535.'));
-        return;
-      }
-      const prompt = createVscodeKeyboardInteractivePrompt();
-      const handle = await buildSshConnectionHandle(server, configManager, hostKeyVerifier, {
-        keyboardInteractivePrompt: prompt
-      });
-      const { Client } = await getSsh2();
-      const client = new Client();
-      try {
-        await new Promise<void>((resolve, reject) => {
-          client.once('ready', resolve);
-          client.once('error', reject);
-          attachKeyboardInteractive(client, prompt, reject);
-          client.connect(handle.config);
-        });
-        const forward = new LocalPortForward(client, {
-          remoteHost: remoteHost.trim(),
-          remotePort,
-          localPort
-        });
-        const boundPort = await forward.start();
-        localForwards.set(server.id, {
-          stop: async () => {
-            await forward.stop();
-            client.end();
-            handle.dispose();
-          }
-        });
-        void vscode.window.showInformationMessage(
-          t('Forwarding localhost:{localPort} to {host}:{remotePort} on {label}. Run the command again to stop.', {
-            localPort: boundPort,
-            host: remoteHost.trim(),
-            remotePort,
-            label: server.label
-          })
-        );
-      } catch (error) {
-        client.end();
-        handle.dispose();
-        void vscode.window.showErrorMessage(formatError(error));
-      }
-    }),
-    vscode.commands.registerCommand('sshManager.refresh', () => {
-      treeProvider.refresh();
-    }),
-    vscode.commands.registerCommand('sshManager.disconnect', () => {
-      const active = TerminalPanel.getActive();
-      if (!active) {
-        void vscode.window.showInformationMessage(t('No active SSH terminal'));
-        return;
-      }
-      active.disconnect();
-    }),
-    vscode.commands.registerCommand('sshManager.reconnect', async () => {
-      const active = TerminalPanel.getActive();
-      if (!active) {
-        void vscode.window.showInformationMessage(t('No active SSH terminal'));
-        return;
-      }
-      await active.reconnect();
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.refresh', () => {
-      refreshSftpFilesView({
-        terminalContext,
-        sftpManager,
-        refreshSftpTree: () => sftpTreeProvider.refresh()
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.goToPath', async () => {
-      await runSftpCommand(async () => {
-        const state = sftpManager.getState();
-        const currentPath = state.kind === 'active' ? state.rootPath : '';
-        const nextPath = await vscode.window.showInputBox({
-          prompt: t('Remote path'),
-          value: currentPath
-        });
-        if (!nextPath?.trim()) {
-          return;
-        }
-        await sftpManager.changeDirectory(nextPath.trim());
-        sftpTreeProvider.refresh();
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.goUp', async () => {
-      await runSftpCommand(async () => {
-        await sftpManager.changeToParentDirectory();
-        sftpTreeProvider.refresh();
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.upload', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
-      await runSftpCommand(async () => {
-        const files = await vscode.window.showOpenDialog({
-          canSelectFiles: true,
-          canSelectFolders: true,
-          canSelectMany: true
-        });
-        if (!files?.length) {
-          return;
-        }
-        const state = sftpManager.getState();
-        const targetDirectory = getTargetDirectory(item, state.kind === 'active' ? state.rootPath : '.');
-        let overwriteAll = false;
-        for (const file of files) {
-          const remotePath = joinRemotePath(targetDirectory, localUploadFileName(file.fsPath));
-          const localStat = await stat(file.fsPath);
-          const upload = async (overwrite: boolean) => {
-            if (localStat.isDirectory()) {
-              await sftpManager.uploadDirectory(file.fsPath, remotePath, undefined, { overwrite });
-              return;
-            }
-            await sftpManager.uploadFile(file.fsPath, remotePath, undefined, { overwrite });
-          };
-          try {
-            await upload(overwriteAll);
-          } catch (error) {
-            if (!isSftpConflictError(error)) {
-              throw error;
-            }
-            const overwrite = t('Overwrite');
-            const overwriteEverything = t('Overwrite All');
-            const skip = t('Skip');
-            const choice = await vscode.window.showWarningMessage(
-              error.message,
-              { modal: true },
-              overwrite,
-              overwriteEverything,
-              skip
-            );
-            if (choice === overwrite || choice === overwriteEverything) {
-              overwriteAll = choice === overwriteEverything;
-              await upload(true);
-            }
-          }
-        }
-        sftpTreeProvider.refresh(item instanceof SftpDirectoryTreeItem ? item : undefined);
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.download', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
-      await runSftpCommand(async () => {
-        if (!item) {
-          return;
-        }
-        if (item.entry.type === 'directory' || item.entry.targetType === 'directory') {
-          const folders = await vscode.window.showOpenDialog({
-            canSelectFiles: false,
-            canSelectFolders: true,
-            canSelectMany: false,
-            openLabel: t('Download Here')
-          });
-          if (!folders?.length) {
-            return;
-          }
-          await sftpManager.downloadDirectory(item.entry.path, joinLocalPath(folders[0].fsPath, item.entry.name));
-          return;
-        }
-        const destination = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.file(item.entry.name) });
-        if (!destination) {
-          return;
-        }
-        await sftpManager.downloadFile(item.entry.path, destination.fsPath);
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.delete', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
-      await runSftpCommand(async () => {
-        if (!item) {
-          return;
-        }
-        const deleteAction = t('Delete');
-        // Symlinked directories stay expandable in the tree, but deleteEntry only
-        // unlinks the symlink. Count-through-target copy would overstate the damage.
-        const message =
-          item.entry.type === 'directory'
-            ? t('Delete remote directory "{path}"? {count} entries will be permanently deleted.', {
-                path: item.entry.path,
-                count: await sftpManager.countDeletableEntries(item.entry.path)
-              })
-            : t('Delete remote {type} "{path}"?', { type: item.entry.type, path: item.entry.path });
-        const answer = await vscode.window.showWarningMessage(message, { modal: true }, deleteAction);
-        if (answer === deleteAction) {
-          await sftpManager.deleteEntry(item.entry);
-          sftpTreeProvider.refresh();
-        }
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.rename', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
-      await runSftpCommand(async () => {
-        if (!item) {
-          return;
-        }
-        const nextName = await vscode.window.showInputBox({
-          prompt: t('New remote name'),
-          value: item.entry.name
-        });
-        if (!nextName || nextName === item.entry.name) {
-          return;
-        }
-        await sftpManager.rename(item.entry.path, joinRemotePath(dirname(item.entry.path), nextName));
-        sftpTreeProvider.refresh();
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.newFile', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
-      await runSftpCommand(async () => {
-        const state = sftpManager.getState();
-        await createRemoteFileForEditing({
-          entry: item?.entry,
-          rootPath: state.kind === 'active' ? state.rootPath : '.',
-          promptName: async () => vscode.window.showInputBox({ prompt: t('New remote file name') }),
-          createFile: (remotePath) => sftpManager.createFile(remotePath),
-          openRemoteFile: async (remotePath) => {
-            await sftpEditManager.openRemoteFile(remotePath);
-          },
-          refresh: () => sftpTreeProvider.refresh()
-        });
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.newFolder', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
-      await runSftpCommand(async () => {
-        const folderName = await vscode.window.showInputBox({ prompt: t('New remote folder name') });
-        if (!folderName) {
-          return;
-        }
-        const state = sftpManager.getState();
-        const targetDirectory = getTargetDirectory(item, state.kind === 'active' ? state.rootPath : '.');
-        await sftpManager.mkdir(joinRemotePath(targetDirectory, folderName));
-        sftpTreeProvider.refresh();
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.copyPath', async (item?: SftpDirectoryTreeItem | SftpFileTreeItem) => {
-      if (item) {
-        await vscode.env.clipboard.writeText(item.entry.path);
-      }
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.edit', async (item?: SftpFileTreeItem) => {
-      await runSftpCommand(async () => {
-        if (!item) {
-          return;
-        }
-        await sftpEditManager.openRemoteFile(item.entry.path);
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.openPreview', async (item?: SftpFileTreeItem) => {
-      await runSftpCommand(async () => {
-        if (!item) {
-          return;
-        }
-        await openRemotePreviewFile({
-          storageUri: context.globalStorageUri,
-          remotePath: item.entry.path,
-          previewStore: sftpPreviewStore,
-          downloadFile: (remotePath, localPath) => sftpManager.downloadFile(remotePath, localPath),
-          openUri: async (uri, openOptions) => {
-            await vscode.commands.executeCommand('vscode.open', uri, openOptions);
-          }
-        });
-      });
-    }),
-    vscode.commands.registerCommand('sshManager.sftp.cdToDirectory', (item?: SftpDirectoryTreeItem) => {
-      if (item) {
-        terminalContext.getActive()?.write(`cd ${quotePosixShellPath(item.entry.path)}\r`);
-      }
     })
   );
 
-  // Activation is complete: repaint the servers view so it leaves the
-  // viewsWelcome placeholder, and reveal a lone group expanded — VS Code often
-  // ignores CollapsibleState.Expanded on the first paint after an update, which
-  // left existing servers hidden behind a collapsed "Default" group.
+  // Repaint the servers view out of viewsWelcome and expand a lone group.
   treeProvider.refresh();
   void configManager
     .listServers()
@@ -838,7 +221,6 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     })
     .catch((error) => {
-      // The reveal is cosmetic; never let it surface as an activation failure.
       console.error('AT Terminal: initial servers tree reveal failed:', formatError(error));
     });
 }
@@ -848,253 +230,20 @@ export function deactivate(): void {
   TerminalPanel.disconnectAll();
 }
 
-export interface SftpContextWiringOptions {
-  terminalContext: Pick<
-    TerminalContextRegistry,
-    'onDidChangeActiveContext' | 'onDidChangeContext' | 'onDidRemoveContext'
-  >;
-  sftpManager: Pick<
-    SftpManager,
-    'setTerminalContext' | 'syncTerminalContext' | 'removeTerminalContext' | 'getActiveViewDescriptor'
-  >;
-  refreshSftpTree(): void;
-  /** Servers-tree repaint and MCP capability push; runs on every context change or removal. */
-  onTerminalsChanged(): void;
-  onTerminalRemoved?(terminalId: string): void;
-}
-
-/**
- * Keeps the SFTP view in lockstep with the terminal registry. Exported so regression tests
- * exercise the exact production wiring instead of a copy.
- *
- * Every registry mutation fires `onDidChangeContext`, so the SFTP state is synced there —
- * including for the focused terminal. `TerminalContext.setActive` skips
- * `onDidChangeActiveContext` when it considers the republished context unchanged, so an
- * active-event-only sync can miss a connect and leave the tree on the
- * "No active SSH terminal" placeholder while the terminal is live.
- */
-export function registerSftpContextWiring(options: SftpContextWiringOptions): void {
-  const { terminalContext, sftpManager } = options;
-  const refreshSftpTreeIfViewChanged = (sync: () => void): void => {
-    const previousView = sftpManager.getActiveViewDescriptor();
-    sync();
-    if (shouldRefreshOnContextChange(previousView, sftpManager.getActiveViewDescriptor())) {
-      options.refreshSftpTree();
-    }
-  };
-  terminalContext.onDidChangeActiveContext((activeContext) => {
-    refreshSftpTreeIfViewChanged(() => sftpManager.setTerminalContext(activeContext));
-  });
-  terminalContext.onDidChangeContext((changedContext) => {
-    refreshSftpTreeIfViewChanged(() => sftpManager.syncTerminalContext(changedContext));
-    options.onTerminalsChanged();
-  });
-  terminalContext.onDidRemoveContext((terminalId) => {
-    // The registry clears the active context after this event, so the descriptor must be
-    // compared here: by the time onDidChangeActiveContext(undefined) runs the removal has
-    // already emptied the view state on both sides of that comparison.
-    refreshSftpTreeIfViewChanged(() => sftpManager.removeTerminalContext(terminalId));
-    options.onTerminalRemoved?.(terminalId);
-    options.onTerminalsChanged();
-  });
-}
-
-/** The registry views the SFTP tree may re-read directly; what MCP tools already read. */
-export type SftpTerminalRegistrySource = Pick<TerminalContextRegistry, 'getConnectedTerminal' | 'getActive'>;
-
-/**
- * SFTP state is a copy of the terminal registry maintained by event listeners; a missed
- * event leaves the copy on "No active SSH terminal" while the registry — the source of
- * truth MCP tools read — has a live connection. Re-syncing on the placeholder path makes
- * every tree read self-healing instead of trusting that no event was ever dropped.
- */
-export function adoptRegistryTerminalIfSftpInactive(
-  terminalContext: SftpTerminalRegistrySource,
-  sftpManager: Pick<SftpManager, 'getState' | 'setTerminalContext'>
-): void {
-  if (sftpManager.getState().kind !== 'none') {
-    return;
-  }
-  const live = terminalContext.getConnectedTerminal() ?? terminalContext.getActive();
-  if (live) {
-    sftpManager.setTerminalContext(live);
-  }
-}
-
-/** Tree source used by `activate()`: every getChildren re-checks the registry first. */
-export function createRegistryBackedSftpTreeSource(
-  terminalContext: SftpTerminalRegistrySource,
-  sftpManager: Pick<SftpManager, 'getState' | 'setTerminalContext' | 'listDirectory'>
-): SftpTreeSource {
-  return {
-    getState: () => {
-      adoptRegistryTerminalIfSftpInactive(terminalContext, sftpManager);
-      return sftpManager.getState();
-    },
-    listDirectory: (path) => sftpManager.listDirectory(path)
-  };
-}
-
-export interface RefreshSftpFilesViewOptions {
-  terminalContext: SftpTerminalRegistrySource;
-  sftpManager: Pick<SftpManager, 'setTerminalContext' | 'invalidateAllListings'>;
-  refreshSftpTree(): void;
-}
-
-/**
- * Handler for `sshManager.sftp.refresh`. Refresh must heal, not just repaint: it re-reads
- * the live registry into the SFTP manager before invalidating listings, so a connected
- * terminal plus Refresh can never keep showing the "No active SSH terminal" placeholder
- * even when every context event was missed.
- */
-export function refreshSftpFilesView(options: RefreshSftpFilesViewOptions): void {
-  const live = options.terminalContext.getConnectedTerminal() ?? options.terminalContext.getActive();
-  if (live) {
-    options.sftpManager.setTerminalContext(live);
-  }
-  options.sftpManager.invalidateAllListings();
-  options.refreshSftpTree();
-}
-
-async function runSftpCommand(command: () => Promise<void>): Promise<void> {
-  try {
-    await command();
-  } catch (error) {
-    // Errors stay on screen until dismissed; only success toasts self-dismiss.
-    void vscode.window.showErrorMessage(formatError(error));
-  }
-}
-
-/**
- * A changed host key blocks the connection by default. Instead of a dead end, the
- * persistent error offers explicit ways out: inspect the stored fingerprint, trust the
- * new key, or forget the stored key so the next connection goes through the normal
- * first-use trust prompt. Nothing is ever trusted automatically.
- */
-export async function promptChangedHostKey(
-  host: string,
-  port: number,
-  fingerprint: string,
-  hostKeyStore: Pick<HostKeyStore, 'trust' | 'forget' | 'getTrusted'>
-): Promise<boolean> {
-  const viewAction = t('View Fingerprint');
-  const trustAction = t('Trust New Key');
-  const forgetAction = t('Forget and Reconnect');
-  for (;;) {
-    const choice = await vscode.window.showErrorMessage(
-      t('Host key for {host}:{port} changed. The connection stays blocked until you trust the new key or forget the stored one. New fingerprint: {fingerprint}', {
-        host,
-        port,
-        fingerprint
-      }),
-      viewAction,
-      trustAction,
-      forgetAction
-    );
-    if (choice === viewAction) {
-      const trusted = hostKeyStore.getTrusted(host, port);
-      await vscode.window.showInformationMessage(
-        trusted
-          ? t('Stored fingerprint for {host}:{port}: {fingerprint}', {
-              host,
-              port,
-              fingerprint: trusted.fingerprint
-            })
-          : t('No trusted host key is stored for {host}:{port}. The next connection will ask to trust the fingerprint.', {
-              host,
-              port
-            })
-      );
-      continue;
-    }
-    if (choice === trustAction) {
-      await hostKeyStore.trust(host, port, fingerprint);
-      return true;
-    }
-    if (choice === forgetAction) {
-      await hostKeyStore.forget(host, port);
-      showTimedNotification(
-        t('Forgot the host key for {host}:{port}. The next connection will ask to trust the fingerprint again.', {
-          host,
-          port
-        })
-      );
-      return false;
-    }
-    return false;
-  }
-}
-
-async function pickServer(
-  configManager: Pick<ConfigManager, 'listServers'>
-): Promise<ServerConfig | undefined> {
-  const servers = await configManager.listServers();
-  if (servers.length === 0) {
-    void vscode.window.showInformationMessage(
-      t('No SSH servers configured yet. Run "SSH: Add Server" to create one.')
-    );
-    return undefined;
-  }
-  const picked = await vscode.window.showQuickPick(
-    servers.map((server) => ({
-      label: server.label,
-      description: `${server.username}@${server.host}:${server.port}`,
-      server
-    })),
-    { placeHolder: t('Select an SSH server') }
-  );
-  return picked?.server;
-}
-
-export type ServerConnectionState = 'connected' | 'disconnected';
-
-/**
- * Reduces terminal summaries to one state per server: any connected terminal wins;
- * known-but-disconnected terminals mark the server as disconnected; servers without a
- * terminal stay absent so the tree keeps their neutral icon.
- */
-export function serverConnectionStates(
-  terminals: ReadonlyArray<{ serverId: string; connected: boolean }>
-): Map<string, ServerConnectionState> {
-  const states = new Map<string, ServerConnectionState>();
-  for (const terminal of terminals) {
-    if (terminal.connected) {
-      states.set(terminal.serverId, 'connected');
-    } else if (!states.has(terminal.serverId)) {
-      states.set(terminal.serverId, 'disconnected');
-    }
-  }
-  return states;
-}
-
-function getTargetDirectory(
-  item: SftpDirectoryTreeItem | SftpFileTreeItem | undefined,
-  rootPath: string
-): string {
-  if (!item) {
-    return rootPath;
-  }
-  return item instanceof SftpFileTreeItem ? dirname(item.entry.path) : item.entry.path;
-}
-
-export function formatJumpHostDeleteBlockMessage(server: ServerConfig, references: ServerConfig[]): string {
-  return t('Cannot delete "{label}" because it is used as a jump host by: {references}', {
-    label: server.label,
-    references: references.map((reference) => reference.label).join(', ')
-  });
-}
-
-export const deleteServerAndTrust = {
-  formatBlockMessage: formatJumpHostDeleteBlockMessage,
-  async remove(
-    server: ServerConfig,
-    dependencies: {
-      configManager: Pick<ConfigManager, 'deleteServer'>;
-      hostKeyStore: Pick<HostKeyStore, 'forget'>;
-    }
-  ): Promise<void> {
-    await dependencies.configManager.deleteServer(server.id);
-    await dependencies.hostKeyStore.forget(server.host, server.port);
-  }
-};
-
+// Public helpers re-exported for existing tests and downstream callers.
+export {
+  adoptRegistryTerminalIfSftpInactive,
+  createRegistryBackedSftpTreeSource,
+  refreshSftpFilesView,
+  registerSftpContextWiring,
+  type RefreshSftpFilesViewOptions,
+  type SftpContextWiringOptions,
+  type SftpTerminalRegistrySource
+} from './extension/wiring';
+export {
+  deleteServerAndTrust,
+  formatJumpHostDeleteBlockMessage,
+  promptChangedHostKey,
+  serverConnectionStates,
+  type ServerConnectionState
+} from './extension/serverHelpers';

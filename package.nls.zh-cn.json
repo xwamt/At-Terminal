@@ -44,5 +44,6 @@
   "atTerminal.config.idleDisconnectMinutes.description": "SSH 终端空闲超过该分钟数后自动断开。设为 0 表示关闭。",
   "atTerminal.config.keepAliveInterval.description": "SSH keep-alive 间隔（秒）。设为 0 表示关闭。",
   "atTerminal.config.zebraStripes.description": "在 SSH 终端中渲染斑马纹交替行背景。默认关闭。",
-  "atTerminal.config.sessionLogDirectory.description": "SSH 会话输出日志的保存目录。留空表示不记录会话日志。"
+  "atTerminal.config.sessionLogDirectory.description": "SSH 会话输出日志的保存目录。留空表示不记录会话日志。",
+  "atTerminal.command.managePortForwards.title": "管理端口转发"
 }

@@ -27,6 +27,8 @@ function listingCacheKey(terminalId: string, path: string): string {
 
 export interface SftpSessionLike {
   connect(): Promise<void>;
+  /** Optional so older test doubles stay valid; when present a dead session is rebuilt. */
+  isConnected?(): boolean;
   realpath(path?: string): Promise<string>;
   listDirectory(path: string): Promise<SftpEntry[]>;
   readFile(path: string, maxBytes: number, offset?: number): Promise<Buffer>;
@@ -362,7 +364,15 @@ export class SftpManager {
       throw new Error(t('No connected SSH terminal is active.'));
     }
     if (connection.session) {
-      return connection.session;
+      if (connection.session.isConnected?.() === false) {
+        // The TCP/SSH connection died without a context event (network reset, server
+        // reboot). Drop the dead wrapper so this request reconnects instead of failing.
+        connection.session.dispose();
+        connection.session = undefined;
+        this.clearListingsForTerminal(context.terminalId);
+      } else {
+        return connection.session;
+      }
     }
     if (connection.connectingSessionPromise) {
       return await connection.connectingSessionPromise;

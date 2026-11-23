@@ -65,6 +65,27 @@ describe('SftpManager', () => {
     expect(manager.getState()).toEqual({ kind: 'active', rootPath: '/home/deploy' });
   });
 
+
+  it('drops a dead cached session and reconnects on the next request', async () => {
+    let alive = true;
+    const first = sessionStub({ isConnected: () => alive });
+    const second = sessionStub();
+    const createSession = vi
+      .fn()
+      .mockReturnValueOnce(first)
+      .mockReturnValueOnce(second);
+    const manager = new SftpManager({ createSession });
+    manager.setTerminalContext(context(true));
+
+    await manager.ensureRoot();
+    alive = false;
+    await manager.listDirectory('/home/deploy');
+
+    expect(first.dispose).toHaveBeenCalledTimes(1);
+    expect(createSession).toHaveBeenCalledTimes(2);
+    expect(second.listDirectory).toHaveBeenCalledWith('/home/deploy');
+  });
+
   it('changes the active root path through realpath', async () => {
     const session = sessionStub({
       realpath: vi.fn(async (path?: string) => (path === '/var/log' ? '/var/log' : '/home/deploy'))

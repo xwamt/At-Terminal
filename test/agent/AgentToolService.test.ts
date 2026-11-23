@@ -122,6 +122,30 @@ describe('AgentToolService', () => {
     });
   });
 
+
+  it('stops waiting for confirmation when the request is aborted', async () => {
+    const allowed = { ...server(), backgroundConnectionAllowed: true };
+    const execute = vi.fn();
+    vi.spyOn(vscode.window, 'showWarningMessage').mockReturnValue(new Promise(() => undefined) as never);
+    const service = new AgentToolService({
+      configManager: { getServer: async () => allowed, listServers: async () => [allowed] } as never,
+      terminalContext: new TerminalContextRegistry(),
+      executor: { execute } as unknown as RemoteCommandExecutor
+    });
+    const controller = new AbortController();
+
+    const promise = service.runRemoteCommand({
+      serverId: 'server-1',
+      command: 'uptime',
+      signal: controller.signal
+    });
+    await vi.waitFor(() => expect(vscode.window.showWarningMessage).toHaveBeenCalled());
+    controller.abort();
+
+    await expect(promise).rejects.toThrow('Remote command was cancelled.');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('rejects direct commands for servers without background authorization', async () => {
     const blocked = { ...server(), backgroundConnectionAllowed: false };
     const execute = vi.fn();

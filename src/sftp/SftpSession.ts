@@ -40,12 +40,33 @@ export interface SftpSessionOptions {
    * may write anywhere", and it does so without a second prompt.
    */
   allowSudoFallback: boolean;
+  /**
+   * When set, the session rides an already-authenticated pooled SSH connection instead of
+   * opening its own. The lease is released on dispose or when the connection drops.
+   */
+  acquireClient?: () => Promise<SftpClientLease>;
+  /**
+   * Called once when an established connection drops on its own (network reset, server
+   * reboot). Pool managers use it to evict the dead session before the next request.
+   * Never called for an explicit {@link SftpSession.dispose}.
+   */
+  onDisconnected?: () => void;
+}
+
+export interface SftpClientLease {
+  client: Client;
+  release(): void;
 }
 
 export class SftpSession {
   private client: Client | undefined;
   private sftp: SFTPWrapper | undefined;
   private connectionHandle: SshConnectionHandle | undefined;
+  private clientLease: SftpClientLease | undefined;
+  private clientFromPool = false;
+  private connected = false;
+  private disposing = false;
+  private detachClientListeners: (() => void) | undefined;
 
   constructor(
     private readonly server: ServerConfig,
@@ -55,38 +76,99 @@ export class SftpSession {
   ) {}
 
   async connect(): Promise<void> {
-    const client = new (await getSsh2()).Client();
-    this.client = client;
-    const handle = await buildSshConnectionHandle(this.server, this.passwords, this.hostKeyVerifier);
-    this.connectionHandle = handle;
+    this.disposing = false;
+    let client: Client;
+    let handle: SshConnectionHandle | undefined;
+    if (this.options.acquireClient) {
+      const lease = await this.options.acquireClient();
+      this.clientLease = lease;
+      this.clientFromPool = true;
+      client = lease.client;
+      this.client = client;
+    } else {
+      this.clientFromPool = false;
+      client = new (await getSsh2()).Client();
+      this.client = client;
+      handle = await buildSshConnectionHandle(this.server, this.passwords, this.hostKeyVerifier);
+      this.connectionHandle = handle;
+    }
+
+    // A dropped TCP/SSH connection must invalidate this session immediately. Without these
+    // permanent listeners the next request is handed a dead SFTP wrapper (or ssh2 emits an
+    // unhandled `error` and crashes the extension host).
+    const onDrop = (): void => this.handleConnectionDrop();
+    client.on('error', onDrop);
+    client.on('close', onDrop);
+    client.on('end', onDrop);
+    this.detachClientListeners = () => {
+      client.off?.('error', onDrop);
+      client.off?.('close', onDrop);
+      client.off?.('end', onDrop);
+      this.detachClientListeners = undefined;
+    };
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        client.once('ready', resolve);
-        client.once('error', reject);
-        attachKeyboardInteractive(client, undefined, reject);
-        client.connect(handle.config);
-      });
+      if (handle) {
+        await new Promise<void>((resolve, reject) => {
+          client.once('ready', resolve);
+          client.once('error', reject);
+          attachKeyboardInteractive(client, undefined, reject);
+          client.connect(handle.config);
+        });
+      }
 
-      this.sftp = await new Promise<SFTPWrapper>((resolve, reject) => {
-        client.sftp((error, sftp) => {
+      const sftp = await new Promise<SFTPWrapper>((resolve, reject) => {
+        client.sftp((error, wrapper) => {
           if (error) {
             reject(error);
             return;
           }
-          resolve(sftp);
+          resolve(wrapper);
         });
       });
+      this.sftp = sftp;
+      if (typeof sftp.on === 'function') {
+        sftp.on('error', onDrop);
+        sftp.on('close', onDrop);
+        sftp.on('end', onDrop);
+      }
+      this.connected = true;
     } catch (error) {
-      client.end();
-      handle.dispose();
+      this.connected = false;
+      const activeHandle = this.connectionHandle;
       this.connectionHandle = undefined;
+      if (this.clientLease) {
+        this.clientLease.release();
+        this.clientLease = undefined;
+      } else if (!this.clientFromPool) {
+        client.end();
+      }
+      activeHandle?.dispose();
       throw error;
     }
   }
 
   isConnected(): boolean {
-    return Boolean(this.client && this.sftp);
+    return this.connected && Boolean(this.client && this.sftp);
+  }
+
+  private handleConnectionDrop(): void {
+    this.detachClientListeners?.();
+    const wasConnected = this.connected;
+    this.connected = false;
+    this.sftp = undefined;
+    this.client = undefined;
+    const handle = this.connectionHandle;
+    this.connectionHandle = undefined;
+    const lease = this.clientLease;
+    this.clientLease = undefined;
+    if (!this.disposing) {
+      handle?.dispose();
+      lease?.release();
+      if (wasConnected) {
+        this.options.onDisconnected?.();
+      }
+    }
   }
 
   async realpath(path = '.'): Promise<string> {
@@ -350,13 +432,15 @@ export class SftpSession {
     sftp: SFTPWrapper,
     localPath: string,
     remotePath: string,
-    progress?: TransferProgress
+    progress?: TransferProgress,
+    mode?: number
   ): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       sftp.fastPut(
         localPath,
         remotePath,
         {
+          ...(mode === undefined ? {} : { mode }),
           step: (transferredBytes, _chunkBytes, totalBytes) =>
             progress?.report({ transferredBytes, totalBytes })
         },
@@ -374,7 +458,9 @@ export class SftpSession {
     const sftp = this.requireSftp();
     const tempPath = `/tmp/at-terminal-upload-${randomUUID()}-${safePreviewName(remotePath)}`;
     try {
-      await this.fastPut(sftp, localPath, tempPath, progress);
+      // The temp file briefly holds the same bytes as the protected target. Create it
+      // owner-only so other local users cannot read secrets out of /tmp in that window.
+      await this.fastPut(sftp, localPath, tempPath, progress, 0o600);
       await this.execSudoOverwrite(tempPath, remotePath);
     } catch (sudoError) {
       await tryRemoveRemoteTempFile(sftp, tempPath);
@@ -492,7 +578,7 @@ export class SftpSession {
       }
       const tempPath = `/tmp/at-terminal-write-${randomUUID()}-${safePreviewName(path)}`;
       try {
-        await writeBuffer(sftp, tempPath, content);
+        await writeBuffer(sftp, tempPath, content, 0o600);
         await this.execSudoOverwrite(tempPath, path);
       } catch (sudoError) {
         await tryRemoveRemoteTempFile(sftp, tempPath);
@@ -504,8 +590,23 @@ export class SftpSession {
   }
 
   dispose(): void {
+    this.disposing = true;
+    this.connected = false;
+    this.detachClientListeners?.();
+    try {
+      if (this.sftp && typeof this.sftp.end === 'function') {
+        this.sftp.end();
+      }
+    } catch {
+      // Channel already gone; releasing the client/handle below still matters.
+    }
     this.sftp = undefined;
-    this.client?.end();
+    if (this.clientLease) {
+      this.clientLease.release();
+      this.clientLease = undefined;
+    } else if (!this.clientFromPool) {
+      this.client?.end();
+    }
     this.connectionHandle?.dispose();
     this.client = undefined;
     this.connectionHandle = undefined;
@@ -601,14 +702,13 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
   }
 }
 
-async function writeBuffer(sftp: SFTPWrapper, path: string, content: Buffer): Promise<void> {
-  const handle = await withTimeout(
-    new Promise<Buffer>((resolve, reject) => {
-      sftp.open(path, 'w', (error, fileHandle) => (error ? reject(error) : resolve(fileHandle)));
-    }),
-    SFTP_WRITE_STEP_TIMEOUT_MS,
-    `SFTP open timed out after ${SFTP_WRITE_STEP_TIMEOUT_MS}ms while writing ${path}.`
-  );
+async function writeBuffer(
+  sftp: SFTPWrapper,
+  path: string,
+  content: Buffer,
+  mode?: number
+): Promise<void> {
+  const handle = await openWriteHandle(sftp, path, mode);
   let failed = false;
   try {
     const chunks: Array<{ position: number; length: number }> = [];
@@ -641,6 +741,39 @@ async function writeBuffer(sftp: SFTPWrapper, path: string, content: Buffer): Pr
         `SFTP close timed out after ${SFTP_WRITE_STEP_TIMEOUT_MS}ms while writing ${path}.`
       );
     }
+  }
+}
+
+/**
+ * Opens a write handle, optionally forcing a permission mask. Some SFTP servers reject
+ * OPEN attributes outright, so the fallback opens normally and calls chmod before any
+ * content is written; that keeps the protected window as small as the protocol allows.
+ */
+async function openWriteHandle(sftp: SFTPWrapper, path: string, mode?: number): Promise<Buffer> {
+  const handle = await withTimeout(
+    new Promise<Buffer>((resolve, reject) => {
+      sftp.open(path, 'w', (error, fileHandle) => (error ? reject(error) : resolve(fileHandle)));
+    }),
+    SFTP_WRITE_STEP_TIMEOUT_MS,
+    `SFTP open timed out after ${SFTP_WRITE_STEP_TIMEOUT_MS}ms while writing ${path}.`
+  );
+  if (mode === undefined || typeof sftp.chmod !== 'function') {
+    return handle;
+  }
+  try {
+    // chmod before any bytes are written: the empty temp file has no secrets to leak while
+    // the default umask still applies.
+    await withTimeout(
+      new Promise<void>((resolve, reject) => {
+        sftp.chmod(path, mode, (error) => (error ? reject(error) : resolve()));
+      }),
+      SFTP_WRITE_STEP_TIMEOUT_MS,
+      `SFTP chmod timed out after ${SFTP_WRITE_STEP_TIMEOUT_MS}ms while writing ${path}.`
+    );
+    return handle;
+  } catch (error) {
+    await closeRemoteHandle(sftp, handle).catch(() => undefined);
+    throw error;
   }
 }
 

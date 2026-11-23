@@ -28,7 +28,7 @@ Generated files:
 Install the MCP build:
 
 ```powershell
-code --install-extension .\at-terminal-mcp-0.3.5.vsix
+code --install-extension .\at-terminal-mcp-0.3.6.vsix
 ```
 
 For Kiro and Cursor, install the VSIX through the IDE's extension UI or compatible command-line installer.
@@ -112,6 +112,7 @@ If you add write tools to `autoApprove`, AT Terminal MCP still applies its own w
 [
   "run_remote_command",
   "sftp_write_file",
+  "sftp_edit_file",
   "sftp_create_file",
   "sftp_create_directory"
 ]

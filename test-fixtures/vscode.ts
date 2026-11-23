@@ -54,6 +54,10 @@ export class Uri {
   }
 
   static parse(value: string): Uri {
+    const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$/.exec(value);
+    if (schemeMatch && schemeMatch[1] !== 'file') {
+      return new Uri(schemeMatch[2], schemeMatch[1], schemeMatch[2]);
+    }
     const withoutScheme = value.replace(/^file:\/\//, '');
     return new Uri(decodeURIComponent(withoutScheme));
   }

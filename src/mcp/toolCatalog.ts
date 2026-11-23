@@ -151,7 +151,7 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
     name: 'sftp_write_file',
     title: 'SFTP Write File',
     description:
-      `Write UTF-8 text to a remote file after AT Terminal write authorization. ${WRITE_AUTHORIZATION_NOTE}`,
+      `Write UTF-8 text to a remote file after AT Terminal write authorization. Pass expectedSize/expectedModifiedAt (from sftp_stat_path or sftp_read_file) to refuse overwriting a file that changed meanwhile. Pass localPath to stream a host-side file instead of content, so large files never enter model context; sensitive host credential paths are refused. ${WRITE_AUTHORIZATION_NOTE}`,
     risk: 'write',
     inputSchema: {
       type: 'object',
@@ -159,14 +159,61 @@ export const AT_TERMINAL_TOOL_CATALOG: ToolCatalogEntry[] = [
         ...pathProperties,
         content: {
           type: 'string',
-          description: 'UTF-8 file content.'
+          description: 'UTF-8 file content. Omit when using localPath.'
         },
         overwrite: {
           type: 'boolean',
           description: 'Set true to replace an existing file.'
+        },
+        expectedSize: {
+          type: 'number',
+          description: 'Optional optimistic lock: required remote size in bytes. Fails if the file changed.'
+        },
+        expectedModifiedAt: {
+          type: 'number',
+          description: 'Optional optimistic lock: required remote mtime (epoch milliseconds). Fails if the file changed.'
+        },
+        localPath: {
+          type: 'string',
+          description:
+            'Optional path to a file on the machine running the IDE. The host streams it to the remote path; its bytes are never returned to the model.'
         }
       },
-      required: ['path', 'content']
+      required: ['path']
+    }
+  },
+  {
+    name: 'sftp_edit_file',
+    title: 'SFTP Edit File',
+    description:
+      `Replace a literal string in an existing remote file through AT Terminal SFTP, without rewriting the whole file from the model. Fails when oldText is missing or matches more than once unless replaceAll is true. expectedSize/expectedModifiedAt provide optimistic locking; the version is checked again immediately before the write. ${WRITE_AUTHORIZATION_NOTE}`,
+    risk: 'write',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...pathProperties,
+        oldText: {
+          type: 'string',
+          description: 'Literal text to replace.'
+        },
+        newText: {
+          type: 'string',
+          description: 'Replacement text.'
+        },
+        expectedSize: {
+          type: 'number',
+          description: 'Optional optimistic lock: required remote size in bytes.'
+        },
+        expectedModifiedAt: {
+          type: 'number',
+          description: 'Optional optimistic lock: required remote mtime (epoch milliseconds).'
+        },
+        replaceAll: {
+          type: 'boolean',
+          description: 'Replace every occurrence instead of requiring a unique match.'
+        }
+      },
+      required: ['path', 'oldText', 'newText']
     }
   },
   {

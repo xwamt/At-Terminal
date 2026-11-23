@@ -241,6 +241,12 @@ export const TERMINAL_AUTO_RECONNECT_MAX_ATTEMPTS = 3;
 export const TERMINAL_AUTO_RECONNECT_BASE_DELAY_MS = 1_000;
 
 /**
+ * Idle sessions are checked on a fixed cadence instead of resetting one timeout per output
+ * packet: a chatty `tail -f` would otherwise clear/arm a timer hundreds of times per second.
+ */
+export const TERMINAL_IDLE_CHECK_INTERVAL_MS = 30_000;
+
+/**
  * ssh2 reports a rejected host key as a handshake failure. Retrying cannot succeed until the
  * user trusts or forgets the key, so auto-reconnect must stop instead of re-prompting.
  */
@@ -257,7 +263,9 @@ export class TerminalPanel {
   private connected = false;
   private disposed = false;
   private connectionGeneration = 0;
-  private idleDisconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Last time bytes moved either direction or the user typed/resized. */
+  private lastActivityAt = Date.now();
+  private idleDisconnectTimer: ReturnType<typeof setInterval> | undefined;
   private outputBatcher: TerminalOutputBatcher | undefined;
   private flowController: TerminalFlowController | undefined;
   private readonly sessionLog: SessionLogWriter | undefined;
@@ -346,6 +354,7 @@ export class TerminalPanel {
       this.connected = true;
       this.userDisconnected = false;
       this.autoReconnectAttempts = 0;
+      this.lastActivityAt = Date.now();
       // publishContext (not markConnected): markConnected no-ops when the terminal is not
       // in the registry yet, leaving MCP tools blind to a live UI connection.
       this.publishContext();
@@ -378,6 +387,7 @@ export class TerminalPanel {
       }
       this.connected = true;
       this.autoReconnectAttempts = 0;
+      this.lastActivityAt = Date.now();
       this.publishContext();
       this.scheduleIdleDisconnect();
     } catch (error) {
@@ -431,6 +441,7 @@ export class TerminalPanel {
         return;
       }
       if (handleTerminalMessage(message, this.session)) {
+        this.lastActivityAt = Date.now();
         this.scheduleIdleDisconnect();
       }
     });
@@ -475,6 +486,9 @@ export class TerminalPanel {
       this.configManager,
       {
         output: (data) => {
+          // Remote output is activity too: `tail -f`, a long build or a database backup
+          // must not be killed just because the user is only watching, not typing.
+          this.lastActivityAt = Date.now();
           this.sessionLog?.append(data);
           outputBatcher.push(data);
         },
@@ -564,13 +578,18 @@ export class TerminalPanel {
     if (!this.connected || this.settings.idleDisconnectMinutes <= 0) {
       return;
     }
-    this.idleDisconnectTimer = setTimeout(() => {
+    const thresholdMs = this.settings.idleDisconnectMinutes * 60_000;
+    this.idleDisconnectTimer = setInterval(() => {
+      if (Date.now() - this.lastActivityAt < thresholdMs) {
+        return;
+      }
       const message = t('Disconnected after {minutes} minute(s) of inactivity.', {
         minutes: this.settings.idleDisconnectMinutes
       });
       this.disconnectWithStatus(message, message);
       showTimedNotification(message, 'warning');
-    }, this.settings.idleDisconnectMinutes * 60_000);
+    }, TERMINAL_IDLE_CHECK_INTERVAL_MS);
+    this.idleDisconnectTimer.unref?.();
   }
 
   private clearIdleDisconnect(): void {

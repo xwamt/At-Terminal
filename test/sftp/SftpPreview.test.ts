@@ -5,7 +5,9 @@ import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
 import * as vscode from 'vscode';
 import {
+  PREVIEW_MAX_BYTES,
   SFTP_PREVIEW_SCHEME,
+  SftpPreviewCancelledError,
   SftpPreviewDocumentStore,
   openRemotePreviewFile,
   safePreviewDocumentName
@@ -41,6 +43,80 @@ describe('SftpPreview', () => {
 
       await previewStore.deletePreviewFile(previewUri);
       expect(existsSync(downloadedLocalPath)).toBe(false);
+    } finally {
+      await rm(storagePath, { recursive: true, force: true });
+    }
+  });
+
+
+  it('asks before downloading an oversized preview and does not download when cancelled', async () => {
+    const storagePath = await mkdtemp(join(tmpdir(), 'sftp-preview-large-'));
+    const previewStore = new SftpPreviewDocumentStore();
+    const downloadFile = vi.fn();
+    const confirmOpen = vi.fn(async () => false);
+
+    try {
+      await expect(
+        openRemotePreviewFile({
+          storageUri: vscode.Uri.file(storagePath),
+          remotePath: '/var/log/huge.log',
+          previewStore,
+          downloadFile,
+          statFile: async () => ({ size: PREVIEW_MAX_BYTES + 1 }),
+          confirmOpen,
+          openUri: async () => undefined
+        })
+      ).rejects.toBeInstanceOf(SftpPreviewCancelledError);
+      expect(confirmOpen).toHaveBeenCalledWith('/var/log/huge.log', PREVIEW_MAX_BYTES + 1, PREVIEW_MAX_BYTES);
+      expect(downloadFile).not.toHaveBeenCalled();
+    } finally {
+      await rm(storagePath, { recursive: true, force: true });
+    }
+  });
+
+  it('asks before previewing a binary archive even when it is small', async () => {
+    const storagePath = await mkdtemp(join(tmpdir(), 'sftp-preview-binary-'));
+    const previewStore = new SftpPreviewDocumentStore();
+    const downloadFile = vi.fn();
+    const confirmOpen = vi.fn(async () => false);
+
+    try {
+      await expect(
+        openRemotePreviewFile({
+          storageUri: vscode.Uri.file(storagePath),
+          remotePath: '/srv/app/backup.tar.gz',
+          previewStore,
+          downloadFile,
+          statFile: async () => ({ size: 1024 }),
+          confirmOpen,
+          openUri: async () => undefined
+        })
+      ).rejects.toBeInstanceOf(SftpPreviewCancelledError);
+      expect(downloadFile).not.toHaveBeenCalled();
+    } finally {
+      await rm(storagePath, { recursive: true, force: true });
+    }
+  });
+
+  it('downloads normally when the user confirms a large preview', async () => {
+    const storagePath = await mkdtemp(join(tmpdir(), 'sftp-preview-confirm-'));
+    const previewStore = new SftpPreviewDocumentStore();
+    const downloadFile = vi.fn(async (_remotePath: string, localPath: string) => {
+      await writeFile(localPath, 'large but confirmed\n');
+    });
+
+    try {
+      const uri = await openRemotePreviewFile({
+        storageUri: vscode.Uri.file(storagePath),
+        remotePath: '/var/log/huge.log',
+        previewStore,
+        downloadFile,
+        statFile: async () => ({ size: PREVIEW_MAX_BYTES + 1 }),
+        confirmOpen: async () => true,
+        openUri: async () => undefined
+      });
+      expect(uri.scheme).toBe(SFTP_PREVIEW_SCHEME);
+      expect(downloadFile).toHaveBeenCalledTimes(1);
     } finally {
       await rm(storagePath, { recursive: true, force: true });
     }

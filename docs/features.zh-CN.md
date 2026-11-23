@@ -66,7 +66,8 @@ AT Terminal MCP 通过共享 **AT Series** hub（`~/.at-series/mcp/hub.js`）发
 | `sftp_list_directory` | 只读 | 通过已连接的 AT Terminal SFTP 会话列出远程目录。最多返回 `maxEntries` 条（默认 500，硬顶 5000），并带 `truncated`/`total`；`offset` 可对大目录分页。 |
 | `sftp_stat_path` | 只读 | 返回远程文件或目录的元信息。 |
 | `sftp_read_file` | 只读 | 读取有限大小的 UTF-8 远程文本文件；默认 `maxBytes` 65536（硬顶 262144）；`offset` 可续读，负值从文件尾部读取；疑似二进制内容会被拒绝。 |
-| `sftp_write_file` | 写入 | 向远程文件写入 UTF-8 文本；覆盖已有文件需要 `overwrite: true`。 |
+| `sftp_write_file` | 写入 | 向远程文件写入 UTF-8 文本；覆盖已有文件需要 `overwrite: true`。`expectedSize`/`expectedModifiedAt` 提供乐观锁，`localPath` 可直接流式上传宿主文件而不经过模型上下文。 |
+| `sftp_edit_file` | 写入 | 对远程文件做字面量局部替换；写入前会再次校验文件版本。 |
 | `sftp_create_file` | 写入 | 创建远程文件，可选写入 UTF-8 内容。 |
 | `sftp_create_directory` | 写入 | 创建远程目录。 |
 | `sftp_rename` | 写入 | 重命名或移动远程文件/目录；源路径与目标路径都需要写授权。 |

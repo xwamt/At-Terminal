@@ -145,6 +145,54 @@ describe('AgentAuditLog', () => {
     expect(lines).toHaveLength(2);
   });
 
+
+  it('creates the storage directory once for many records', async () => {
+    const { fs, mkdirs } = fakeFs();
+    const { channel } = fakeChannel();
+    const log = new AgentAuditLog({ storageDir: '/s', channel, now: () => 0, fs });
+
+    log.record({ tool: 'a', reasonCode: 'ok' });
+    log.record({ tool: 'b', reasonCode: 'ok' });
+    log.record({ tool: 'c', reasonCode: 'ok' });
+    await log.flush();
+
+    expect(mkdirs).toHaveLength(1);
+  });
+
+  it('rotates the audit file once it would exceed the size cap', async () => {
+    const appended: string[] = [];
+    const renames: Array<[string, string]> = [];
+    const rm = vi.fn(async () => undefined);
+    const fs = {
+      mkdir: vi.fn(async () => undefined),
+      appendFile: vi.fn(async (_path: string, data: string) => {
+        appended.push(data);
+      }),
+      stat: vi.fn(async () => ({ size: 95 })),
+      rename: vi.fn(async (from: string, to: string) => {
+        renames.push([from, to]);
+      }),
+      rm
+    };
+    const { channel } = fakeChannel();
+    const log = new AgentAuditLog({
+      storageDir: '/s',
+      channel,
+      now: () => 0,
+      fs,
+      maxBytes: 100
+    });
+
+    log.record({ tool: 'run_remote_command', reasonCode: 'ok' });
+    await log.flush();
+
+    expect(rm).toHaveBeenCalledWith(expect.stringContaining('agent-audit.jsonl.1'), { force: true });
+    expect(renames).toHaveLength(1);
+    expect(renames[0][0]).toContain('agent-audit.jsonl');
+    expect(renames[0][1]).toContain('agent-audit.jsonl.1');
+    expect(appended).toHaveLength(1);
+  });
+
   it('dispose forwards to the channel', () => {
     const { channel, dispose } = fakeChannel();
     const log = new AgentAuditLog({ storageDir: '/s', channel, now: () => 0, fs: fakeFs().fs });

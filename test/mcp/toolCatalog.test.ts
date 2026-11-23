@@ -6,15 +6,16 @@ describe('toolCatalog', () => {
     expect(AT_TERMINAL_PLUGIN_ID).toBe('at.terminal');
   });
 
-  it('declares risk for all eleven tools', () => {
+  it('declares risk for all twelve tools', () => {
     const byName = Object.fromEntries(AT_TERMINAL_TOOL_CATALOG.map((t) => [t.name, t.risk]));
-    expect(AT_TERMINAL_TOOL_CATALOG).toHaveLength(11);
+    expect(AT_TERMINAL_TOOL_CATALOG).toHaveLength(12);
     expect(byName.list_ssh_servers).toBe('read');
     expect(byName.get_terminal_context).toBe('read');
     expect(byName.sftp_list_directory).toBe('read');
     expect(byName.sftp_stat_path).toBe('read');
     expect(byName.sftp_read_file).toBe('read');
     expect(byName.sftp_write_file).toBe('write');
+    expect(byName.sftp_edit_file).toBe('write');
     expect(byName.sftp_create_file).toBe('write');
     expect(byName.sftp_create_directory).toBe('write');
     expect(byName.sftp_rename).toBe('write');
@@ -102,7 +103,7 @@ describe('toolCatalog', () => {
   it('tells the caller that write authorization is per directory, not per server', () => {
     const writeTools = AT_TERMINAL_TOOL_CATALOG.filter((tool) => tool.risk === 'write');
 
-    expect(writeTools).toHaveLength(5);
+    expect(writeTools).toHaveLength(6);
     for (const tool of writeTools) {
       expect(tool.description).toContain('directory');
       expect(tool.description).toContain('sensitive');

@@ -37,12 +37,23 @@ describe('SftpDragAndDropController conflict handling', () => {
     vi.restoreAllMocks();
   });
 
-  function makeController(uploadFile: SftpManager['uploadFile']) {
+  function makeController(
+    uploadFile: SftpManager['uploadFile'],
+    uploadDirectory?: SftpManager['uploadDirectory'],
+    onUploaded?: (target?: unknown) => void
+  ) {
     const manager = {
       getState: () => ({ kind: 'active' as const, rootPath: '/root' }),
-      uploadFile
+      uploadFile,
+      uploadDirectory
     } as unknown as SftpManager;
-    return { controller: new SftpDragAndDropController(manager), manager };
+    return {
+      controller: new SftpDragAndDropController(manager, {
+        statFile: async () => ({ isDirectory: () => false }),
+        onUploaded
+      }),
+      manager
+    };
   }
 
   function dropTransfer(...uris: string[]) {
@@ -107,6 +118,41 @@ describe('SftpDragAndDropController conflict handling', () => {
     expect(uploadFile).toHaveBeenLastCalledWith('/home/alan/b.txt', '/root/b.txt', undefined, {
       overwrite: true
     });
+  });
+
+
+  it('uploads a dragged local directory recursively and refreshes the view', async () => {
+    const uploadFile = vi.fn<SftpManager['uploadFile']>();
+    const uploadDirectory = vi.fn<SftpManager['uploadDirectory']>().mockResolvedValue(undefined);
+    const onUploaded = vi.fn();
+    const manager = {
+      getState: () => ({ kind: 'active' as const, rootPath: '/root' }),
+      uploadFile,
+      uploadDirectory
+    } as unknown as SftpManager;
+    const controller = new SftpDragAndDropController(manager, {
+      statFile: async () => ({ isDirectory: () => true }),
+      onUploaded
+    });
+
+    await controller.handleDrop(undefined, dropTransfer('file:///home/alan/project'), {} as never);
+
+    expect(uploadDirectory).toHaveBeenCalledWith('/home/alan/project', '/root/project', undefined, {
+      overwrite: false
+    });
+    expect(uploadFile).not.toHaveBeenCalled();
+    expect(onUploaded).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips non-file URIs with a notice instead of trying to read them from disk', async () => {
+    const uploadFile = vi.fn<SftpManager['uploadFile']>();
+    const warn = vi.spyOn(vscode.window, 'showWarningMessage').mockResolvedValue(undefined as never);
+    const { controller } = makeController(uploadFile);
+
+    await controller.handleDrop(undefined, dropTransfer('untitled:Untitled-1'), {} as never);
+
+    expect(uploadFile).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('Only local files and folders can be uploaded.');
   });
 
   it('still rethrows non-conflict upload failures', async () => {

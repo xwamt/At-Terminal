@@ -8,7 +8,7 @@ import { isSensitiveRemotePath, isWithinRemoteDirectory, normalizeRemoteDirector
 export type SftpWriteScope = 'once' | 'directory' | 'session';
 
 export interface SftpWriteRequest {
-  operation: 'write_file' | 'create_file' | 'create_directory' | 'rename' | 'delete_file';
+  operation: 'write_file' | 'edit_file' | 'create_file' | 'create_directory' | 'rename' | 'delete_file';
   path: string;
   overwrite: boolean;
   /** `realpath('.')` of the SFTP session, i.e. the directory the user actually opened. */

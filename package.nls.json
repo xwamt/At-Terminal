@@ -44,5 +44,6 @@
   "atTerminal.config.idleDisconnectMinutes.description": "Disconnect idle SSH terminals after this many minutes. Set 0 to disable.",
   "atTerminal.config.keepAliveInterval.description": "SSH keep-alive interval in seconds. Set 0 to disable.",
   "atTerminal.config.zebraStripes.description": "Render alternating row backgrounds (zebra stripes) in the SSH terminal. Off by default.",
-  "atTerminal.config.sessionLogDirectory.description": "Directory where SSH session output logs are written. Leave empty to disable session logging."
+  "atTerminal.config.sessionLogDirectory.description": "Directory where SSH session output logs are written. Leave empty to disable session logging.",
+  "atTerminal.command.managePortForwards.title": "Manage Port Forwards"
 }

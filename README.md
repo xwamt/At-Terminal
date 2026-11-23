@@ -72,7 +72,7 @@ MCP 客户端只配置一条 **AT Series** 入口（`node ~/.at-series/mcp/hub.j
 从 **0.3.0** 起，共享 MCP Hub 已从本插件仓库拆分为独立开源包 [`@at-series/mcp-hub`](https://www.npmjs.com/package/@at-series/mcp-hub)：
 
 - **职责边界**：Hub 负责 AT Series 入口聚合、安装器与协议类型；本仓库只保留 AT Terminal 扩展、Bridge 发布与按需同步 `hub.js`。
-- **依赖方式**：通过 npm 公开 registry 声明依赖（当前 `^0.3.2`）。执行 `npm install` 即可拉取，**不再**需要克隆 Hub 仓库，也**不再**使用 `file:` 本地链接。
+- **依赖方式**：通过 npm 公开 registry 声明依赖（当前 `^0.3.4`）。执行 `npm install` 即可拉取，**不再**需要克隆 Hub 仓库，也**不再**使用 `file:` 本地链接。
 - **打包行为**：`npm run build:mcp` / `package:mcp` 会把已发布 Hub 中的运行时复制为 `dist/hub.js`，并写入 `dist/hub-version.json` 供选举同步使用。
 
 架构说明见 [ADR-004](docs/decisions/ADR-004-at-series-mcp-hub.md) 与 [ADR-005](docs/decisions/ADR-005-at-series-hub-adaptation.md)。
@@ -107,13 +107,13 @@ npm run package:mcp
 打包成功后，项目根目录会生成类似下面的文件：
 
 ```textile
-at-terminal-mcp-0.3.5.vsix
+at-terminal-mcp-0.3.6.vsix
 ```
 
 生成 .vsix 后，可以在 VS Code / Cursor / Kiro 等兼容 VS Code 插件的 IDE 中通过“从 VSIX 安装”安装，也可以使用命令行安装
 
 ```bash
-code --install-extension at-terminal-mcp-0.3.5.vsix
+code --install-extension at-terminal-mcp-0.3.6.vsix
 #如果安装基础版，则把文件名替换为实际生成的 at-terminal-*.vsix。
 ```
 
@@ -154,13 +154,14 @@ code --install-extension at-terminal-mcp-0.3.5.vsix
 | SSH 服务器管理 | 添加、编辑、删除、分组展示服务器配置，支持复制连接信息。                   |
 | SSH 连接    | 支持密码认证、私钥认证、keep-alive、断开、重连和独立终端标签页。          |
 | 主机信任      | 首次连接确认主机指纹，已信任主机指纹变化时阻止连接。                     |
-| 跳板机       | 服务器配置可引用 jump host，通过跳板机转发连接目标服务器。             |
+| 跳板机       | 服务器配置可引用 jump host，支持多级跳板链（最多 4 级）、连接复用与环路检测。 |
+| 本地端口转发    | 支持单服务器同时开启多条本地端口转发，状态栏可查看/停止，SSH 断开自动清理。 |
 | Web 终端    | 基于 xterm.js 渲染终端，支持窗口尺寸同步、主题适配、链接识别和语义高亮。      |
 | SFTP 文件视图 | 跟随当前活动 SSH 终端，连接后加载远程登录目录。                     |
 | SFTP 文件操作 | 浏览、刷新、跳转路径、返回父目录、上传文件、下载文件、新建、重命名、删除、复制远程路径。   |
-| 拖拽上传      | 支持从 VS Code Explorer 拖拽本地文件到 SFTP 视图上传。        |
-| 远程预览      | 远程文件可通过预览命令打开，不需要手动下载到用户指定位置。                  |
+| 拖拽上传      | 支持从 VS Code Explorer 拖拽本地文件或文件夹（递归）到 SFTP 视图上传，完成后自动刷新。 |
+| 远程预览      | 远程文件可通过预览命令打开；大文件或二进制文件打开前会提示确认。 |
 | 远程文件本地编辑  | 使用 SFTP: Edit 下载远程文件到本地编辑器，保存后上传同步。            |
 | 保存同步保护    | 首次自动同步需要用户确认；同步前检测远程文件是否变化；上传后校验远程内容。          |
 | 资产导入导出    | 通过加密 .at-terminal-assets 包迁移服务器配置、可选密码和可选私钥文件。 |
-| Agent 工具  | MCP 版提供远程命令、SFTP 读取和 SFTP 写入等工具调用能力。           |
+| Agent 工具  | MCP 版提供远程命令、SFTP 读取/写入、局部编辑（版本锁）等工具调用能力。 |

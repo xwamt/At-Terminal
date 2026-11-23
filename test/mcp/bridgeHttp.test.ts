@@ -15,14 +15,15 @@ interface RunningBridge {
   token: string;
 }
 
-async function startBridge(): Promise<RunningBridge> {
+async function startBridge(serviceOverrides: Record<string, unknown> = {}): Promise<RunningBridge> {
   const home = await mkdtemp(join(tmpdir(), 'at-terminal-bridge-http-'));
   tempRoots.push(home);
   const server = new BridgeServer({
     service: {
       listServers: async () => ({ servers: [] }),
       getTerminalContext: async () => ({ connectedTerminals: [], knownTerminals: [] }),
-      runRemoteCommand: vi.fn()
+      runRemoteCommand: vi.fn(),
+      ...serviceOverrides
     } as never,
     home,
     hostApp: 'cursor',
@@ -142,6 +143,44 @@ describe('bridge HTTP transport', () => {
     );
 
     expect(status).toBe(413);
+  });
+
+
+  it('aborts the in-flight tool when the HTTP client disconnects', async () => {
+    let observedSignal: AbortSignal | undefined;
+    const runRemoteCommand = vi.fn(
+      (input: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          observedSignal = input.signal;
+          input.signal?.addEventListener('abort', () => reject(new Error('Remote command was cancelled.')), {
+            once: true
+          });
+        })
+    );
+    const bridge = await startBridge({ runRemoteCommand });
+
+    const clientRequest = httpRequest({
+      host: '127.0.0.1',
+      port: bridge.port,
+      method: 'POST',
+      path: '/invoke',
+      headers: {
+        'content-type': 'application/json',
+        [AT_SERIES_TOKEN_HEADER]: bridge.token
+      }
+    });
+    requests.push(clientRequest);
+    clientRequest.on('error', () => undefined);
+    clientRequest.end(
+      JSON.stringify({ name: 'run_remote_command', arguments: { command: 'sleep 60' } })
+    );
+
+    await vi.waitFor(() => expect(observedSignal).toBeDefined());
+    expect(observedSignal!.aborted).toBe(false);
+
+    clientRequest.destroy();
+
+    await vi.waitFor(() => expect(observedSignal!.aborted).toBe(true));
   });
 
   it('bounds how long a caller may hold a socket open', () => {

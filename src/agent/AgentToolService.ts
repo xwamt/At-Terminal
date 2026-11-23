@@ -23,6 +23,8 @@ export interface RunRemoteCommandInput {
   cwd?: string;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  /** Aborted when the MCP client disconnects or the user presses Stop. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -98,10 +100,14 @@ export class AgentToolService {
         );
         let answer: string | undefined;
         try {
-          answer = await withTimeout(
-            confirmation,
-            CONFIRMATION_TIMEOUT_MS,
-            'Confirmation timed out; ask the user to approve the command dialog in the IDE, then retry.'
+          answer = await withAbort(
+            withTimeout(
+              confirmation,
+              CONFIRMATION_TIMEOUT_MS,
+              'Confirmation timed out; ask the user to approve the command dialog in the IDE, then retry.'
+            ),
+            input.signal,
+            'Remote command was cancelled.'
           );
         } catch (error) {
           // VS Code cannot dismiss the modal; a click after the timeout must not look
@@ -127,7 +133,8 @@ export class AgentToolService {
         command,
         cwd: input.cwd,
         timeoutMs: input.timeoutMs,
-        maxOutputBytes: input.maxOutputBytes
+        maxOutputBytes: input.maxOutputBytes,
+        signal: input.signal
       });
       this.dependencies.audit?.record({
         tool: 'run_remote_command',
@@ -179,10 +186,26 @@ export class AgentToolService {
     terminalId?: string;
     serverId?: string;
     path: string;
-    content: string;
+    content?: string;
     overwrite?: boolean;
+    expectedSize?: number;
+    expectedModifiedAt?: number;
+    localPath?: string;
   }) {
     return await this.requireSftp().writeFile(input);
+  }
+
+  async sftpEditFile(input: {
+    terminalId?: string;
+    serverId?: string;
+    path: string;
+    oldText: string;
+    newText: string;
+    expectedSize?: number;
+    expectedModifiedAt?: number;
+    replaceAll?: boolean;
+  }) {
+    return await this.requireSftp().editFile(input);
   }
 
   async sftpCreateFile(input: { terminalId?: string; serverId?: string; path: string; content?: string }) {
@@ -288,4 +311,35 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: s
       clearTimeout(timer);
     }
   }
+}
+
+/**
+ * Settles as soon as `signal` aborts, so a confirmation dialog the AI client has already
+ * cancelled cannot keep the tool call parked until the 2-minute confirmation timeout.
+ */
+function withAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined, message: string): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(new Error(message));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      cleanup();
+      reject(new Error(message));
+    };
+    const cleanup = (): void => signal.removeEventListener('abort', onAbort);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        cleanup();
+        reject(error);
+      }
+    );
+  });
 }

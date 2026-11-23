@@ -17,6 +17,7 @@ import { formatError } from '../utils/errors';
 import {
   sftpCreateFileBridgeSchema,
   sftpDeleteBridgeSchema,
+  sftpEditFileBridgeSchema,
   sftpListDirectoryBridgeSchema,
   sftpPathBridgeSchema,
   sftpReadFileBridgeSchema,
@@ -62,6 +63,8 @@ export interface BridgeRequest {
   path: string;
   headers: Record<string, string | string[] | undefined>;
   body?: string;
+  /** Aborted when the HTTP client disconnects before the response is complete. */
+  signal?: AbortSignal;
 }
 
 export interface BridgeResponse {
@@ -217,7 +220,7 @@ export function createBridgeRequestHandler(dependencies: BridgeHandlerDependenci
       }
 
       if (path === '/invoke' && method === 'POST') {
-        return await handleInvoke(dependencies, request.body);
+        return await handleInvoke(dependencies, request.body, request.signal);
       }
 
       if (method !== 'GET' && method !== 'POST') {
@@ -258,7 +261,8 @@ async function buildHealthResponse(
 
 async function handleInvoke(
   dependencies: BridgeHandlerDependencies,
-  body: string | undefined
+  body: string | undefined,
+  signal?: AbortSignal
 ): Promise<BridgeResponse> {
   let raw: unknown = {};
   if (body) {
@@ -285,7 +289,7 @@ async function handleInvoke(
   const args = (raw as { arguments: Record<string, unknown> }).arguments;
 
   try {
-    const result = await dispatchTool(dependencies.service, name, args);
+    const result = await dispatchTool(dependencies.service, name, args, signal);
     if (!result.ok) {
       return result.response;
     }
@@ -307,7 +311,8 @@ const USER_CANCELLED_MESSAGES = new Set([
 async function dispatchTool(
   service: AgentToolService,
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<{ ok: true; value: unknown } | { ok: false; response: BridgeResponse }> {
   switch (name) {
     case 'list_ssh_servers':
@@ -328,7 +333,7 @@ async function dispatchTool(
       }
       return {
         ok: true,
-        value: await service.runRemoteCommand({ ...parsed.data, command })
+        value: await service.runRemoteCommand({ ...parsed.data, command, signal })
       };
     }
     case 'sftp_list_directory': {
@@ -358,6 +363,13 @@ async function dispatchTool(
         return { ok: false, response: bridgeError(422, 'VALIDATION_ERROR', parsed.error) };
       }
       return { ok: true, value: await service.sftpWriteFile(parsed.data) };
+    }
+    case 'sftp_edit_file': {
+      const parsed = parseArgsWithSchema(args, sftpEditFileBridgeSchema);
+      if (!parsed.ok) {
+        return { ok: false, response: bridgeError(422, 'VALIDATION_ERROR', parsed.error) };
+      }
+      return { ok: true, value: await service.sftpEditFile(parsed.data) };
     }
     case 'sftp_create_file': {
       const parsed = parseArgsWithSchema(args, sftpCreateFileBridgeSchema);
@@ -513,6 +525,14 @@ async function handleNodeRequest(
   response: ServerResponse,
   token: string
 ): Promise<void> {
+  // An MCP client pressing Stop closes the HTTP request before the tool finishes. Abort
+  // the in-flight tool so the remote command is terminated instead of running to timeout.
+  const controller = new AbortController();
+  response.once('close', () => {
+    if (!response.writableEnded) {
+      controller.abort();
+    }
+  });
   try {
     // Headers are enough to authenticate, so answering here keeps an unauthenticated
     // caller from making the extension host buffer BRIDGE_MAX_BODY_BYTES per socket.
@@ -543,7 +563,8 @@ async function handleNodeRequest(
       method: request.method ?? 'GET',
       path: request.url ?? '/',
       headers: request.headers,
-      body: limited.body
+      body: limited.body,
+      signal: controller.signal
     });
     response.statusCode = result.status;
     response.setHeader('content-type', 'application/json; charset=utf-8');

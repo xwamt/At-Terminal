@@ -1,20 +1,17 @@
-import type { Client, ClientChannel } from 'ssh2';
+import type { ClientChannel } from 'ssh2';
 import type { ConfigManager } from '../config/ConfigManager';
 import type { ServerConfig } from '../config/schema';
 import { quotePosixShellPath } from '../sftp/RemotePath';
-import { attachKeyboardInteractive } from '../ssh/KeyboardInteractive';
-import { getSsh2 } from '../ssh/ssh2Loader';
-import {
-  buildSshConnectionHandle,
-  type HostKeyVerifier,
-  type SshConnectionHandle
-} from '../ssh/SshConnectionConfig';
+import type { HostKeyVerifier } from '../ssh/SshConnectionConfig';
+import { AgentSshClientPool, type AgentSshClientLease } from './AgentSshClientPool';
 
 export interface RemoteCommandRequest {
   command: string;
   cwd?: string;
   timeoutMs?: number;
   maxOutputBytes?: number;
+  /** Aborted when the MCP client disconnects or the user presses Stop. */
+  signal?: AbortSignal;
 }
 
 export interface RemoteCommandResult {
@@ -38,57 +35,29 @@ const DEFAULT_MAX_OUTPUT_BYTES = 64_000;
 const MAX_OUTPUT_BYTES = 256_000;
 
 /**
- * How long a pooled connection may sit unused before it is closed. Long enough to cover
- * the pauses in a conversation with an agent, short enough that an abandoned chat does
- * not hold a server-side session all day.
- */
-const IDLE_CONNECTION_TTL_MS = 5 * 60_000;
-
-class PooledConnection {
-  /** Resolves once the connection is authenticated; rejects if it never got there. */
-  readonly ready: Promise<Client>;
-  client: Client | undefined;
-  handle: SshConnectionHandle | undefined;
-  /** Commands currently holding a channel on this connection. */
-  inFlight = 0;
-  idleTimer: ReturnType<typeof setTimeout> | undefined;
-  closed = false;
-
-  constructor(open: (connection: PooledConnection) => Promise<Client>) {
-    this.ready = open(this);
-  }
-}
-
-interface ConnectionLease {
-  client: Client;
-  release(): void;
-}
-
-/**
  * Runs agent commands over SSH, reusing one connection per server.
  *
  * A fresh TCP + KEX + auth round trip per command costs a few hundred milliseconds each
  * (more with a jump host, which needs a second connection), which an agent firing a
- * dozen commands pays over and over. Connections are therefore keyed by `serverId` and
- * kept until they go idle, drop, or the extension shuts down.
+ * dozen commands pays over and over. The underlying {@link AgentSshClientPool} is shared
+ * with the background SFTP tools so a mixed conversation authenticates once, not twice.
  *
  * Concurrent commands on one server share the connection and open a channel each, which
  * is what SSH multiplexing is for; queueing them behind a single channel would serialize
  * an agent that legitimately fans out. A server whose `MaxSessions` is exhausted fails
  * that one `exec` rather than the whole connection.
- *
- * Reusing the `Client` behind an open terminal session would save one more connection,
- * but it would put the agent's commands at the mercy of the user closing that panel, so
- * the agent keeps its own.
  */
 export class RemoteCommandExecutor {
-  private readonly pool = new Map<string, PooledConnection>();
+  private readonly pool: AgentSshClientPool;
   private disposed = false;
 
   constructor(
     private readonly configManager: ConfigManager,
-    private readonly hostKeyVerifier: HostKeyVerifier
-  ) {}
+    private readonly hostKeyVerifier: HostKeyVerifier,
+    pool?: AgentSshClientPool
+  ) {
+    this.pool = pool ?? new AgentSshClientPool(configManager, hostKeyVerifier);
+  }
 
   async execute(server: ServerConfig, request: RemoteCommandRequest): Promise<RemoteCommandResult> {
     const command = request.command.trim();
@@ -107,7 +76,7 @@ export class RemoteCommandExecutor {
     return new Promise<RemoteCommandResult>((resolve, reject) => {
       const stdout = new OutputBuffer(maxOutputBytes);
       const stderr = new OutputBuffer(maxOutputBytes);
-      let lease: ConnectionLease | undefined;
+      let lease: AgentSshClientLease | undefined;
       // Armed before acquisition so the caller's timeout still covers a connection that
       // never comes up, not just a command that never returns.
       const timeout = setTimeout(() => {
@@ -116,11 +85,24 @@ export class RemoteCommandExecutor {
         finish(null);
       }, timeoutMs);
 
+      const onAbort = (): void => {
+        // Ask the remote side to terminate first; closing the channel alone can leave an
+        // interactive command or its children running server-side.
+        try {
+          stream?.signal('TERM');
+        } catch {
+          // The channel may already be gone; closing it below is still correct.
+        }
+        stream?.close();
+        rejectOnce(new Error('Remote command was cancelled.'));
+      };
+
       const onConnectionLost = (error?: Error): void => {
         rejectOnce(error ?? new Error('SSH connection closed before the command finished.'));
       };
       const detach = (): void => {
         clearTimeout(timeout);
+        request.signal?.removeEventListener('abort', onAbort);
         if (!lease) {
           return;
         }
@@ -128,6 +110,13 @@ export class RemoteCommandExecutor {
         lease.client.off('close', onConnectionLost);
         lease.release();
       };
+      if (request.signal) {
+        if (request.signal.aborted) {
+          onAbort();
+        } else {
+          request.signal.addEventListener('abort', onAbort, { once: true });
+        }
+      }
 
       function finish(exitCode: number | null, signal?: string): void {
         if (settled) {
@@ -188,97 +177,22 @@ export class RemoteCommandExecutor {
     });
   }
 
+  /** Closes the pooled connection for one server, e.g. after its configuration changed. */
+  disposeServer(serverId: string): void {
+    this.pool.disposeServer(serverId);
+  }
+
   /** Closes every pooled connection. Must run on extension deactivate. */
   dispose(): void {
     this.disposed = true;
-    for (const [serverId, connection] of [...this.pool]) {
-      this.evict(serverId, connection);
-    }
-    this.pool.clear();
+    this.pool.dispose();
   }
 
-  private async acquire(server: ServerConfig): Promise<ConnectionLease> {
+  private async acquire(server: ServerConfig): Promise<AgentSshClientLease> {
     if (this.disposed) {
       throw new Error('The remote command executor has been disposed.');
     }
-
-    let connection = this.pool.get(server.id);
-    if (!connection || connection.closed) {
-      connection = this.open(server);
-      this.pool.set(server.id, connection);
-    }
-
-    connection.inFlight += 1;
-    if (connection.idleTimer) {
-      clearTimeout(connection.idleTimer);
-      connection.idleTimer = undefined;
-    }
-
-    const held = connection;
-    try {
-      return {
-        client: await held.ready,
-        release: () => this.release(server.id, held)
-      };
-    } catch (error) {
-      this.release(server.id, held);
-      throw error;
-    }
-  }
-
-  private open(server: ServerConfig): PooledConnection {
-    const connection = new PooledConnection(async (self) => {
-      // Pooling reuses an already-verified socket; every connection it opens still goes
-      // through buildSshConnectionHandle, so host key verification is never skipped.
-      const handle = await buildSshConnectionHandle(server, this.configManager, this.hostKeyVerifier);
-      self.handle = handle;
-      const client = new (await getSsh2()).Client();
-      // Each in-flight command attaches its own error/close listeners, so the default
-      // ceiling of 10 would warn once a handful of channels run at once.
-      client.setMaxListeners(64);
-      self.client = client;
-      // A dropped connection must leave the pool, or the next command is handed a dead
-      // client and fails for a reason that has nothing to do with the command.
-      const drop = (): void => this.evict(server.id, self);
-      client.on('error', drop);
-      client.on('close', drop);
-      client.on('end', drop);
-      await new Promise<void>((resolve, reject) => {
-        client.once('ready', resolve);
-        client.once('error', reject);
-        attachKeyboardInteractive(client, undefined, reject);
-        client.connect(handle.config);
-      });
-      return client;
-    });
-    connection.ready.catch(() => this.evict(server.id, connection));
-
-    return connection;
-  }
-
-  private release(serverId: string, connection: PooledConnection): void {
-    connection.inFlight = Math.max(0, connection.inFlight - 1);
-    if (connection.inFlight > 0 || connection.closed || connection.idleTimer) {
-      return;
-    }
-    connection.idleTimer = setTimeout(() => this.evict(serverId, connection), IDLE_CONNECTION_TTL_MS);
-    connection.idleTimer.unref?.();
-  }
-
-  private evict(serverId: string, connection: PooledConnection): void {
-    if (connection.closed) {
-      return;
-    }
-    connection.closed = true;
-    if (connection.idleTimer) {
-      clearTimeout(connection.idleTimer);
-      connection.idleTimer = undefined;
-    }
-    if (this.pool.get(serverId) === connection) {
-      this.pool.delete(serverId);
-    }
-    connection.client?.end();
-    connection.handle?.dispose();
+    return await this.pool.acquire(server);
   }
 }
 
@@ -331,6 +245,34 @@ class OutputBuffer {
   }
 
   text(): string {
-    return Buffer.concat(this.chunks).toString('utf8');
+    const combined = Buffer.concat(this.chunks);
+    return (this.truncated ? alignUtf8Boundary(combined) : combined).toString('utf8');
   }
+}
+
+/**
+ * A hard byte cap can land inside a multi-byte UTF-8 character, which decodes to a
+ * trailing replacement character (U+FFFD). When truncating, walk back over at most three
+ * continuation bytes and drop the whole partial character instead.
+ */
+export function alignUtf8Boundary(buffer: Buffer): Buffer {
+  let index = buffer.length - 1;
+  let continuationBytes = 0;
+  while (index >= 0 && (buffer[index]! & 0xc0) === 0x80 && continuationBytes < 4) {
+    continuationBytes += 1;
+    index -= 1;
+  }
+  if (index < 0) {
+    return buffer.subarray(0, buffer.length - continuationBytes);
+  }
+  const lead = buffer[index]!;
+  const expectedLength =
+    lead < 0x80 ? 1 : lead >= 0xf0 ? 4 : lead >= 0xe0 ? 3 : lead >= 0xc0 ? 2 : 1;
+  if (expectedLength === 1) {
+    return buffer.subarray(0, index + 1);
+  }
+  if (continuationBytes + 1 < expectedLength) {
+    return buffer.subarray(0, index);
+  }
+  return buffer;
 }

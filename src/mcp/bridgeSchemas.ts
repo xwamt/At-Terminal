@@ -60,8 +60,23 @@ export const sftpWriteFileBridgeSchema = z
   .object({
     ...sftpTargetFields,
     path: z.string().min(1),
-    content: z.string(),
-    overwrite: z.boolean().optional()
+    content: z.string().optional(),
+    overwrite: z.boolean().optional(),
+    expectedSize: z.number().int().nonnegative().optional(),
+    expectedModifiedAt: z.number().int().nonnegative().optional(),
+    localPath: z.string().min(1).optional()
+  })
+  .strict();
+
+export const sftpEditFileBridgeSchema = z
+  .object({
+    ...sftpTargetFields,
+    path: z.string().min(1),
+    oldText: z.string().min(1),
+    newText: z.string(),
+    expectedSize: z.number().int().nonnegative().optional(),
+    expectedModifiedAt: z.number().int().nonnegative().optional(),
+    replaceAll: z.boolean().optional()
   })
   .strict();
 

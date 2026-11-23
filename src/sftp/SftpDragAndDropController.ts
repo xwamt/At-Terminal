@@ -2,15 +2,17 @@ import * as vscode from 'vscode';
 import { t } from '../i18n/t';
 import { SftpDirectoryTreeItem, SftpFileTreeItem } from '../tree/SftpTreeItems';
 import type { SftpTreeNode } from '../tree/SftpTreeProvider';
-import { dirname, joinRemotePath, safePreviewName } from './RemotePath';
-import { isSftpConflictError } from './SftpErrors';
+import { dirname } from './RemotePath';
 import type { SftpManager } from './SftpManager';
+import { uploadLocalEntries, type LocalUploadStat } from './SftpUpload';
 
-export function localUploadFileName(localPath: string): string {
-  return localPath.split(/[\\/]/).filter(Boolean).pop() ?? safePreviewName(localPath);
+export { localUploadFileName } from './SftpUpload';
+
+export function collectDraggedUris(dataTransfer: vscode.DataTransfer): Promise<string[]> {
+  return collectDraggedUrisText(dataTransfer);
 }
 
-export async function collectDraggedUris(dataTransfer: vscode.DataTransfer): Promise<string[]> {
+async function collectDraggedUrisText(dataTransfer: vscode.DataTransfer): Promise<string[]> {
   const item = dataTransfer.get('text/uri-list');
   if (!item) {
     return [];
@@ -32,11 +34,25 @@ export function resolveDropTargetPath(
   return target instanceof SftpFileTreeItem ? dirname(target.entry.path) : target.entry.path;
 }
 
+export interface SftpDragAndDropOptions {
+  /** Refresh callback invoked (with the drop target) after at least one entry uploaded. */
+  onUploaded?: (target?: SftpTreeNode) => void;
+  /** Injectable for tests; defaults to `fs.stat`. */
+  statFile?: LocalUploadStat;
+}
+
 export class SftpDragAndDropController implements vscode.TreeDragAndDropController<SftpTreeNode> {
   readonly dropMimeTypes = ['text/uri-list'];
   readonly dragMimeTypes: string[] = [];
 
-  constructor(private readonly manager: SftpManager) {}
+  private readonly options: SftpDragAndDropOptions;
+
+  constructor(
+    private readonly manager: SftpManager,
+    options: SftpDragAndDropOptions | ((target?: SftpTreeNode) => void) = {}
+  ) {
+    this.options = typeof options === 'function' ? { onUploaded: options } : options;
+  }
 
   async handleDrop(
     target: SftpTreeNode | undefined,
@@ -53,34 +69,34 @@ export class SftpDragAndDropController implements vscode.TreeDragAndDropControll
         ? resolveDropTargetPath(target, state.rootPath)
         : state.rootPath;
 
-    // Uploads raise SftpConflictError when the remote name exists, and TransferService
-    // deliberately shows no failure toast for conflicts because the caller is expected
-    // to prompt. Without this prompt a drop onto an existing name would fail silently.
-    let overwriteAll = false;
+    const localPaths: string[] = [];
+    let skippedNonFile = false;
     for (const uri of uris) {
       const localUri = vscode.Uri.parse(uri);
-      const remotePath = joinRemotePath(targetPath, localUploadFileName(localUri.fsPath));
-      try {
-        await this.manager.uploadFile(localUri.fsPath, remotePath, undefined, { overwrite: overwriteAll });
-      } catch (error) {
-        if (!isSftpConflictError(error)) {
-          throw error;
-        }
-        const overwrite = t('Overwrite');
-        const overwriteEverything = t('Overwrite All');
-        const skip = t('Skip');
-        const choice = await vscode.window.showWarningMessage(
-          error.message,
-          { modal: true },
-          overwrite,
-          overwriteEverything,
-          skip
-        );
-        if (choice === overwrite || choice === overwriteEverything) {
-          overwriteAll = choice === overwriteEverything;
-          await this.manager.uploadFile(localUri.fsPath, remotePath, undefined, { overwrite: true });
-        }
+      if (localUri.scheme !== 'file') {
+        skippedNonFile = true;
+        continue;
       }
+      localPaths.push(localUri.fsPath);
+    }
+    if (skippedNonFile) {
+      void vscode.window.showWarningMessage(t('Only local files and folders can be uploaded.'));
+    }
+    if (localPaths.length === 0) {
+      return;
+    }
+
+    const uploaded = await uploadLocalEntries({
+      manager: this.manager,
+      localPaths,
+      targetDirectory: targetPath,
+      statFile: this.options.statFile,
+      // The helper uploads entries one by one; refresh once at the end instead of
+      // rebuilding the tree for every file in a multi-file drop.
+      onUploaded: () => undefined
+    });
+    if (uploaded > 0) {
+      this.options.onUploaded?.(target);
     }
   }
 }

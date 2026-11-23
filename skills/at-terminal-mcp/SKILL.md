@@ -8,7 +8,7 @@ description: >-
 
 # AT Terminal (via AT Series)
 
-MCP entry: **AT Series**. Prefer series skill `super-ops` for Hub discovery. Never read IDE storage, passwords, keys, or bridge tokens.
+MCP entry: **AT Series** (skill `super-ops` for Hub discovery). Never read IDE storage, passwords, keys, or bridge tokens.
 
 **Select:** `at_list_providers` → `at_select_tools({ mode: "replace", pluginIds: ["at.terminal"] })` → refresh `tools/list` → call tools → `at_clear_tool_selection` when done.
 
@@ -24,8 +24,8 @@ journalctl -u example.service -n 100 --no-pager
 ```
 
 Default stdout/stderr 64000 bytes (cap 256000). When `truncated`, narrow—never dump whole configs (`nginx -T`).
-4. Use SFTP for inspection/edits: stat then read before write; POSIX paths. `sftp_read_file` default 64KiB (cap 256KiB); byte `offset` resumes a read, negative `offset` tails a log. `sftp_list_directory` pages with `offset` plus `maxEntries` (default 500, cap 5000). When `truncated`, page with `offset` or narrow. `sftp_rename` needs write approval for both paths; `sftp_delete` removes files only and always prompts, even at full trust.
-5. Report target, evidence, actions, exit status, verification, remaining risk; never claim unverified results.
+4. Use SFTP for inspection/edits: stat then read before write; POSIX paths. `sftp_read_file` default 64KiB (cap 256KiB); byte `offset` resumes a read, negative `offset` tails a log. `sftp_list_directory` pages with `offset` plus `maxEntries` (default 500, cap 5000). When `truncated`, page with `offset`. `sftp_edit_file` does locked literal replacements; `sftp_write_file` accepts `localPath` to stream host files. `sftp_rename` needs write approval for both paths; `sftp_delete` removes files only and always prompts.
+5. Report target, evidence, actions, verification, remaining risk.
 
 `list_ssh_servers` returns background-allowed servers plus any with a live UI terminal (`connected: true`); only the former accept `run_remote_command`/`sftp_*` without an open terminal.
 

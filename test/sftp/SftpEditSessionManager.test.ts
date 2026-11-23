@@ -9,7 +9,9 @@ import {
   createEditCacheUri,
   createVscodeSftpEditUi,
   resolveEditStorageUri,
+  SftpEditCancelledError,
   SftpEditSessionManager,
+  EDIT_MAX_BYTES,
   VERIFY_FULL_CONTENT_MAX_BYTES
 } from '../../src/sftp/SftpEditSessionManager';
 
@@ -243,6 +245,73 @@ describe('SftpEditSessionManager open flow', () => {
       expect(sftp.downloadFile).toHaveBeenCalledTimes(1);
       expect(sftp.stat).toHaveBeenCalledTimes(1);
       expect(opened).toEqual([first.localUri, first.localUri]);
+    } finally {
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('asks before downloading an oversized file and skips the download when cancelled', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-large-')));
+    const downloadFile = vi.fn();
+    const confirmLargeFile = vi.fn(async () => false);
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp: {
+        getActiveServerId: () => 'srv',
+        stat: vi.fn(async () => ({ size: EDIT_MAX_BYTES + 1, modifiedAt: 10 })),
+        downloadFile,
+        uploadFile: vi.fn()
+      },
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn(),
+        confirmLargeFile
+      }
+    });
+
+    try {
+      await expect(manager.openRemoteFile('/srv/app/huge.log')).rejects.toBeInstanceOf(
+        SftpEditCancelledError
+      );
+      expect(confirmLargeFile).toHaveBeenCalledWith('/srv/app/huge.log', EDIT_MAX_BYTES + 1, EDIT_MAX_BYTES);
+      expect(downloadFile).not.toHaveBeenCalled();
+    } finally {
+      manager.dispose();
+      await rm(storage.fsPath, { recursive: true, force: true });
+    }
+  });
+
+  it('asks before editing a binary archive even when it is small', async () => {
+    const storage = vscode.Uri.file(await mkdtemp(join(tmpdir(), 'sftp-edit-binary-')));
+    const downloadFile = vi.fn();
+    const confirmLargeFile = vi.fn(async () => false);
+    const manager = new SftpEditSessionManager({
+      storageUri: storage,
+      sftp: {
+        getActiveServerId: () => 'srv',
+        stat: vi.fn(async () => ({ size: 1024, modifiedAt: 10 })),
+        downloadFile,
+        uploadFile: vi.fn()
+      },
+      ui: {
+        openFile: vi.fn(),
+        confirmAutoSync: vi.fn(),
+        resolveConflict: vi.fn(),
+        showStatus: vi.fn(),
+        promptUnsyncedClose: vi.fn(),
+        confirmLargeFile
+      }
+    });
+
+    try {
+      await expect(manager.openRemoteFile('/srv/app/archive.zip')).rejects.toBeInstanceOf(
+        SftpEditCancelledError
+      );
+      expect(downloadFile).not.toHaveBeenCalled();
     } finally {
       manager.dispose();
       await rm(storage.fsPath, { recursive: true, force: true });

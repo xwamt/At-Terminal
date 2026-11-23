@@ -50,6 +50,23 @@ export class SshSession {
     const client = new Client();
     this.client = client;
 
+    // ssh2's Client emits a second `error` after the handshake fails (or a socket reset
+    // after the session is established). A single `once('error', reject)` only covers the
+    // first one; without a permanent listener Node treats the next emission as an
+    // uncaughtException and takes the whole extension host down. Pre-connect errors stay
+    // with the `once` handler below so they are not reported twice.
+    client.on('error', (error) => {
+      if (this.connected) {
+        this.events.error(error);
+      }
+    });
+    client.on('close', () => {
+      if (this.connected) {
+        this.connected = false;
+        this.events.status({ state: 'disconnected', text: t('Disconnected') });
+      }
+    });
+
     try {
       await new Promise<void>((resolve, reject) => {
         client.once('ready', resolve);
@@ -137,13 +154,13 @@ export class SshSession {
   }
 
   dispose(): void {
+    this.connected = false;
     this.shell?.end();
     this.client?.end();
     this.connectionHandle?.dispose();
     this.shell = undefined;
     this.client = undefined;
     this.connectionHandle = undefined;
-    this.connected = false;
   }
 
   private async buildConnectionHandle(): Promise<SshConnectionHandle> {

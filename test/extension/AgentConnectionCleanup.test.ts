@@ -26,7 +26,8 @@ vi.mock('../../src/mcp/McpConfigInstaller', () => ({
 }));
 
 import { RemoteCommandExecutor } from '../../src/agent/RemoteCommandExecutor';
-import { activate, deactivate } from '../../src/extension';
+import { activate, deactivate, registerSftpContextWiring } from '../../src/extension';
+import { TerminalContextRegistry } from '../../src/terminal/TerminalContext';
 
 function extensionContext(): vscode.ExtensionContext {
   return {
@@ -56,6 +57,45 @@ describe('agent SSH connection cleanup', () => {
   afterEach(() => {
     deactivate();
     vi.restoreAllMocks();
+  });
+
+
+  it('disposes the terminal SFTP session as soon as the terminal reports disconnected', () => {
+    const registry = new TerminalContextRegistry();
+    const disposeTerminal = vi.fn();
+    registerSftpContextWiring({
+      terminalContext: registry,
+      sftpManager: {
+        setTerminalContext: vi.fn(),
+        syncTerminalContext: vi.fn(),
+        removeTerminalContext: vi.fn(),
+        getActiveViewDescriptor: vi.fn(() => undefined)
+      },
+      refreshSftpTree: vi.fn(),
+      onTerminalsChanged: vi.fn(),
+      onTerminalRemoved: disposeTerminal
+    });
+    registry.setActive({
+      terminalId: 'terminal-1',
+      server: {
+        id: 'server-1',
+        label: 'server-1',
+        host: 'example.com',
+        port: 22,
+        username: 'deploy',
+        authType: 'password',
+        keepAliveInterval: 30,
+        encoding: 'utf-8',
+        createdAt: 1,
+        updatedAt: 1
+      },
+      connected: true,
+      write: vi.fn()
+    });
+
+    registry.markDisconnected('terminal-1');
+
+    expect(disposeTerminal).toHaveBeenCalledWith('terminal-1');
   });
 
   it('closes pooled agent SSH connections when the extension deactivates', () => {

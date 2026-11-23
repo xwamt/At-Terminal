@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as sftpSessionModule from '../../src/sftp/SftpSession';
 import { SftpSession } from '../../src/sftp/SftpSession';
+import { disposeJumpHostConnections } from '../../src/ssh/SshConnectionConfig';
 import { SftpConflictError } from '../../src/sftp/SftpErrors';
 import type { ServerConfig } from '../../src/config/schema';
 
@@ -28,10 +29,14 @@ vi.mock('ssh2', () => ({
         client.handlers[event] = handler;
         return client;
       }),
+      on: vi.fn((event: string, handler: () => void) => {
+        client.handlers[event] = handler;
+        return client;
+      }),
       connect: sshMocks.connect,
       end: sshMocks.end,
       forwardOut: sshMocks.forwardOut,
-      sftp: vi.fn((callback) => callback(undefined, { realpath: vi.fn() })),
+      sftp: vi.fn((callback) => callback(undefined, { realpath: vi.fn(), on: vi.fn(), end: vi.fn() })),
       exec: vi.fn()
     };
     return client;
@@ -69,6 +74,7 @@ function agentSession(): SftpSession {
 }
 
 beforeEach(() => {
+  disposeJumpHostConnections();
   sshMocks.end.mockClear();
   sshMocks.connect.mockClear();
   sshMocks.forwardOut.mockClear();
@@ -104,6 +110,7 @@ describe('SftpSession jump host lifecycle', () => {
 
     await session.connect();
     session.dispose();
+    disposeJumpHostConnections('jump-1');
 
     expect(sshMocks.forwardOut).toHaveBeenCalledWith('127.0.0.1', 0, 'example.com', 2222, expect.any(Function));
     expect(sshMocks.end).toHaveBeenCalledTimes(2);
@@ -310,6 +317,61 @@ describe('SftpSession writeFile sudo fallback', () => {
     expect(sudoCommand).toContain('/root/README-base.md');
     expect(sudoCommand).toContain(open.mock.calls[1][0]);
     expect(unlink).not.toHaveBeenCalled();
+  });
+
+
+  it('creates the sudo write temp file with owner-only permissions', async () => {
+    const permissionDenied = new Error('Permission denied') as Error & { code: number };
+    permissionDenied.code = 3;
+    const tempHandle = Buffer.from('temp-handle');
+    const open = vi
+      .fn()
+      .mockImplementationOnce((_remotePath, _flags, callback) => callback(permissionDenied))
+      .mockImplementationOnce((_remotePath, _flags, callback) => callback(undefined, tempHandle));
+    const chmod = vi.fn((_remotePath, _mode, callback) => callback());
+    const write = vi.fn((_handle, _buffer, _offset, length, _position, callback) => callback(undefined, length));
+    const close = vi.fn((_handle, callback) => callback());
+    const unlink = vi.fn((_remotePath, callback) => callback());
+    const client = {
+      exec: vi.fn((_command, callback) => {
+        const stream = new FakeExecStream();
+        callback(undefined, stream);
+        queueMicrotask(() => stream.emit('close', 0));
+      })
+    };
+    const session = passwordSession();
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { open, chmod, write, close, unlink };
+    (session as unknown as { sftp: unknown; client: unknown }).client = client;
+
+    await session.writeFile('/root/README-base.md', Buffer.from('hello', 'utf8'));
+
+    expect(open.mock.calls[1][0]).toMatch(/^\/tmp\/at-terminal-write-/);
+    expect(chmod).toHaveBeenCalledWith(open.mock.calls[1][0], 0o600, expect.any(Function));
+  });
+
+  it('creates the sudo upload temp file with mode 0600', async () => {
+    const permissionDenied = new Error('Permission denied') as Error & { code: number };
+    permissionDenied.code = 3;
+    const fastPut = vi
+      .fn()
+      .mockImplementationOnce((_localPath, _remotePath, _options, callback) => callback(permissionDenied))
+      .mockImplementationOnce((_localPath, _remotePath, _options, callback) => callback());
+    const unlink = vi.fn((_remotePath, callback) => callback());
+    const client = {
+      exec: vi.fn((_command, callback) => {
+        const stream = new FakeExecStream();
+        callback(undefined, stream);
+        queueMicrotask(() => stream.emit('close', 0));
+      })
+    };
+    const session = passwordSession();
+    (session as unknown as { sftp: unknown; client: unknown }).sftp = { fastPut, unlink, stat: statNoSuchFile() };
+    (session as unknown as { sftp: unknown; client: unknown }).client = client;
+
+    await session.uploadFile('C:/tmp/app.conf', '/etc/app.conf');
+
+    expect(fastPut.mock.calls[1][1]).toMatch(/^\/tmp\/at-terminal-upload-/);
+    expect(fastPut.mock.calls[1][2]).toMatchObject({ mode: 0o600 });
   });
 
   it('reports sudo stderr when elevated write also fails', async () => {

@@ -483,6 +483,44 @@ describe('TerminalPanel rendering helpers', () => {
     }
   });
 
+
+  it('treats continuous remote output as activity and only disconnects after true silence', async () => {
+    try {
+      vi.useFakeTimers();
+      vi.spyOn(vscode.window, 'withProgress').mockImplementation(async (_options, task) =>
+        task({ report: vi.fn() }, {} as never) as never
+      );
+      vi.spyOn(vscode.workspace, 'getConfiguration').mockReturnValue({
+        get: <T>(key: string, defaultValue: T): T => {
+          const values: Record<string, unknown> = {
+            idleDisconnectMinutes: 1
+          };
+          return (values[key] ?? defaultValue) as T;
+        }
+      } as never);
+      const registry = new TerminalContextRegistry();
+
+      TerminalPanel.open(extensionContext(), server(), configManager(), hostKeyVerifier, registry);
+      await flushPromises();
+
+      // Two minutes of a chatty remote command, with output every 20 seconds.
+      for (let tick = 0; tick < 6; tick += 1) {
+        await vi.advanceTimersByTimeAsync(20_000);
+        sessionEvents.at(-1)!.output(Buffer.from('still working\n'));
+      }
+
+      expect(disposeSession).not.toHaveBeenCalled();
+      expect(registry.getActive()?.connected).toBe(true);
+
+      // Then silence: the next idle check must disconnect.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(disposeSession).toHaveBeenCalledTimes(1);
+      expect(registry.getActive()?.connected).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('disconnects all terminal sessions when the extension deactivates', async () => {
     const firstPanelHost = createPanel();
     const secondPanelHost = createPanel();

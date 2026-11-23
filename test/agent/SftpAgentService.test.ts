@@ -299,7 +299,7 @@ describe('SftpAgentService', () => {
     await expect(service.writeFile({ path: '/app.txt', content: 'next' })).rejects.toThrow(
       'Remote file already exists. Pass overwrite: true to replace it.'
     );
-    await expect(service.writeFile({ path: '/app.txt', content: 'next', overwrite: true })).resolves.toEqual({
+    await expect(service.writeFile({ path: '/app.txt', content: 'next', overwrite: true })).resolves.toMatchObject({
       terminalId: 'terminal-1',
       serverId: 'server-1',
       path: '/app.txt',
@@ -308,6 +308,27 @@ describe('SftpAgentService', () => {
     });
     expect(auth.requireWrite).toHaveBeenCalledTimes(1);
     expect(session.writeFile).toHaveBeenCalledWith('/app.txt', Buffer.from('next', 'utf8'));
+  });
+
+
+  it('replaces a terminal session whose connection died before the next request', async () => {
+    let alive = true;
+    const first = makeSession({ isConnected: () => alive });
+    const second = makeSession();
+    const createSession = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const service = new SftpAgentService({
+      terminalContext: connectedRegistry(),
+      createSession,
+      authorizer: authorizer()
+    });
+
+    await service.statPath({ path: '/home/deploy/a.txt' });
+    alive = false;
+    await service.statPath({ path: '/home/deploy/a.txt' });
+
+    expect(first.dispose).toHaveBeenCalledTimes(1);
+    expect(createSession).toHaveBeenCalledTimes(2);
+    expect(second.stat).toHaveBeenCalled();
   });
 
   it('returns a timeout error instead of hanging when a remote write never completes', async () => {

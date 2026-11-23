@@ -1,3 +1,6 @@
+import { realpath as realpathLocal, stat as statLocal } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { resolve as resolveLocal, sep as sepLocal } from 'node:path';
 import type { ServerConfig } from '../config/schema';
 import type { SftpEntry, SftpEntryType, SftpFileStat } from '../sftp/SftpTypes';
 import { dirname, joinRemotePath } from '../sftp/RemotePath';
@@ -7,11 +10,20 @@ import type { SftpWriteAuthorizer } from './SftpWriteAuthorizer';
 
 export interface AgentSftpSession {
   connect(): Promise<void>;
+  /** Optional; when present a cached session is discarded rather than reused dead. */
+  isConnected?(): boolean;
   realpath(path?: string): Promise<string>;
   listDirectory(path: string): Promise<SftpEntry[]>;
   stat(path: string): Promise<SftpFileStat>;
   readFile(path: string, maxBytes: number, offset?: number): Promise<Buffer>;
   writeFile(path: string, content: Buffer): Promise<void>;
+  /** Optional streamed upload, used by `localPath` so large files never enter model context. */
+  uploadFile?(
+    localPath: string,
+    remotePath: string,
+    progress?: unknown,
+    options?: { overwrite?: boolean }
+  ): Promise<void>;
   mkdir(path: string): Promise<void>;
   createFile(path: string): Promise<void>;
   rename(oldPath: string, newPath: string): Promise<void>;
@@ -27,6 +39,12 @@ export interface SftpAgentServiceOptions {
    * denied agent write stays denied.
    */
   createSession(target: { server: ServerConfig }): AgentSftpSession;
+  /**
+   * Builds a background session. Production passes a session that rides the shared
+   * {@link AgentSshClientPool}, so a command and an SFTP call in the same conversation
+   * authenticate once. Falls back to `createSession` when omitted.
+   */
+  createBackgroundSession?(target: { server: ServerConfig }): AgentSftpSession;
   authorizer: Pick<SftpWriteAuthorizer, 'requireWrite' | 'requireDelete'>;
   /**
    * Looks a server up by id for background SFTP (no connected UI terminal). Servers
@@ -81,7 +99,14 @@ const DEFAULT_READ_BYTES = 64 * 1024;
 const MAX_READ_BYTES = 256 * 1024;
 const DEFAULT_MAX_ENTRIES = 500;
 const MAX_ENTRIES = 5_000;
-const WRITE_TIMEOUT_MS = 60_000;
+export const WRITE_TIMEOUT_MS = 60_000;
+/**
+ * Read-side timeout. An SFTP channel that stalls (dropped network mid-transfer, server
+ * frozen) must fail the tool call instead of parking the MCP request forever.
+ */
+export const READ_TIMEOUT_MS = 30_000;
+/** In-place edits above this size are rejected: the whole file has to round-trip anyway. */
+export const MAX_EDIT_FILE_BYTES = 2 * 1024 * 1024;
 
 /**
  * How long an idle background session is kept before its SSH connection is closed.
@@ -105,7 +130,11 @@ export class SftpAgentService {
       const lease = await this.leaseFor(target);
       try {
         const path = await this.resolvePath(lease, input.path);
-        const entries = await lease.session.listDirectory(path);
+        const entries = await withTimeout(
+          lease.session.listDirectory(path),
+          READ_TIMEOUT_MS,
+          `Timed out listing remote directory ${path} after ${READ_TIMEOUT_MS}ms.`
+        );
         const maxEntries = clampMaxEntries(input.maxEntries);
         const offset = clampListOffset(input.offset);
         const page = entries.slice(offset, offset + maxEntries);
@@ -134,7 +163,11 @@ export class SftpAgentService {
           terminalId: target.terminalId,
           serverId: target.server.id,
           path,
-          ...(await lease.session.stat(path))
+          ...(await withTimeout(
+            lease.session.stat(path),
+            READ_TIMEOUT_MS,
+            `Timed out reading metadata for ${path} after ${READ_TIMEOUT_MS}ms.`
+          ))
         };
       } finally {
         lease.release();
@@ -148,14 +181,24 @@ export class SftpAgentService {
       const lease = await this.leaseFor(target);
       try {
         const path = await this.resolvePath(lease, input.path);
-        const stat = await lease.session.stat(path);
+        const stat = await withTimeout(
+          lease.session.stat(path),
+          READ_TIMEOUT_MS,
+          `Timed out reading metadata for ${path} after ${READ_TIMEOUT_MS}ms.`
+        );
         const maxBytes = clampReadBytes(input.maxBytes);
         const start = resolveReadStart(input.offset, stat.size);
         const window = Math.min(Math.max(stat.size - start, 0), maxBytes);
         const buffer =
           window === 0
             ? Buffer.alloc(0)
-            : (await lease.session.readFile(path, window, start)).subarray(0, window);
+            : (
+                await withTimeout(
+                  lease.session.readFile(path, window, start),
+                  READ_TIMEOUT_MS,
+                  `Timed out reading remote file ${path} after ${READ_TIMEOUT_MS}ms.`
+                )
+              ).subarray(0, window);
         if (looksBinary(buffer)) {
           throw new Error('Remote file appears to be binary.');
         }
@@ -175,38 +218,163 @@ export class SftpAgentService {
     });
   }
 
-  async writeFile(input: SftpTargetInput & { path: string; content: string; overwrite?: boolean }) {
+  async writeFile(input: SftpTargetInput & {
+    path: string;
+    content?: string;
+    overwrite?: boolean;
+    expectedSize?: number;
+    expectedModifiedAt?: number;
+    localPath?: string;
+  }) {
     return await this.withAudit('sftp_write_file', input, async () => {
       const target = await this.resolveTarget(input);
       const lease = await this.leaseFor(target);
       try {
         const { path, workspaceRoot } = await this.resolveWritablePath(lease, input.path);
-        const exists = await pathExists(lease.session, path);
+        const existing = await statOrUndefined(lease.session, path);
+        const exists = existing !== undefined;
         if (exists && !input.overwrite) {
           throw new Error('Remote file already exists. Pass overwrite: true to replace it.');
         }
+        assertExpectedVersion(existing, input);
         await withTimeout(
           this.options.authorizer.requireWrite(target.server, {
             operation: 'write_file',
             path,
-            overwrite: Boolean(exists),
+            overwrite: exists,
             workspaceRoot
           }),
           WRITE_TIMEOUT_MS,
           `Timed out waiting for SFTP write authorization for ${path}.`
         );
-        const content = Buffer.from(input.content, 'utf8');
+        let bytesWritten: number;
+        if (input.localPath !== undefined) {
+          if (input.content !== undefined) {
+            throw new Error('Pass either content or localPath, not both.');
+          }
+          if (!lease.session.uploadFile) {
+            throw new Error('This SFTP session does not support local file uploads.');
+          }
+          const local = await resolveLocalUploadFile(input.localPath);
+          await withTimeout(
+            lease.session.uploadFile(local.path, path, undefined, { overwrite: exists }),
+            WRITE_TIMEOUT_MS,
+            `Timed out uploading ${local.path} to ${path}.`
+          );
+          bytesWritten = local.size;
+        } else {
+          if (input.content === undefined) {
+            throw new Error('Either content or localPath is required.');
+          }
+          const content = Buffer.from(input.content, 'utf8');
+          await withTimeout(
+            lease.session.writeFile(path, content),
+            WRITE_TIMEOUT_MS,
+            `Timed out writing remote file ${path}.`
+          );
+          bytesWritten = content.length;
+        }
+        const updated = await statOrUndefined(lease.session, path);
+        return {
+          terminalId: target.terminalId,
+          serverId: target.server.id,
+          path,
+          bytesWritten,
+          overwritten: exists,
+          size: updated?.size,
+          modifiedAt: updated?.modifiedAt
+        };
+      } finally {
+        lease.release();
+      }
+    });
+  }
+
+  /**
+   * Targeted literal replacement with optimistic locking. Saves the model from emitting a
+   * whole file just to change one line, and refuses to overwrite a file that changed since
+   * the caller last read it.
+   */
+  async editFile(input: SftpTargetInput & {
+    path: string;
+    oldText: string;
+    newText: string;
+    expectedSize?: number;
+    expectedModifiedAt?: number;
+    replaceAll?: boolean;
+  }) {
+    return await this.withAudit('sftp_edit_file', input, async () => {
+      const target = await this.resolveTarget(input);
+      const lease = await this.leaseFor(target);
+      try {
+        const { path, workspaceRoot } = await this.resolveWritablePath(lease, input.path);
+        if (!input.oldText) {
+          throw new Error('oldText cannot be empty.');
+        }
+        const stat = await statOrUndefined(lease.session, path);
+        if (!stat) {
+          throw new Error('Remote file was not found.');
+        }
+        assertExpectedVersion(stat, input);
+        if (stat.size > MAX_EDIT_FILE_BYTES) {
+          throw new Error(
+            `Remote file is too large for in-place editing (${stat.size} bytes; limit ${MAX_EDIT_FILE_BYTES}). ` +
+              'Use sftp_read_file in chunks and sftp_write_file, or download it.'
+          );
+        }
+        const current = await withTimeout(
+          lease.session.readFile(path, stat.size, 0),
+          READ_TIMEOUT_MS,
+          `Timed out reading remote file ${path} after ${READ_TIMEOUT_MS}ms.`
+        );
+        const text = current.subarray(0, stat.size).toString('utf8');
+        const occurrences = countOccurrences(text, input.oldText);
+        if (occurrences === 0) {
+          throw new Error('oldText was not found in the remote file.');
+        }
+        if (occurrences > 1 && !input.replaceAll) {
+          throw new Error(
+            `oldText matched ${occurrences} times; pass replaceAll: true or include more surrounding text.`
+          );
+        }
+        const updatedText = input.replaceAll
+          ? text.split(input.oldText).join(input.newText)
+          : text.replace(input.oldText, () => input.newText);
+        await withTimeout(
+          this.options.authorizer.requireWrite(target.server, {
+            operation: 'edit_file',
+            path,
+            overwrite: true,
+            workspaceRoot
+          }),
+          WRITE_TIMEOUT_MS,
+          `Timed out waiting for SFTP edit authorization for ${path}.`
+        );
+        // Re-check immediately before the write: the file may have changed while the
+        // authorization dialog was open.
+        const latest = await statOrUndefined(lease.session, path);
+        if (!latest) {
+          throw new Error('Remote file was removed before the edit could be written.');
+        }
+        assertExpectedVersion(latest, input);
+        if (latest.size !== stat.size || latest.modifiedAt !== stat.modifiedAt) {
+          throw new Error('Remote file changed while the edit was being prepared; re-read it and retry.');
+        }
+        const content = Buffer.from(updatedText, 'utf8');
         await withTimeout(
           lease.session.writeFile(path, content),
           WRITE_TIMEOUT_MS,
           `Timed out writing remote file ${path}.`
         );
+        const after = await statOrUndefined(lease.session, path);
         return {
           terminalId: target.terminalId,
           serverId: target.server.id,
           path,
+          replacements: input.replaceAll ? occurrences : 1,
           bytesWritten: content.length,
-          overwritten: exists
+          size: after?.size,
+          modifiedAt: after?.modifiedAt
         };
       } finally {
         lease.release();
@@ -452,7 +620,12 @@ export class SftpAgentService {
   private async ensureTerminalSession(context: TerminalContext): Promise<AgentSftpSession> {
     const existing = this.terminalSessions.get(context.terminalId);
     if (existing) {
-      return await existing.promise;
+      const session = await existing.promise;
+      if (session.isConnected?.() === false) {
+        this.disposeTerminal(context.terminalId);
+      } else {
+        return session;
+      }
     }
     const session = this.options.createSession({ server: context.server });
     const promise = Promise.resolve()
@@ -471,6 +644,10 @@ export class SftpAgentService {
 
   private async leaseBackgroundSession(server: ServerConfig): Promise<SessionLease> {
     let entry = this.backgroundSessions.get(server.id);
+    if (entry && !entry.closed && entry.session.isConnected?.() === false) {
+      this.evictBackgroundSession(server.id, entry);
+      entry = undefined;
+    }
     if (!entry || entry.closed) {
       entry = this.openBackgroundSession(server);
       this.backgroundSessions.set(server.id, entry);
@@ -495,7 +672,8 @@ export class SftpAgentService {
   }
 
   private openBackgroundSession(server: ServerConfig): BackgroundSessionEntry {
-    const session = this.options.createSession({ server });
+    const createSession = this.options.createBackgroundSession ?? this.options.createSession;
+    const session = createSession({ server });
     const entry: BackgroundSessionEntry = {
       session,
       inFlight: 0,
@@ -568,10 +746,21 @@ export class SftpAgentService {
 
   private async resolvePath(lease: SessionLease, path: string | undefined): Promise<string> {
     const root = await this.rootFor(lease);
-    if (!path || path === '.') {
+    if (!path || path === '.' || path === '~/') {
       return root;
     }
-    return path.startsWith('/') ? await lease.session.realpath(path) : await lease.session.realpath(`${root}/${path}`);
+    const expanded = expandHome(path, root);
+    return expanded.startsWith('/')
+      ? await withTimeout(
+          lease.session.realpath(expanded),
+          READ_TIMEOUT_MS,
+          `Timed out resolving remote path ${expanded} after ${READ_TIMEOUT_MS}ms.`
+        )
+      : await withTimeout(
+          lease.session.realpath(`${root}/${expanded}`),
+          READ_TIMEOUT_MS,
+          `Timed out resolving remote path ${expanded} after ${READ_TIMEOUT_MS}ms.`
+        );
   }
 
   private async resolveWritablePath(lease: SessionLease, path: string): Promise<WritableTarget> {
@@ -579,12 +768,17 @@ export class SftpAgentService {
       throw new Error('Remote path cannot be empty.');
     }
     const workspaceRoot = await this.rootFor(lease);
-    const candidate = path.startsWith('/') ? path : joinRemotePath(workspaceRoot, path);
+    const expanded = expandHome(path.trim(), workspaceRoot);
+    const candidate = expanded.startsWith('/') ? expanded : joinRemotePath(workspaceRoot, expanded);
     const normalized = candidate.replace(/\/+$/, '') || '/';
     if (normalized === '/') {
       throw new Error('Remote root path cannot be modified.');
     }
-    const parent = await lease.session.realpath(dirname(normalized));
+    const parent = await withTimeout(
+      lease.session.realpath(dirname(normalized)),
+      READ_TIMEOUT_MS,
+      `Timed out resolving remote path ${normalized} after ${READ_TIMEOUT_MS}ms.`
+    );
     const resolved = joinRemotePath(parent, basenameRemotePath(normalized));
     if (resolved === '/') {
       throw new Error('Remote root path cannot be modified.');
@@ -597,10 +791,25 @@ export class SftpAgentService {
     if (existing) {
       return existing;
     }
-    const root = await lease.session.realpath('.');
+    const root = await withTimeout(
+      lease.session.realpath('.'),
+      READ_TIMEOUT_MS,
+      `Timed out resolving the remote home directory after ${READ_TIMEOUT_MS}ms.`
+    );
     this.roots.set(lease.rootKey, root);
     return root;
   }
+}
+
+/** SFTP has no notion of `~`; the session root (`realpath('.')`) is the login home. */
+function expandHome(path: string, workspaceRoot: string): string {
+  if (path === '~') {
+    return workspaceRoot;
+  }
+  if (path.startsWith('~/')) {
+    return joinRemotePath(workspaceRoot, path.slice(2));
+  }
+  return path;
 }
 
 async function pathExists(session: AgentSftpSession, path: string): Promise<boolean> {
@@ -613,6 +822,75 @@ async function pathExists(session: AgentSftpSession, path: string): Promise<bool
     }
     throw error;
   }
+}
+
+async function statOrUndefined(session: AgentSftpSession, path: string): Promise<SftpFileStat | undefined> {
+  try {
+    return await session.stat(path);
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function assertExpectedVersion(
+  stat: SftpFileStat | undefined,
+  expected: { expectedSize?: number; expectedModifiedAt?: number }
+): void {
+  if (expected.expectedSize !== undefined && stat?.size !== expected.expectedSize) {
+    throw new Error(
+      `Remote file changed: expected size ${expected.expectedSize}, found ${stat ? stat.size : 'a missing file'}. Re-read it and retry.`
+    );
+  }
+  if (expected.expectedModifiedAt !== undefined && stat?.modifiedAt !== expected.expectedModifiedAt) {
+    throw new Error(
+      `Remote file changed: expected modifiedAt ${expected.expectedModifiedAt}, found ${stat ? stat.modifiedAt : 'a missing file'}. Re-read it and retry.`
+    );
+  }
+}
+
+function countOccurrences(haystack: string, needle: string): number {
+  let count = 0;
+  let index = haystack.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = haystack.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+/**
+ * Resolves a host-side upload path and refuses credential stores. `localPath` exists to
+ * stream large files that should never pass through the model context; without this guard
+ * a prompt-injected model could exfiltrate the user's private keys to a remote server.
+ */
+async function resolveLocalUploadFile(localPath: string): Promise<{ path: string; size: number }> {
+  const resolved = await realpathLocal(localPath);
+  const home = homedir();
+  const sensitiveRoots = [
+    resolveLocal(home, '.ssh'),
+    resolveLocal(home, '.gnupg'),
+    resolveLocal(home, '.aws'),
+    resolveLocal(home, '.kube'),
+    resolveLocal(home, '.docker'),
+    resolveLocal(home, '.config', 'gcloud'),
+    resolveLocal(home, '.config', 'gh'),
+    resolveLocal(home, '.netrc'),
+    resolveLocal(home, '.pgpass'),
+    resolveLocal(home, '.bash_history')
+  ];
+  for (const root of sensitiveRoots) {
+    if (resolved === root || resolved.startsWith(`${root}${sepLocal}`)) {
+      throw new Error(`Refusing to read sensitive local path ${resolved}.`);
+    }
+  }
+  const stats = await statLocal(resolved);
+  if (!stats.isFile()) {
+    throw new Error(`Local path ${resolved} is not a regular file.`);
+  }
+  return { path: resolved, size: stats.size };
 }
 
 /** Type of the directory entry at `path`, read from its parent listing; undefined when absent. */

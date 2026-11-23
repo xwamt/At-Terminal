@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildSshConnectConfig,
   buildSshConnectionHandle,
+  disposeJumpHostConnections,
   requireHostKeyVerifier,
   resolveAgentSocket
 } from '../../src/ssh/SshConnectionConfig';
@@ -66,6 +67,7 @@ function server(overrides: Partial<ServerConfig> = {}): ServerConfig {
 }
 
 beforeEach(() => {
+  disposeJumpHostConnections();
   sshMocks.clients.length = 0;
   sshMocks.connect.mockClear();
   sshMocks.end.mockClear();
@@ -270,7 +272,7 @@ describe('buildSshConnectionHandle', () => {
     });
 
     const target = server({ id: 'target-1', host: '10.0.0.20', jumpHostId: 'jump-1' });
-    const jump = server({ id: 'jump-1', host: 'bastion.example.com', username: 'ops', jumpHostId: 'ignored-parent' });
+    const jump = server({ id: 'jump-1', host: 'bastion.example.com', username: 'ops' });
 
     const handle = await buildSshConnectionHandle(
       target,
@@ -291,6 +293,7 @@ describe('buildSshConnectionHandle', () => {
     expect(handle.config).toMatchObject({ host: '10.0.0.20', sock: fakeSock });
 
     handle.dispose();
+    disposeJumpHostConnections('jump-1');
 
     expect(sshMocks.end).toHaveBeenCalled();
   });

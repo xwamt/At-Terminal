@@ -20,12 +20,16 @@ vi.mock('ssh2', () => ({
         client.handlers[event] = handler;
         return client;
       }),
+      on: vi.fn((event: string, handler: () => void) => {
+        client.handlers[event] = handler;
+        return client;
+      }),
       connect: vi.fn(function (this: { handlers?: Record<string, () => void> }) {
         this.handlers?.ready?.();
       }),
       end: vi.fn(),
-      sftp: vi.fn((callback: (error: undefined, sftp: { realpath: ReturnType<typeof vi.fn> }) => void) =>
-        callback(undefined, { realpath: vi.fn() }))
+      sftp: vi.fn((callback: (error: undefined, sftp: { realpath: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> }) => void) =>
+        callback(undefined, { realpath: vi.fn(), on: vi.fn(), end: vi.fn() }))
     };
     return client;
   })

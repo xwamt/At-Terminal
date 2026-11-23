@@ -9,6 +9,7 @@ import {
   TIMED_NOTIFICATION_MS
 } from '../utils/notifications';
 import { safePreviewName } from './RemotePath';
+import { isLikelyBinaryPreviewPath } from './SftpPreview';
 import type { SftpFileStat } from './SftpTypes';
 import { t } from '../i18n/t';
 
@@ -17,6 +18,16 @@ import { t } from '../i18n/t';
  * affordable while the file is small enough for the round trip to be noise.
  */
 export const VERIFY_FULL_CONTENT_MAX_BYTES = 256 * 1024;
+/** Editing above this size is almost always a mistake; ask before pulling it locally. */
+export const EDIT_MAX_BYTES = 50 * 1024 * 1024;
+
+/** Opening was cancelled at the large/binary file confirmation; callers should stay quiet. */
+export class SftpEditCancelledError extends Error {
+  constructor(readonly remotePath: string) {
+    super(`Opening ${remotePath} was cancelled.`);
+    this.name = 'SftpEditCancelledError';
+  }
+}
 
 export type SftpEditSyncState = 'idle' | 'pending' | 'uploading' | 'conflict' | 'failed';
 export type SftpEditConflictChoice = 'overwrite' | 'cancel';
@@ -45,6 +56,8 @@ export interface SftpEditUi {
   showError?(remotePath: string, message: string): Promise<void>;
   promptUnsyncedClose(remotePath: string): Promise<SftpEditCloseChoice>;
   showUnsyncedLocalCopy?(remotePath: string, localUri: vscode.Uri): void;
+  /** Asked when a file is very large or looks binary; false cancels opening it. */
+  confirmLargeFile?(remotePath: string, size: number, limitBytes: number): Promise<boolean>;
 }
 
 export interface SftpEditSession {
@@ -67,6 +80,7 @@ export interface SftpEditSessionManagerOptions {
   sftp: SftpEditSftpClient;
   ui: SftpEditUi;
   debounceMs?: number;
+  maxEditBytes?: number;
 }
 
 export function buildEditSessionKey(serverId: string, remotePath: string): string {
@@ -95,9 +109,11 @@ export class SftpEditSessionManager {
   private readonly sessionsByLocalPath = new Map<string, SftpEditSession>();
   private readonly disposables: Array<{ dispose(): void }> = [];
   private readonly debounceMs: number;
+  private readonly maxEditBytes: number;
 
   constructor(private readonly options: SftpEditSessionManagerOptions) {
     this.debounceMs = options.debounceMs ?? 750;
+    this.maxEditBytes = options.maxEditBytes ?? EDIT_MAX_BYTES;
     this.disposables.push(
       vscode.workspace.onDidSaveTextDocument((document) => {
         void this.handleSavedDocument(document);
@@ -128,6 +144,17 @@ export class SftpEditSessionManager {
     const localUri = createEditCacheUri(this.options.storageUri, serverId, remotePath);
     await mkdir(dirname(localUri.fsPath), { recursive: true });
     const baseRemoteStat = await this.options.sftp.stat(remotePath);
+    // Pulling a multi-hundred-MB archive into a text editor blocks the SFTP channel and
+    // can exhaust the Extension Host heap. Ask before the download, not after.
+    if (
+      (baseRemoteStat.size > this.maxEditBytes || isLikelyBinaryPreviewPath(remotePath)) &&
+      this.options.ui.confirmLargeFile
+    ) {
+      const confirmed = await this.options.ui.confirmLargeFile(remotePath, baseRemoteStat.size, this.maxEditBytes);
+      if (!confirmed) {
+        throw new SftpEditCancelledError(remotePath);
+      }
+    }
     await this.options.sftp.downloadFile(remotePath, localUri.fsPath);
 
     const session: SftpEditSession = {
@@ -400,6 +427,16 @@ function getTabInputUri(tab: vscode.Tab): vscode.Uri | undefined {
   return uri instanceof vscode.Uri ? uri : undefined;
 }
 
+export function formatByteSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KiB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
 export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): SftpEditUi {
   return {
     async openFile(uri, remotePath) {
@@ -466,6 +503,20 @@ export function createVscodeSftpEditUi(statusBarItem: vscode.StatusBarItem): Sft
         'error',
         FAILED_NOTIFICATION_MS
       );
+    },
+    async confirmLargeFile(remotePath, size, limitBytes) {
+      const openAction = t('Open Anyway');
+      const cancelAction = t('Cancel');
+      const answer = await vscode.window.showWarningMessage(
+        t(
+          '{remotePath} is {size} and may be slow or unsafe to open in the editor (soft limit {limit}). Download it instead if it is an archive or binary.',
+          { remotePath, size: formatByteSize(size), limit: formatByteSize(limitBytes) }
+        ),
+        { modal: true },
+        openAction,
+        cancelAction
+      );
+      return answer === openAction;
     },
     async promptUnsyncedClose(remotePath) {
       const keepAction = t('Keep Local Copy');

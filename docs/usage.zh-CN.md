@@ -28,7 +28,7 @@ npm run package:mcp
 安装 MCP 版：
 
 ```powershell
-code --install-extension .\at-terminal-mcp-0.3.5.vsix
+code --install-extension .\at-terminal-mcp-0.3.6.vsix
 ```
 
 Kiro 和 Cursor 可以通过各自 IDE 的扩展安装入口或兼容命令行安装 VSIX。
@@ -112,6 +112,7 @@ Kiro 支持：
 [
   "run_remote_command",
   "sftp_write_file",
+  "sftp_edit_file",
   "sftp_create_file",
   "sftp_create_directory"
 ]

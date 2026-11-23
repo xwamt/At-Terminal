@@ -207,5 +207,21 @@
   "WARNING: outside the working directory {root} that this session was opened in.": "警告：目标位于本次会话工作目录 {root} 之外。",
   "WARNING: sensitive system path (SSH keys, service units, cron, or system configuration).": "警告：敏感系统路径（SSH 密钥、服务单元、cron 或系统配置）。",
   "{path} is a sensitive system path on {host}.": "{path} 是 {host} 上的敏感系统路径。",
-  "{remotePath} was not synced. The local copy is kept at {path}.": "{remotePath} 未同步。本地副本保留在 {path}。"
+  "{remotePath} was not synced. The local copy is kept at {path}.": "{remotePath} 未同步。本地副本保留在 {path}。",
+  "$(plug) AT Forwards: {count}": "$(plug) AT 转发: {count}",
+  "Add New Forward": "新增转发",
+  "Active forward for {label}; pick it to stop or copy the address.": "{label} 的活跃转发；选择后可停止或复制地址。",
+  "Local port forwards for {label}": "{label} 的本地端口转发",
+  "Forwarding localhost:{localPort} to {host}:{remotePort} on {label}.": "正在将 localhost:{localPort} 转发到 {label} 的 {host}:{remotePort}。",
+  "No active local port forwards.": "没有活跃的本地端口转发。",
+  "Started {time}": "启动时间 {time}",
+  "Manage local port forwards": "管理本地端口转发",
+  "Open Anyway": "仍然打开",
+  "Cancel": "取消",
+  "{remotePath} is {size} bytes and may be a large or binary file (soft limit {limit} bytes). Open a text preview anyway, or download it instead?": "{remotePath} 大小为 {size} 字节，可能是大文件或二进制文件（软上限 {limit} 字节）。仍要打开文本预览，还是改为下载？",
+  "Copy Address": "复制地址",
+  "Stop Forward": "停止转发",
+  "Stopped local port forward 127.0.0.1:{localPort}.": "已停止本地端口转发 127.0.0.1:{localPort}。",
+  "Only local files and folders can be uploaded.": "只能上传本地文件或文件夹。",
+  "{remotePath} is {size} and may be slow or unsafe to open in the editor (soft limit {limit}). Download it instead if it is an archive or binary.": "{remotePath} 大小为 {size}，在编辑器中打开可能很慢或不安全（软上限 {limit}）。如果是压缩包或二进制文件，请改为下载。"
 }
